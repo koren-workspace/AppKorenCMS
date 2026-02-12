@@ -7,39 +7,46 @@ import {
     buildCollection
 } from "@firecms/cloud";
 
-// 1. הגדרות אוספים
-const tocCollection = buildCollection({
-    id: "toc",
-    path: "toc",
-    name: "TOC",
-    properties: { title: { dataType: "string", name: "Title" } },
+// 1. הגדרות אוספים (Collections)
+const tocCollection = buildCollection({ 
+    id: "toc", 
+    path: "toc", 
+    name: "TOC", 
+    properties: { title: { dataType: "string" } } 
 });
 
-const translationsCollection = buildCollection({
-    id: "translations",
-    path: "translations",
-    name: "Translations",
-    properties: { content: { dataType: "string", name: "Content" } },
+const translationsCollection = buildCollection({ 
+    id: "translations", 
+    path: "translations", 
+    name: "Translations", 
+    properties: { content: { dataType: "string" } } 
 });
 
-// הגדרת האוסף הפנימי של התפילות
-const prayersCollection = buildCollection({
-    id: "prayers",
-    path: "prayers",
-    name: "Prayers",
-    properties: { 
-        content: { dataType: "string", name: "Content" },
-        type: { dataType: "string", name: "Type" } // הוספת השדה מה-Firebase
-    },
+const prayersCollection = buildCollection({ 
+    id: "prayers", 
+    path: "prayers", 
+    name: "Prayers", 
+    properties: { type: { dataType: "string" } } 
 });
 
-type GenericEntity = Entity<{ content?: string; [key: string]: unknown }>;
+const itemsCollection = buildCollection({
+    id: "items",
+    path: "items",
+    name: "Items",
+    properties: {
+        content: { dataType: "string", name: "תוכן" },
+        partName: { dataType: "string", name: "שם החלק" },
+        partId: { dataType: "string", name: "מזהה חלק" }
+    }
+});
+
+type GenericEntity = Entity<any>;
 
 export function TocTranslationsView() {
     const dataSource = useDataSource();
     const snackbar = useSnackbarController();
 
-    // States לניהול הבחירה
+    // States לניהול הניווט
     const [tocItems, setTocItems] = useState<GenericEntity[]>([]);
     const [selectedTocId, setSelectedTocId] = useState<string | null>(null);
 
@@ -47,180 +54,210 @@ export function TocTranslationsView() {
     const [selectedTranslationId, setSelectedTranslationId] = useState<string | null>(null);
 
     const [prayers, setPrayers] = useState<GenericEntity[]>([]);
-    const [selectedPrayer, setSelectedPrayer] = useState<GenericEntity | null>(null);
+    const [selectedPrayerId, setSelectedPrayerId] = useState<string | null>(null);
 
-    const [contentValue, setContentValue] = useState<string>("");
+    // States לניהול ה-Items והעריכה
+    const [allItems, setAllItems] = useState<GenericEntity[]>([]);
+    const [localContents, setLocalContents] = useState<Record<string, string>>({});
+    const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    // א. שליפת רשימת ה-TOC הראשונית
+    // פונקציית עזר לחילוץ קבוצה לפי 5 ספרות אחרונות
+    const getGroupId = (partId: string) => partId ? partId.slice(-5) : "unknown";
+
+    // --- שליפות נתונים ---
+
     const fetchToc = useCallback(async () => {
-        setLoading(true);
-        try {
-            const entities = await dataSource.fetchCollection({
-                path: "toc",
-                collection: tocCollection,
-            });
-            setTocItems(entities as GenericEntity[]);
-        } catch (err) {
-            snackbar.open({ type: "error", message: `שגיאה בשליפת TOC: ${err}` });
-        } finally {
-            setLoading(false);
-        }
-    }, [dataSource, snackbar]);
+        const entities = await dataSource.fetchCollection({ path: "toc", collection: tocCollection });
+        setTocItems(entities);
+    }, [dataSource]);
 
-    useEffect(() => {
-        fetchToc();
-    }, [fetchToc]);
+    useEffect(() => { fetchToc(); }, [fetchToc]);
 
-    // ב. סינון מסמכי תרגום לפי סיומת (למשל כל מה שנגמר ב-ashkenaz)
-    const fetchTranslations = useCallback(async (tocId: string) => {
+    const fetchTranslations = async (tocId: string) => {
         setLoading(true);
-        setFilteredTranslations([]);
+        const entities = await dataSource.fetchCollection({ path: "translations", collection: translationsCollection });
+        setFilteredTranslations(entities.filter(e => e.id.endsWith(tocId)));
         setSelectedTranslationId(null);
         setPrayers([]);
-        try {
-            const entities = await dataSource.fetchCollection({
-                path: "translations",
-                collection: translationsCollection,
-            });
-            const matches = (entities as GenericEntity[]).filter((e) => e.id.endsWith(tocId));
-            setFilteredTranslations(matches);
-        } catch (err) {
-            snackbar.open({ type: "error", message: `שגיאה בסינון תרגומים: ${err}` });
-        } finally {
-            setLoading(false);
-        }
-    }, [dataSource, snackbar]);
+        setLoading(false);
+    };
 
-    // ג. שליפת תפילות מתוך ה-Sub-collection של המסמך הנבחר
-    const fetchPrayers = useCallback(async (translationId: string) => {
+    const fetchPrayers = async (translationId: string) => {
         setLoading(true);
-        setPrayers([]);
-        setSelectedPrayer(null);
-        setContentValue("");
+        const entities = await dataSource.fetchCollection({ 
+            path: `translations/${translationId}/prayers`, 
+            collection: prayersCollection 
+        });
+        setPrayers(entities);
+        setSelectedPrayerId(null);
+        setAllItems([]);
+        setLoading(false);
+    };
+
+    const fetchItems = async (translationId: string, prayerId: string) => {
+        setLoading(true);
         try {
             const entities = await dataSource.fetchCollection({
-                path: `translations/${translationId}/prayers`,
-                collection: prayersCollection,
+                path: `translations/${translationId}/prayers/${prayerId}/items`,
+                collection: itemsCollection
             });
-            setPrayers(entities as GenericEntity[]);
-        } catch (err) {
-            snackbar.open({ type: "error", message: `שגיאה בשליפת תפילות: ${err}` });
+            // מיון לפי ה-partId המלא כדי לשמור על סדר התפילה
+          // מיון מדויק לפי ערך מספרי של ה-partId
+const sorted = [...entities].sort((a, b) => {
+    const idA = a.values.partId || "";
+    const idB = b.values.partId || "";
+    
+    // שימוש ב-localeCompare עם הגדרה מספרית (numeric: true) 
+    // זו הדרך הכי בטוחה למנוע שגיאות בטקסטים ארוכים
+    return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+});
+
+setAllItems(sorted);
+
+            // יצירת עותק מקומי לעריכה
+            const contents: Record<string, string> = {};
+            sorted.forEach(item => {
+                contents[item.id] = typeof item.values.content === "string" ? item.values.content : "";
+            });
+            setLocalContents(contents);
+            setSelectedGroupId(null);
         } finally {
             setLoading(false);
         }
-    }, [dataSource, snackbar]);
+    };
 
-    // ד. שמירת השינויים בתפילה הספציפית
-    const handleSave = async () => {
-        if (!selectedPrayer || !selectedTranslationId) return;
+    // --- שמירה ---
+
+    const handleSaveGroup = async () => {
+        if (!selectedGroupId || !selectedTranslationId || !selectedPrayerId) return;
         setSaving(true);
         try {
-            await dataSource.saveEntity({
-                path: `translations/${selectedTranslationId}/prayers`,
-                entityId: selectedPrayer.id,
-                values: { ...selectedPrayer.values, content: contentValue } as EntityValues<any>,
-                status: "existing",
-                collection: prayersCollection,
-            });
-            snackbar.open({ type: "success", message: "התפילה נשמרה בהצלחה" });
+            const itemsInGroup = allItems.filter(item => getGroupId(item.values.partId) === selectedGroupId);
+            
+            for (const item of itemsInGroup) {
+                await dataSource.saveEntity({
+                    path: `translations/${selectedTranslationId}/prayers/${selectedPrayerId}/items`,
+                    entityId: item.id,
+                    values: { ...item.values, content: localContents[item.id] },
+                    status: "existing",
+                    collection: itemsCollection,
+                });
+            }
+            snackbar.open({ type: "success", message: "הקבוצה נשמרה בהצלחה" });
         } catch (err) {
-            snackbar.open({ type: "error", message: `שגיאה בשמירה: ${err}` });
+            snackbar.open({ type: "error", message: "שגיאה בשמירה" });
         } finally {
             setSaving(false);
         }
     };
 
+    // הפקת רשימת קבוצות ייחודית לתצוגה בעמודה 4
+    const uniqueGroupIds = Array.from(new Set(allItems.map(item => getGroupId(item.values.partId))));
+
     return (
-        <div className="flex w-full h-full p-6 gap-4 bg-gray-50 dark:bg-gray-900">
+        <div className="flex w-full h-full p-4 gap-3 bg-gray-100 overflow-hidden font-sans" dir="rtl">
             
-            {/* עמודה 1: קטגוריות TOC */}
-            <div className="w-48 shrink-0 flex flex-col gap-2 border-l pl-2">
-                <h3 className="font-bold text-sm uppercase text-gray-500">toc</h3>
-                <div className="flex flex-col gap-1">
-                    {tocItems.map((toc) => (
-                        <button
-                            key={toc.id}
-                            onClick={() => { setSelectedTocId(toc.id); fetchTranslations(toc.id); }}
-                            className={`text-right p-2 text-sm rounded border ${selectedTocId === toc.id ? "bg-blue-600 text-white" : "bg-white hover:bg-blue-50"}`}
-                        >
+            {/* 1. קטגוריה */}
+            <div className="w-40 shrink-0 flex flex-col gap-2 border-l pl-2">
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase">נוסח</h4>
+                <div className="flex flex-col gap-1 overflow-auto">
+                    {tocItems.map(toc => (
+                        <button key={toc.id} onClick={() => { setSelectedTocId(toc.id); fetchTranslations(toc.id); }}
+                            className={`text-right p-2 text-sm rounded border shadow-sm transition-all ${selectedTocId === toc.id ? "bg-blue-600 text-white" : "bg-white hover:bg-blue-50"}`}>
                             {toc.id}
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* עמודה 2: מסמכי תרגום (למשל 0-ashkenaz) */}
-            <div className="w-48 shrink-0 flex flex-col gap-2 border-l pl-2">
-                <h3 className="font-bold text-sm uppercase text-gray-500">translations</h3>
-                <div className="flex flex-col gap-1">
-                    {filteredTranslations.map((t) => (
-                        <button
-                            key={t.id}
-                            onClick={() => { setSelectedTranslationId(t.id); fetchPrayers(t.id); }}
-                            className={`text-right p-2 text-sm rounded border ${selectedTranslationId === t.id ? "bg-indigo-600 text-white" : "bg-white hover:bg-indigo-50"}`}
-                        >
+            {/* 2. קובץ */}
+            <div className="w-40 shrink-0 flex flex-col gap-2 border-l pl-2">
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase">תרגום</h4>
+                <div className="flex flex-col gap-1 overflow-auto">
+                    {filteredTranslations.map(t => (
+                        <button key={t.id} onClick={() => { setSelectedTranslationId(t.id); fetchPrayers(t.id); }}
+                            className={`text-right p-2 text-sm rounded border shadow-sm ${selectedTranslationId === t.id ? "bg-indigo-600 text-white" : "bg-white"}`}>
                             {t.id}
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* עמודה 3: רשימת תפילות (Prayers) */}
-<div className="w-48 shrink-0 flex flex-col gap-2 border-l pl-2">
-    <h3 className="font-bold text-sm uppercase text-gray-500">prayer</h3>
-    <div className="flex flex-col gap-1 overflow-auto max-h-[60vh]">
-        {prayers.map((p) => {
-            // חילוץ שם התפילה מתוך הערכים
-            const prayerName = (p.values as any)?.type;
-            
-            return (
-                <button
-                    key={p.id}
-                    onClick={() => {
-                        setSelectedPrayer(p);
-                        setContentValue((p.values as any)?.content || "");
-                    }}
-                    className={`text-right p-2 text-sm rounded border transition-colors ${
-                        selectedPrayer?.id === p.id 
-                        ? "bg-green-600 text-white shadow-md" 
-                        : "bg-white hover:bg-green-50 text-gray-700"
-                    }`}
-                >
-                    {/* כאן קורה השינוי: מציגים את השם, ואם אין שם - את ה-ID */}
-                    {prayerName ? prayerName : `תפילה ${p.id}`}
-                </button>
-            );
-        })}
-    </div>
-</div>
-
-            {/* עמודה 4: עורך התוכן */}
-            <div className="flex-1 flex flex-col gap-4 bg-white p-4 rounded-lg shadow-sm border">
-                <h3 className="font-bold text-lg border-b pb-2">עריכת תוכן התפילה</h3>
-                {selectedPrayer ? (
-                    <>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">ID: {selectedPrayer.id}</span>
-                        </div>
-                        <textarea
-                            className="w-full flex-1 p-4 border rounded font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={contentValue}
-                            onChange={(e) => setContentValue(e.target.value)}
-                            placeholder="כאן כותבים את נוסח התפילה..."
-                        />
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="w-full py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 disabled:opacity-50 transition-colors"
-                        >
-                            {saving ? "שומר..." : "שמור שינויים בתפילה"}
+            {/* 3. תפילה */}
+            <div className="w-40 shrink-0 flex flex-col gap-2 border-l pl-2">
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase"> תפילה</h4>
+                <div className="flex flex-col gap-1 overflow-auto">
+                    {prayers.map(p => (
+                        <button key={p.id} onClick={() => { setSelectedPrayerId(p.id); fetchItems(selectedTranslationId!, p.id); }}
+                            className={`text-right p-2 text-sm rounded border shadow-sm ${selectedPrayerId === p.id ? "bg-green-600 text-white" : "bg-white"}`}>
+                            {p.values.type || p.id}
                         </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* 4. קבוצת חלקים */}
+            <div className="w-44 shrink-0 flex flex-col gap-2 border-l pl-2">
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase">חלק בתפילה</h4>
+                <div className="flex flex-col gap-1 overflow-auto">
+                    {uniqueGroupIds.map(groupId => {
+                        const firstItem = allItems.find(i => getGroupId(i.values.partId) === groupId);
+                        return (
+                            <button key={groupId} onClick={() => setSelectedGroupId(groupId)}
+                                className={`text-right p-2 text-xs rounded border shadow-sm ${selectedGroupId === groupId ? "bg-orange-500 text-white" : "bg-white"}`}>
+                                {firstItem?.values.partName || `קבוצה ${groupId}`}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* 5. עורך רצף */}
+            <div className="flex-1 flex flex-col gap-4 bg-white p-5 rounded-lg border shadow-inner overflow-hidden">
+                {selectedGroupId ? (
+                    <>
+                        <div className="flex justify-between items-center border-b pb-3 sticky top-0 bg-white z-10">
+                            <div>
+                                <h3 className="font-bold text-lg text-gray-800">
+                                    {allItems.find(i => getGroupId(i.values.partId) === selectedGroupId)?.values.partName}
+                                </h3>
+                                <p className="text-[10px] text-gray-400">עריכה של קבוצת מזהה: {selectedGroupId}</p>
+                            </div>
+                            <button 
+                                onClick={handleSaveGroup} 
+                                disabled={saving} 
+                                className="px-8 py-2 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 shadow-md disabled:opacity-50 transition-all"
+                            >
+                                {saving ? "שומר הכל..." : "שמור קבוצה"}
+                            </button>
+                        </div>
+                        
+                        <div className="flex flex-col gap-8 overflow-auto pb-10">
+                            {allItems
+                                .filter(item => getGroupId(item.values.partId) === selectedGroupId)
+                                .map((item, idx) => (
+                                    <div key={item.id} className="group flex flex-col gap-2">
+                                        <div className="flex justify-between text-[9px] text-gray-400 font-mono">
+                                            <span>מקטע {idx + 1} | ID: {item.id}</span>
+                                            <span>מזהה חלק: {item.values.partId}</span>
+                                        </div>
+                                        <textarea
+                                            className="w-full p-4 border rounded-md font-serif text-lg leading-relaxed shadow-sm focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none transition-all min-h-[120px] bg-gray-50 group-hover:bg-white"
+                                            value={localContents[item.id] || ""}
+                                            onChange={(e) => setLocalContents({...localContents, [item.id]: e.target.value})}
+                                            dir="rtl"
+                                        />
+                                    </div>
+                                ))}
+                        </div>
                     </>
                 ) : (
-                    <div className="flex h-full items-center justify-center text-gray-400 italic">
-                        בחר תפילה מהרשימה כדי להתחיל לערוך
+                    <div className="flex h-full items-center justify-center text-gray-300 italic flex-col gap-2">
+                        <span className="text-4xl">📂</span>
+                        <span>בחר קבוצה מהתפריט כדי להציג את רצף הטקסט</span>
                     </div>
                 )}
             </div>

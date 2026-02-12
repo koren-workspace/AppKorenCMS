@@ -1,11 +1,19 @@
 import { FireCMSAppConfig } from "@firecms/cloud";
 import { SampleEntityView } from "./entity_views/SampleEntityView";
+import { TocTranslationsView } from "./views/TocTranslationsView";
 import { demoCollection } from "./collections/demo";
 
 const appConfig: FireCMSAppConfig = {
     version: "1",
     collections: [
         demoCollection
+    ],
+    views: [
+        {
+            path: "toc-translations",
+            name: "Toc & Translations",
+            view: <TocTranslationsView />,
+        },
     ],
     propertyConfigs: [{
         name: "String with color",

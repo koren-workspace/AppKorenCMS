@@ -49,22 +49,20 @@ export function TocTranslationsView() {
     // States לניהול הניווט
     const [tocItems, setTocItems] = useState<GenericEntity[]>([]);
     const [selectedTocId, setSelectedTocId] = useState<string | null>(null);
-
     const [filteredTranslations, setFilteredTranslations] = useState<GenericEntity[]>([]);
     const [selectedTranslationId, setSelectedTranslationId] = useState<string | null>(null);
-
     const [prayers, setPrayers] = useState<GenericEntity[]>([]);
     const [selectedPrayerId, setSelectedPrayerId] = useState<string | null>(null);
 
-    // States לניהול ה-Items והעריכה
+    // States לניהול ה-Items והעריכה החכמה
     const [allItems, setAllItems] = useState<GenericEntity[]>([]);
     const [localContents, setLocalContents] = useState<Record<string, string>>({});
+    const [changedIds, setChangedIds] = useState<Set<string>>(new Set()); // מעקב אחרי שינויים
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    // פונקציית עזר לחילוץ קבוצה לפי 5 ספרות אחרונות
     const getGroupId = (partId: string) => partId ? partId.slice(-5) : "unknown";
 
     // --- שליפות נתונים ---
@@ -104,40 +102,45 @@ export function TocTranslationsView() {
                 path: `translations/${translationId}/prayers/${prayerId}/items`,
                 collection: itemsCollection
             });
-            // מיון לפי ה-partId המלא כדי לשמור על סדר התפילה
-          // מיון מדויק לפי ערך מספרי של ה-partId
-const sorted = [...entities].sort((a, b) => {
-    const idA = a.values.partId || "";
-    const idB = b.values.partId || "";
-    
-    // שימוש ב-localeCompare עם הגדרה מספרית (numeric: true) 
-    // זו הדרך הכי בטוחה למנוע שגיאות בטקסטים ארוכים
-    return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
-});
 
-setAllItems(sorted);
-
-            // יצירת עותק מקומי לעריכה
-            const contents: Record<string, string> = {};
-            sorted.forEach(item => {
-                contents[item.id] = typeof item.values.content === "string" ? item.values.content : "";
+            // מיון מספרי מדויק למניעת בלבול בין ID ארוכים
+            const sorted = [...entities].sort((a, b) => {
+                const idA = a.values.partId || "";
+                const idB = b.values.partId || "";
+                return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
             });
+            
+            setAllItems(sorted);
+
+            const contents: Record<string, string> = {};
+            sorted.forEach(item => { contents[item.id] = item.values.content || ""; });
             setLocalContents(contents);
+            setChangedIds(new Set()); // איפוס רשימת השינויים בטעינה חדשה
             setSelectedGroupId(null);
         } finally {
             setLoading(false);
         }
     };
 
-    // --- שמירה ---
+    // --- שמירה חכמה (רק מה שהשתנה) ---
 
     const handleSaveGroup = async () => {
         if (!selectedGroupId || !selectedTranslationId || !selectedPrayerId) return;
+
+        // סינון פריטים שגם שייכים לקבוצה וגם באמת עברו שינוי
+        const itemsToUpdate = allItems.filter(item => 
+            getGroupId(item.values.partId) === selectedGroupId && 
+            changedIds.has(item.id)
+        );
+
+        if (itemsToUpdate.length === 0) {
+            snackbar.open({ type: "info", message: "לא זוהו שינויים בקבוצה זו" });
+            return;
+        }
+
         setSaving(true);
         try {
-            const itemsInGroup = allItems.filter(item => getGroupId(item.values.partId) === selectedGroupId);
-            
-            for (const item of itemsInGroup) {
+            for (const item of itemsToUpdate) {
                 await dataSource.saveEntity({
                     path: `translations/${selectedTranslationId}/prayers/${selectedPrayerId}/items`,
                     entityId: item.id,
@@ -146,15 +149,22 @@ setAllItems(sorted);
                     collection: itemsCollection,
                 });
             }
-            snackbar.open({ type: "success", message: "הקבוצה נשמרה בהצלחה" });
+            
+            // ניקוי הסטטוס "השתנה" עבור הפריטים שנשמרו
+            setChangedIds(prev => {
+                const next = new Set(prev);
+                itemsToUpdate.forEach(item => next.delete(item.id));
+                return next;
+            });
+
+            snackbar.open({ type: "success", message: `נשמרו בהצלחה ${itemsToUpdate.length} מקטעים` });
         } catch (err) {
-            snackbar.open({ type: "error", message: "שגיאה בשמירה" });
+            snackbar.open({ type: "error", message: "שגיאה בשמירת הנתונים" });
         } finally {
             setSaving(false);
         }
     };
 
-    // הפקת רשימת קבוצות ייחודית לתצוגה בעמודה 4
     const uniqueGroupIds = Array.from(new Set(allItems.map(item => getGroupId(item.values.partId))));
 
     return (
@@ -188,7 +198,7 @@ setAllItems(sorted);
 
             {/* 3. תפילה */}
             <div className="w-40 shrink-0 flex flex-col gap-2 border-l pl-2">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase"> תפילה</h4>
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase">תפילה</h4>
                 <div className="flex flex-col gap-1 overflow-auto">
                     {prayers.map(p => (
                         <button key={p.id} onClick={() => { setSelectedPrayerId(p.id); fetchItems(selectedTranslationId!, p.id); }}
@@ -205,10 +215,13 @@ setAllItems(sorted);
                 <div className="flex flex-col gap-1 overflow-auto">
                     {uniqueGroupIds.map(groupId => {
                         const firstItem = allItems.find(i => getGroupId(i.values.partId) === groupId);
+                        const hasChanges = allItems.some(i => getGroupId(i.values.partId) === groupId && changedIds.has(i.id));
+                        
                         return (
                             <button key={groupId} onClick={() => setSelectedGroupId(groupId)}
-                                className={`text-right p-2 text-xs rounded border shadow-sm ${selectedGroupId === groupId ? "bg-orange-500 text-white" : "bg-white"}`}>
+                                className={`text-right p-2 text-xs rounded border shadow-sm relative ${selectedGroupId === groupId ? "bg-orange-500 text-white" : "bg-white"}`}>
                                 {firstItem?.values.partName || `קבוצה ${groupId}`}
+                                {hasChanges && <span className="absolute left-1 top-1 w-2 h-2 bg-red-400 rounded-full"></span>}
                             </button>
                         );
                     })}
@@ -224,15 +237,18 @@ setAllItems(sorted);
                                 <h3 className="font-bold text-lg text-gray-800">
                                     {allItems.find(i => getGroupId(i.values.partId) === selectedGroupId)?.values.partName}
                                 </h3>
-                                <p className="text-[10px] text-gray-400">עריכה של קבוצת מזהה: {selectedGroupId}</p>
+                                <p className="text-[10px] text-gray-400">עריכה קבוצתית | {allItems.filter(i => getGroupId(i.values.partId) === selectedGroupId).length} מקטעים</p>
                             </div>
-                            <button 
-                                onClick={handleSaveGroup} 
-                                disabled={saving} 
-                                className="px-8 py-2 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 shadow-md disabled:opacity-50 transition-all"
-                            >
-                                {saving ? "שומר הכל..." : "שמור קבוצה"}
-                            </button>
+                            <div className="flex gap-2 items-center">
+                                {changedIds.size > 0 && <span className="text-xs text-orange-600 font-bold ml-2">יש שינויים לא שמורים</span>}
+                                <button 
+                                    onClick={handleSaveGroup} 
+                                    disabled={saving} 
+                                    className="px-8 py-2 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 shadow-md disabled:opacity-50 transition-all"
+                                >
+                                    {saving ? "שומר..." : "שמור שינויים"}
+                                </button>
+                            </div>
                         </div>
                         
                         <div className="flex flex-col gap-8 overflow-auto pb-10">
@@ -240,14 +256,20 @@ setAllItems(sorted);
                                 .filter(item => getGroupId(item.values.partId) === selectedGroupId)
                                 .map((item, idx) => (
                                     <div key={item.id} className="group flex flex-col gap-2">
-                                        <div className="flex justify-between text-[9px] text-gray-400 font-mono">
-                                            <span>מקטע {idx + 1} | ID: {item.id}</span>
-                                            <span>מזהה חלק: {item.values.partId}</span>
+                                        <div className="flex justify-between text-[9px] font-mono">
+                                            <span className={changedIds.has(item.id) ? "text-orange-600 font-bold" : "text-gray-400"}>
+                                                מקטע {idx + 1} {changedIds.has(item.id) ? "(ערוך)" : ""}
+                                            </span>
+                                            <span className="text-gray-300">ID: {item.id} | partId: {item.values.partId}</span>
                                         </div>
                                         <textarea
-                                            className="w-full p-4 border rounded-md font-serif text-lg leading-relaxed shadow-sm focus:ring-2 focus:ring-orange-200 focus:border-orange-400 outline-none transition-all min-h-[120px] bg-gray-50 group-hover:bg-white"
+                                            className={`w-full p-4 border rounded-md font-serif text-lg leading-relaxed shadow-sm outline-none transition-all min-h-[120px] 
+                                                ${changedIds.has(item.id) ? "border-orange-300 bg-orange-50" : "border-gray-200 bg-gray-50 group-hover:bg-white"}`}
                                             value={localContents[item.id] || ""}
-                                            onChange={(e) => setLocalContents({...localContents, [item.id]: e.target.value})}
+                                            onChange={(e) => {
+                                                setLocalContents({...localContents, [item.id]: e.target.value});
+                                                setChangedIds(prev => new Set(prev).add(item.id));
+                                            }}
                                             dir="rtl"
                                         />
                                     </div>
@@ -256,8 +278,8 @@ setAllItems(sorted);
                     </>
                 ) : (
                     <div className="flex h-full items-center justify-center text-gray-300 italic flex-col gap-2">
-                        <span className="text-4xl">📂</span>
-                        <span>בחר קבוצה מהתפריט כדי להציג את רצף הטקסט</span>
+                        <span className="text-4xl">📝</span>
+                        <span>בחר קבוצת מקטעים לעריכה</span>
                     </div>
                 )}
             </div>

@@ -143,18 +143,15 @@ export function TocTranslationsView() {
                 };
             });
             setAllItems(sorted);
-
-            const contents: Record<string, string> = {};
-            sorted.forEach(item => { contents[item.id] = item.values.content || ""; });
-            setLocalContents(contents);
-            setChangedIds(new Set()); // איפוס רשימת השינויים בטעינה חדשה
-            setSelectedGroupId(null);
-        } finally {
-            setLoading(false);
-        }
+            setLocalValues(initialValues);
+            setChangedIds(new Set());
+        } finally { setLoading(false); }
     };
 
-    // --- שמירה חכמה (רק מה שהשתנה) ---
+    const updateLocalItem = (id: string, field: string, value: any) => {
+        setLocalValues(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+        setChangedIds(prev => new Set(prev).add(id));
+    };
 
     const handleSaveGroup = async () => {
         if (!currentTranslationData || changedIds.size === 0) return;

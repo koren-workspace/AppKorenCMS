@@ -105,15 +105,15 @@ export function TocTranslationsView() {
 
             // מיון מספרי מדויק למניעת בלבול בין ID ארוכים
             const sorted = [...entities].sort((a, b) => {
-                const idA = a.values.partId || "";
-                const idB = b.values.partId || "";
+                const idA = String(a.values.partId ?? "");
+                const idB = String(b.values.partId ?? "");
                 return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
             });
             
             setAllItems(sorted);
 
             const contents: Record<string, string> = {};
-            sorted.forEach(item => { contents[item.id] = item.values.content || ""; });
+            sorted.forEach(item => { contents[item.id] = String(item.values.content ?? ""); });
             setLocalContents(contents);
             setChangedIds(new Set()); // איפוס רשימת השינויים בטעינה חדשה
             setSelectedGroupId(null);

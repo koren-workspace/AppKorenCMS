@@ -24,9 +24,7 @@ const itemsCollection = buildCollection({
 
 const baseColl = buildCollection({ id: "base", path: "base", name: "base", properties: {} });
 
-type GenericEntity = Entity<any>;
-
-// --- 2. לוגיקת עיצוב לפי סוג ---
+// --- 2. לוגיקת עיצוב ---
 const getItemStyle = (type: string, titleType?: string, fontTanach?: boolean) => {
     let baseStyle = "w-full p-4 border rounded-b-md shadow-sm outline-none transition-all ";
     if (fontTanach) baseStyle += "font-serif text-2xl border-r-8 border-amber-200 pr-4 ";
@@ -55,15 +53,15 @@ export function TocTranslationsView() {
     const fetchingRef = useRef(false);
 
     // States ניווט
-    const [tocItems, setTocItems] = useState<GenericEntity[]>([]);
+    const [tocItems, setTocItems] = useState<Entity<any>[]>([]);
     const [selectedTocId, setSelectedTocId] = useState<string | null>(null);
     const [selectedTranslationIndex, setSelectedTranslationIndex] = useState<number | null>(null);
-    const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null); // בחירת קטגוריה
+    const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null); 
     const [selectedPrayerId, setSelectedPrayerId] = useState<string | null>(null);
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
     // States עריכה
-    const [allItems, setAllItems] = useState<GenericEntity[]>([]);
+    const [allItems, setAllItems] = useState<Entity<any>[]>([]);
     const [localValues, setLocalValues] = useState<Record<string, any>>({});
     const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
     const [availableTypes, setAvailableTypes] = useState<string[]>(["body", "title", "smallInstructions", "instructions"]);
@@ -72,7 +70,7 @@ export function TocTranslationsView() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    // 1. שליפת TOC (פעם אחת בלבד 💰)
+    // 1. שליפת TOC
     useEffect(() => {
         const fetchTocOnce = async () => {
             if (hasFetchedToc.current || fetchingRef.current) return;
@@ -86,7 +84,6 @@ export function TocTranslationsView() {
         fetchTocOnce();
     }, [dataSource]);
 
-    // גזירת נתונים מתוך ה-TOC בזיכרון
     const currentTocData = useMemo(() => tocItems.find(t => t.id === selectedTocId)?.values as any, [tocItems, selectedTocId]);
     const currentTranslationData = useMemo(() => {
         if (selectedTranslationIndex === null || !currentTocData) return null;
@@ -94,18 +91,10 @@ export function TocTranslationsView() {
     }, [currentTocData, selectedTranslationIndex]);
 
     const categories = useMemo(() => currentTranslationData?.categories || [], [currentTranslationData]);
-    
-    const prayers = useMemo(() => {
-        const cat = categories.find((c: any) => c.name === selectedCategoryName);
-        return cat?.prayers || [];
-    }, [categories, selectedCategoryName]);
+    const prayers = useMemo(() => categories.find((c: any) => c.name === selectedCategoryName)?.prayers || [], [categories, selectedCategoryName]);
+    const sections = useMemo(() => prayers.find((p: any) => p.id === selectedPrayerId)?.parts || [], [prayers, selectedPrayerId]);
 
-    const sections = useMemo(() => {
-        const prayer = prayers.find((p: any) => p.id === selectedPrayerId);
-        return (prayer?.parts || []).map((p: any) => ({ id: p.id, name: p.name || "ללא שם" }));
-    }, [prayers, selectedPrayerId]);
-
-    // 2. שליפת פריטים מה-DB 💰
+    // 2. שליפת פריטים
     const fetchItemsForGroup = async (partId: string) => {
         if (!currentTranslationData || !selectedPrayerId) return;
         setLoading(true);
@@ -117,17 +106,6 @@ export function TocTranslationsView() {
             });
             const sorted = [...entities].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
             
-            // עדכון סוגים דינמי
-            const foundTypes = new Set(availableTypes);
-            const foundTitleTypes = new Set(availableTitleTypes);
-            sorted.forEach(item => {
-                const v = item.values as any;
-                if (v.type) foundTypes.add(v.type);
-                if (v.titleType) foundTitleTypes.add(v.titleType);
-            });
-            setAvailableTypes(Array.from(foundTypes));
-            setAvailableTitleTypes(Array.from(foundTitleTypes).filter(t => t));
-
             const initialValues: Record<string, any> = {};
             sorted.forEach(item => {
                 const v = item.values as any;
@@ -207,7 +185,7 @@ export function TocTranslationsView() {
 
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">5. מקטע</h4>
-                {sections.map(s => (
+                {sections.map((s: any) => (
                     <button key={s.id} onClick={() => { setSelectedGroupId(s.id); fetchItemsForGroup(s.id); }}
                         className={`text-right p-1.5 rounded border ${selectedGroupId === s.id ? "bg-orange-500 text-white shadow-md" : "bg-gray-50 hover:bg-orange-50"}`}>
                         {s.name}
@@ -221,7 +199,9 @@ export function TocTranslationsView() {
                     <>
                         <div className="flex justify-between items-center mb-4 pb-2 border-b">
                             <div>
-                                <h3 className="font-bold text-base text-gray-800 italic">{sections.find(s => s.id === selectedGroupId)?.name}</h3>
+                                <h3 className="font-bold text-base text-gray-800 italic">
+                                    {sections.find((s: any) => s.id === selectedGroupId)?.name}
+                                </h3>
                                 <p className="text-[8px] text-gray-400 uppercase tracking-tighter">{selectedTocId} / {selectedCategoryName} / {selectedPrayerId}</p>
                             </div>
                             <button onClick={handleSaveGroup} disabled={saving || changedIds.size === 0} className="px-6 py-1.5 bg-green-600 text-white rounded font-bold shadow-md hover:bg-green-700 disabled:opacity-30">

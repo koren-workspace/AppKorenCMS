@@ -1,287 +1,291 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import {
     useDataSource,
     useSnackbarController,
     Entity,
-    EntityValues,
     buildCollection
 } from "@firecms/cloud";
 
-// 1. הגדרות אוספים (Collections)
-const tocCollection = buildCollection({ 
-    id: "toc", 
-    path: "toc", 
-    name: "TOC", 
-    properties: { title: { dataType: "string" } } 
-});
-
-const translationsCollection = buildCollection({ 
-    id: "translations", 
-    path: "translations", 
-    name: "Translations", 
-    properties: { content: { dataType: "string" } } 
-});
-
-const prayersCollection = buildCollection({ 
-    id: "prayers", 
-    path: "prayers", 
-    name: "Prayers", 
-    properties: { type: { dataType: "string" } } 
-});
-
+// --- 1. הגדרות אוספים ---
 const itemsCollection = buildCollection({
     id: "items",
     path: "items",
     name: "Items",
     properties: {
         content: { dataType: "string", name: "תוכן" },
-        partName: { dataType: "string", name: "שם החלק" },
-        partId: { dataType: "string", name: "מזהה חלק" }
+        type: { dataType: "string", name: "סוג" },
+        titleType: { dataType: "string", name: "סוג כותרת" },
+        fontTanach: { dataType: "boolean", name: "גופן תנך" },
+        noSpace: { dataType: "boolean", name: "ללא רווח" },
+        role: { dataType: "string", name: "תפקיד" },
+        partId: { dataType: "string", name: "מזהה חלק" } 
     }
 });
 
+const baseColl = buildCollection({ id: "base", path: "base", name: "base", properties: {} });
+
 type GenericEntity = Entity<any>;
+
+// --- 2. לוגיקת עיצוב לפי סוג (כולל תמיכה ב-H1) ---
+const getItemStyle = (type: string, titleType?: string, fontTanach?: boolean) => {
+    let baseStyle = "w-full p-4 border rounded-b-md shadow-sm outline-none transition-all ";
+    
+    if (fontTanach) baseStyle += "font-serif text-2xl border-r-8 border-amber-200 pr-4 ";
+    else baseStyle += "font-sans text-lg ";
+
+    switch (type) {
+        case "title":
+            if (titleType === "H1") return baseStyle + "text-3xl font-black text-center bg-blue-100 border-blue-600 text-blue-900 border-b-4 min-h-[80px]";
+            if (titleType === "H2") return baseStyle + "text-xl font-black text-center bg-blue-50 border-blue-400 text-blue-900 min-h-[60px]";
+            if (titleType === "H4") return baseStyle + "text-lg font-bold border-r-4 border-blue-300 bg-slate-50 min-h-[50px]";
+            return baseStyle + "font-bold border-r-4 border-gray-400 bg-gray-50";
+        case "smallInstructions":
+            return baseStyle + "text-sm italic text-gray-500 bg-gray-50 border-dashed border-gray-300 min-h-[40px] leading-tight";
+        case "instructions":
+            return baseStyle + "text-base italic text-blue-700 bg-blue-50/50 border-blue-200 min-h-[60px]";
+        case "body":
+        default:
+            return baseStyle + "leading-relaxed bg-white border-gray-200 min-h-[120px]";
+    }
+};
 
 export function TocTranslationsView() {
     const dataSource = useDataSource();
     const snackbar = useSnackbarController();
 
-    // States לניהול הניווט
+    const hasFetchedToc = useRef(false);
+    const fetchingRef = useRef(false);
+
+    // States ניווט
     const [tocItems, setTocItems] = useState<GenericEntity[]>([]);
     const [selectedTocId, setSelectedTocId] = useState<string | null>(null);
-    const [filteredTranslations, setFilteredTranslations] = useState<GenericEntity[]>([]);
-    const [selectedTranslationId, setSelectedTranslationId] = useState<string | null>(null);
-    const [prayers, setPrayers] = useState<GenericEntity[]>([]);
+    const [selectedTranslationIndex, setSelectedTranslationIndex] = useState<number | null>(null);
     const [selectedPrayerId, setSelectedPrayerId] = useState<string | null>(null);
-
-    // States לניהול ה-Items והעריכה החכמה
-    const [allItems, setAllItems] = useState<GenericEntity[]>([]);
-    const [localContents, setLocalContents] = useState<Record<string, string>>({});
-    const [changedIds, setChangedIds] = useState<Set<string>>(new Set()); // מעקב אחרי שינויים
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
+    // States עריכה
+    const [allItems, setAllItems] = useState<GenericEntity[]>([]);
+    const [localValues, setLocalValues] = useState<Record<string, any>>({});
+    const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
+    
+    // רשימות סוגים דינמיות
+    const [availableTypes, setAvailableTypes] = useState<string[]>(["body", "title", "smallInstructions", "instructions"]);
+    const [availableTitleTypes, setAvailableTitleTypes] = useState<string[]>(["H1", "H2", "H4"]);
+    
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    const getGroupId = (partId: string) => partId ? partId.slice(-5) : "unknown";
-
-    // --- שליפות נתונים ---
-
-    const fetchToc = useCallback(async () => {
-        const entities = await dataSource.fetchCollection({ path: "toc", collection: tocCollection });
-        setTocItems(entities);
+    // 1. שליפת TOC (💰 קריאה אחת בלבד)
+    useEffect(() => {
+        const fetchTocOnce = async () => {
+            if (hasFetchedToc.current || fetchingRef.current) return;
+            fetchingRef.current = true;
+            console.log("💰 קריאה ל-DB: שליפת TOC");
+            try {
+                const entities = await dataSource.fetchCollection({ path: "toc", collection: baseColl });
+                setTocItems(entities);
+                hasFetchedToc.current = true;
+            } catch (e) { console.error(e); } finally { fetchingRef.current = false; }
+        };
+        fetchTocOnce();
     }, [dataSource]);
 
-    useEffect(() => { fetchToc(); }, [fetchToc]);
+    const currentTocData = useMemo(() => tocItems.find(t => t.id === selectedTocId)?.values as any, [tocItems, selectedTocId]);
+    const currentTranslationData = useMemo(() => {
+        if (selectedTranslationIndex === null || !currentTocData) return null;
+        return currentTocData.translations?.[selectedTranslationIndex];
+    }, [currentTocData, selectedTranslationIndex]);
 
-    const fetchTranslations = async (tocId: string) => {
-        setLoading(true);
-        const entities = await dataSource.fetchCollection({ path: "translations", collection: translationsCollection });
-        setFilteredTranslations(entities.filter(e => e.id.endsWith(tocId)));
-        setSelectedTranslationId(null);
-        setPrayers([]);
-        setLoading(false);
-    };
-
-    const fetchPrayers = async (translationId: string) => {
-        setLoading(true);
-        const entities = await dataSource.fetchCollection({ 
-            path: `translations/${translationId}/prayers`, 
-            collection: prayersCollection 
+    const sections = useMemo(() => {
+        if (!currentTranslationData || !selectedPrayerId) return [];
+        let foundParts: any[] = [];
+        (currentTranslationData.categories || []).forEach((cat: any) => {
+            const prayer = (cat.prayers || []).find((p: any) => p.id === selectedPrayerId);
+            if (prayer && prayer.parts) foundParts = prayer.parts;
         });
-        setPrayers(entities);
-        setSelectedPrayerId(null);
-        setAllItems([]);
-        setLoading(false);
-    };
+        return foundParts.map(p => ({ id: p.id, name: p.name || "ללא שם" }));
+    }, [currentTranslationData, selectedPrayerId]);
 
-    const fetchItems = async (translationId: string, prayerId: string) => {
+    // 2. שליפת פריטים + זיהוי סוגים דינמי
+    const fetchItemsForGroup = async (partId: string) => {
+        if (!currentTranslationData || !selectedPrayerId) return;
+        const transId = currentTranslationData.translationId;
+        console.log(`💰 קריאה ל-DB: שליפת פריטים עבור ${partId}`);
         setLoading(true);
         try {
             const entities = await dataSource.fetchCollection({
-                path: `translations/${translationId}/prayers/${prayerId}/items`,
-                collection: itemsCollection
-            });
-
-            // מיון מספרי מדויק למניעת בלבול בין ID ארוכים
-            const sorted = [...entities].sort((a, b) => {
-                const idA = a.values.partId || "";
-                const idB = b.values.partId || "";
-                return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+                path: `translations/${transId}/prayers/${selectedPrayerId}/items`,
+                collection: itemsCollection,
+                filter: { partId: ["==", partId] }
             });
             
-            setAllItems(sorted);
+            const sorted = [...entities].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
-            const contents: Record<string, string> = {};
-            sorted.forEach(item => { contents[item.id] = item.values.content || ""; });
-            setLocalContents(contents);
-            setChangedIds(new Set()); // איפוס רשימת השינויים בטעינה חדשה
-            setSelectedGroupId(null);
-        } finally {
-            setLoading(false);
-        }
+            // עדכון רשימת הסוגים לפי מה שיש ב-DB באמת
+            const foundTypes = new Set(availableTypes);
+            const foundTitleTypes = new Set(availableTitleTypes);
+            
+            sorted.forEach(item => {
+                const v = item.values as any;
+                if (v.type) foundTypes.add(v.type);
+                if (v.titleType) foundTitleTypes.add(v.titleType);
+            });
+            setAvailableTypes(Array.from(foundTypes));
+            setAvailableTitleTypes(Array.from(foundTitleTypes).filter(t => t));
+
+            const initialValues: Record<string, any> = {};
+            sorted.forEach(item => {
+                const v = item.values as any;
+                initialValues[item.id] = {
+                    content: v.content || "", type: v.type || "body",
+                    titleType: v.titleType || "", fontTanach: !!v.fontTanach,
+                    noSpace: !!v.noSpace, role: v.role || ""
+                };
+            });
+            setAllItems(sorted);
+            setLocalValues(initialValues);
+            setChangedIds(new Set());
+        } finally { setLoading(false); }
     };
 
-    // --- שמירה חכמה (רק מה שהשתנה) ---
+    const updateLocalItem = (id: string, field: string, value: any) => {
+        setLocalValues(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+        setChangedIds(prev => new Set(prev).add(id));
+    };
 
     const handleSaveGroup = async () => {
-        if (!selectedGroupId || !selectedTranslationId || !selectedPrayerId) return;
-
-        // סינון פריטים שגם שייכים לקבוצה וגם באמת עברו שינוי
-        const itemsToUpdate = allItems.filter(item => 
-            getGroupId(item.values.partId) === selectedGroupId && 
-            changedIds.has(item.id)
-        );
-
-        if (itemsToUpdate.length === 0) {
-            snackbar.open({ type: "info", message: "לא זוהו שינויים בקבוצה זו" });
-            return;
-        }
-
+        if (!currentTranslationData || changedIds.size === 0) return;
         setSaving(true);
         try {
-            for (const item of itemsToUpdate) {
-                await dataSource.saveEntity({
-                    path: `translations/${selectedTranslationId}/prayers/${selectedPrayerId}/items`,
-                    entityId: item.id,
-                    values: { ...item.values, content: localContents[item.id] },
-                    status: "existing",
-                    collection: itemsCollection,
-                });
-            }
-            
-            // ניקוי הסטטוס "השתנה" עבור הפריטים שנשמרו
-            setChangedIds(prev => {
-                const next = new Set(prev);
-                itemsToUpdate.forEach(item => next.delete(item.id));
-                return next;
-            });
-
-            snackbar.open({ type: "success", message: `נשמרו בהצלחה ${itemsToUpdate.length} מקטעים` });
-        } catch (err) {
-            snackbar.open({ type: "error", message: "שגיאה בשמירת הנתונים" });
-        } finally {
-            setSaving(false);
-        }
+            const transId = currentTranslationData.translationId;
+            const promises = Array.from(changedIds).map(id => dataSource.saveEntity({
+                path: `translations/${transId}/prayers/${selectedPrayerId}/items`,
+                entityId: id, values: localValues[id], status: "existing", collection: itemsCollection,
+            }));
+            await Promise.all(promises);
+            setChangedIds(new Set());
+            snackbar.open({ type: "success", message: "נשמר בהצלחה" });
+        } catch (err) { snackbar.open({ type: "error", message: "שגיאה בשמירה" }); } finally { setSaving(false); }
     };
 
-    const uniqueGroupIds = Array.from(new Set(allItems.map(item => getGroupId(item.values.partId))));
-
     return (
-        <div className="flex w-full h-full p-4 gap-3 bg-gray-100 overflow-hidden font-sans" dir="rtl">
-            
-            {/* 1. קטגוריה */}
-            <div className="w-40 shrink-0 flex flex-col gap-2 border-l pl-2">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase">נוסח</h4>
-                <div className="flex flex-col gap-1 overflow-auto">
-                    {tocItems.map(toc => (
-                        <button key={toc.id} onClick={() => { setSelectedTocId(toc.id); fetchTranslations(toc.id); }}
-                            className={`text-right p-2 text-sm rounded border shadow-sm transition-all ${selectedTocId === toc.id ? "bg-blue-600 text-white" : "bg-white hover:bg-blue-50"}`}>
-                            {toc.id}
+        <div className="flex w-full h-full p-2 gap-2 bg-gray-100 overflow-hidden font-sans text-[11px]" dir="rtl">
+            {/* עמודות ניווט */}
+            <div className="w-32 shrink-0 flex flex-col gap-1 border-l pl-1 overflow-auto">
+                <h4 className="font-bold text-gray-400 uppercase text-[9px]">1. נוסח</h4>
+                {tocItems.map(toc => (
+                    <button key={toc.id} onClick={() => { setSelectedTocId(toc.id); setSelectedTranslationIndex(null); setSelectedPrayerId(null); setSelectedGroupId(null); }}
+                        className={`text-right p-2 rounded border transition-all ${selectedTocId === toc.id ? "bg-blue-600 text-white shadow-sm" : "bg-white hover:bg-blue-50"}`}>
+                        {toc.id}
+                    </button>
+                ))}
+            </div>
+
+            <div className="w-32 shrink-0 flex flex-col gap-1 border-l pl-1 overflow-auto">
+                <h4 className="font-bold text-gray-400 uppercase text-[9px]">2. תרגום</h4>
+                {currentTocData?.translations?.map((trans: any, index: number) => (
+                    <button key={index} onClick={() => { setSelectedTranslationIndex(index); setSelectedPrayerId(null); setSelectedGroupId(null); }}
+                        className={`text-right p-2 rounded border transition-all ${selectedTranslationIndex === index ? "bg-purple-600 text-white shadow-sm" : "bg-white hover:bg-purple-50"}`}>
+                        {trans.translationId}
+                    </button>
+                ))}
+            </div>
+
+            <div className="w-32 shrink-0 flex flex-col gap-1 border-l pl-1 overflow-auto">
+                <h4 className="font-bold text-gray-400 uppercase text-[9px]">3. תפילה</h4>
+                {currentTranslationData?.categories?.map((cat: any) => 
+                    cat.prayers?.map((p: any) => (
+                        <button key={p.id} onClick={() => { setSelectedPrayerId(p.id); setSelectedGroupId(null); }}
+                            className={`text-right p-2 rounded border transition-all ${selectedPrayerId === p.id ? "bg-green-600 text-white shadow-sm" : "bg-white hover:bg-green-50"}`}>
+                            {p.name}
                         </button>
-                    ))}
-                </div>
+                    ))
+                )}
             </div>
 
-            {/* 2. קובץ */}
-            <div className="w-40 shrink-0 flex flex-col gap-2 border-l pl-2">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase">תרגום</h4>
-                <div className="flex flex-col gap-1 overflow-auto">
-                    {filteredTranslations.map(t => (
-                        <button key={t.id} onClick={() => { setSelectedTranslationId(t.id); fetchPrayers(t.id); }}
-                            className={`text-right p-2 text-sm rounded border shadow-sm ${selectedTranslationId === t.id ? "bg-indigo-600 text-white" : "bg-white"}`}>
-                            {t.id}
-                        </button>
-                    ))}
-                </div>
+            <div className="w-36 shrink-0 flex flex-col gap-1 border-l pl-1 overflow-auto">
+                <h4 className="font-bold text-gray-400 uppercase text-[9px]">4. מקטע</h4>
+                {sections.map(s => (
+                    <button key={s.id} onClick={() => { setSelectedGroupId(s.id); fetchItemsForGroup(s.id); }}
+                        className={`text-right p-2 rounded border transition-all ${selectedGroupId === s.id ? "bg-orange-500 text-white shadow-sm" : "bg-white hover:bg-orange-50"}`}>
+                        {s.name}
+                    </button>
+                ))}
             </div>
 
-            {/* 3. תפילה */}
-            <div className="w-40 shrink-0 flex flex-col gap-2 border-l pl-2">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase">תפילה</h4>
-                <div className="flex flex-col gap-1 overflow-auto">
-                    {prayers.map(p => (
-                        <button key={p.id} onClick={() => { setSelectedPrayerId(p.id); fetchItems(selectedTranslationId!, p.id); }}
-                            className={`text-right p-2 text-sm rounded border shadow-sm ${selectedPrayerId === p.id ? "bg-green-600 text-white" : "bg-white"}`}>
-                            {p.values.type || p.id}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* 4. קבוצת חלקים */}
-            <div className="w-44 shrink-0 flex flex-col gap-2 border-l pl-2">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase">חלק בתפילה</h4>
-                <div className="flex flex-col gap-1 overflow-auto">
-                    {uniqueGroupIds.map(groupId => {
-                        const firstItem = allItems.find(i => getGroupId(i.values.partId) === groupId);
-                        const hasChanges = allItems.some(i => getGroupId(i.values.partId) === groupId && changedIds.has(i.id));
-                        
-                        return (
-                            <button key={groupId} onClick={() => setSelectedGroupId(groupId)}
-                                className={`text-right p-2 text-xs rounded border shadow-sm relative ${selectedGroupId === groupId ? "bg-orange-500 text-white" : "bg-white"}`}>
-                                {firstItem?.values.partName || `קבוצה ${groupId}`}
-                                {hasChanges && <span className="absolute left-1 top-1 w-2 h-2 bg-red-400 rounded-full"></span>}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* 5. עורך רצף */}
-            <div className="flex-1 flex flex-col gap-4 bg-white p-5 rounded-lg border shadow-inner overflow-hidden">
-                {selectedGroupId ? (
+            {/* אזור עריכה מעוצב */}
+            <div className="flex-1 bg-white p-5 rounded-lg border shadow-xl overflow-hidden flex flex-col">
+                {loading ? <div className="m-auto animate-pulse text-blue-500 font-bold italic">טוען מה-DB...</div> : selectedGroupId ? (
                     <>
-                        <div className="flex justify-between items-center border-b pb-3 sticky top-0 bg-white z-10">
+                        <div className="flex justify-between items-center mb-6 pb-3 border-b sticky top-0 bg-white z-10">
                             <div>
-                                <h3 className="font-bold text-lg text-gray-800">
-                                    {allItems.find(i => getGroupId(i.values.partId) === selectedGroupId)?.values.partName}
-                                </h3>
-                                <p className="text-[10px] text-gray-400">עריכה קבוצתית | {allItems.filter(i => getGroupId(i.values.partId) === selectedGroupId).length} מקטעים</p>
+                                <h3 className="font-bold text-lg text-gray-800 italic">עריכת: {sections.find(s => s.id === selectedGroupId)?.name}</h3>
+                                <p className="text-[9px] text-gray-400 uppercase tracking-widest">ID: {selectedGroupId}</p>
                             </div>
-                            <div className="flex gap-2 items-center">
-                                {changedIds.size > 0 && <span className="text-xs text-orange-600 font-bold ml-2">יש שינויים לא שמורים</span>}
-                                <button 
-                                    onClick={handleSaveGroup} 
-                                    disabled={saving} 
-                                    className="px-8 py-2 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 shadow-md disabled:opacity-50 transition-all"
-                                >
-                                    {saving ? "שומר..." : "שמור שינויים"}
-                                </button>
-                            </div>
+                            <button onClick={handleSaveGroup} disabled={saving || changedIds.size === 0} className="px-8 py-2 bg-green-600 text-white rounded-md font-bold shadow-lg hover:bg-green-700 disabled:opacity-30 transition-all">
+                                {saving ? "שומר..." : `שמור ${changedIds.size > 0 ? `(${changedIds.size})` : ""}`}
+                            </button>
                         </div>
-                        
-                        <div className="flex flex-col gap-8 overflow-auto pb-10">
-                            {allItems
-                                .filter(item => getGroupId(item.values.partId) === selectedGroupId)
-                                .map((item, idx) => (
-                                    <div key={item.id} className="group flex flex-col gap-2">
-                                        <div className="flex justify-between text-[9px] font-mono">
-                                            <span className={changedIds.has(item.id) ? "text-orange-600 font-bold" : "text-gray-400"}>
-                                                מקטע {idx + 1} {changedIds.has(item.id) ? "(ערוך)" : ""}
-                                            </span>
-                                            <span className="text-gray-300">ID: {item.id} | partId: {item.values.partId}</span>
+
+                        <div className="overflow-auto space-y-8 pb-10 px-2">
+                            {allItems.map(item => {
+                                const localItem = localValues[item.id] || {};
+                                const isChanged = changedIds.has(item.id);
+
+                                return (
+                                    <div key={item.id} className="flex flex-col group">
+                                        {/* סרגל כלים לכל פריט */}
+                                        <div className={`flex justify-between items-center p-2 rounded-t-md border border-b-0 transition-colors ${isChanged ? "bg-orange-50 border-orange-200" : "bg-gray-50 border-gray-200"}`}>
+                                            <div className="flex gap-3 items-center">
+                                                <select value={localItem.type} onChange={e => updateLocalItem(item.id, "type", e.target.value)} 
+                                                    className="text-[10px] font-bold border rounded px-1 py-0.5 bg-white outline-none focus:ring-1 ring-blue-400">
+                                                    {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                                </select>
+
+                                                {localItem.type === "title" && (
+                                                    <select value={localItem.titleType} onChange={e => updateLocalItem(item.id, "titleType", e.target.value)} 
+                                                        className="text-[10px] border rounded px-1 py-0.5 bg-white font-medium text-blue-700">
+                                                        <option value="">ללא רמה</option>
+                                                        {availableTitleTypes.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                                                    </select>
+                                                )}
+
+                                                {localItem.type === "body" && (
+                                                    <div className="flex gap-3 items-center border-r pr-3 ml-2">
+                                                        <label className="flex items-center gap-1 text-[10px] cursor-pointer select-none">
+                                                            <input type="checkbox" checked={!!localItem.fontTanach} onChange={e => updateLocalItem(item.id, "fontTanach", e.target.checked)} /> 
+                                                            <span className="font-serif font-bold italic">תנ"ך</span>
+                                                        </label>
+                                                        <input className="text-[10px] border rounded px-2 py-0.5 w-20 bg-white" placeholder="תפקיד" value={localItem.role || ""} onChange={e => updateLocalItem(item.id, "role", e.target.value)} />
+                                                    </div>
+                                                )}
+                                                
+                                                {(localItem.type === "body" || localItem.type === "smallInstructions") && (
+                                                    <label className="flex items-center gap-1 text-[10px] cursor-pointer border-r pr-3 select-none">
+                                                        <input type="checkbox" checked={!!localItem.noSpace} onChange={e => updateLocalItem(item.id, "noSpace", e.target.checked)} /> 
+                                                        <span>ללא רווח</span>
+                                                    </label>
+                                                )}
+                                            </div>
+                                            <span className="text-[9px] text-gray-400 font-mono italic">#{item.id}</span>
                                         </div>
-                                        <textarea
-                                            className={`w-full p-4 border rounded-md font-serif text-lg leading-relaxed shadow-sm outline-none transition-all min-h-[120px] 
-                                                ${changedIds.has(item.id) ? "border-orange-300 bg-orange-50" : "border-gray-200 bg-gray-50 group-hover:bg-white"}`}
-                                            value={localContents[item.id] || ""}
-                                            onChange={(e) => {
-                                                setLocalContents({...localContents, [item.id]: e.target.value});
-                                                setChangedIds(prev => new Set(prev).add(item.id));
-                                            }}
+
+                                        {/* תיבת הטקסט עם העיצוב הדינמי */}
+                                        <textarea 
+                                            className={`${getItemStyle(localItem.type, localItem.titleType, localItem.fontTanach)} ${isChanged ? "border-orange-400 ring-2 ring-orange-50 shadow-md" : "border-gray-200 focus:border-blue-400 focus:ring-2 ring-blue-50"}`}
+                                            value={localItem.content}
+                                            onChange={e => updateLocalItem(item.id, "content", e.target.value)}
                                             dir="rtl"
                                         />
                                     </div>
-                                ))}
+                                );
+                            })}
                         </div>
                     </>
-                ) : (
-                    <div className="flex h-full items-center justify-center text-gray-300 italic flex-col gap-2">
-                        <span className="text-4xl">📝</span>
-                        <span>בחר קבוצת מקטעים לעריכה</span>
-                    </div>
-                )}
+                ) : <div className="m-auto text-gray-300 italic flex flex-col items-center gap-4 select-none">
+                        <span className="text-5xl animate-bounce">⬅️</span>
+                        <p className="text-lg font-medium">בחר מקטע מהעמודה הרביעית כדי לערוך</p>
+                    </div>}
             </div>
         </div>
     );

@@ -6,7 +6,8 @@ import {
     buildCollection
 } from "@firecms/cloud";
 
-// --- 1. הגדרות אוספים ---
+// --- 1. הגדרות אוספים (Collections) ---
+
 const itemsCollection = buildCollection({
     id: "items",
     path: "items",
@@ -22,9 +23,25 @@ const itemsCollection = buildCollection({
     }
 });
 
+// אוסף עבור עדכון זמני הסנכרון ב-Firestore
+const dbUpdateTimeCollection = buildCollection({
+    id: "db-update-time",
+    path: "db-update-time",
+    name: "DB Update Time",
+    properties: {
+        maxTimestamp: { dataType: "number", name: "זמן עדכון מקסימלי" }
+    }
+});
+
 const baseColl = buildCollection({ id: "base", path: "base", name: "base", properties: {} });
 
-// --- 2. לוגיקת עיצוב ---
+// --- 2. טיפוסים (Interfaces) ---
+
+interface BagelUpdatePayload {
+    timestamp: number;
+}
+
+// --- 3. לוגיקת עיצוב ---
 const getItemStyle = (type: string, titleType?: string, fontTanach?: boolean) => {
     let baseStyle = "w-full p-4 border rounded-b-md shadow-sm outline-none transition-all ";
     if (fontTanach) baseStyle += "font-serif text-2xl border-r-8 border-amber-200 pr-4 ";
@@ -64,8 +81,8 @@ export function TocTranslationsView() {
     const [allItems, setAllItems] = useState<Entity<any>[]>([]);
     const [localValues, setLocalValues] = useState<Record<string, any>>({});
     const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
-    const [availableTypes, setAvailableTypes] = useState<string[]>(["body", "title", "smallInstructions", "instructions"]);
-    const [availableTitleTypes, setAvailableTitleTypes] = useState<string[]>(["H1", "H2", "H4"]);
+    const [availableTypes] = useState<string[]>(["body", "title", "smallInstructions", "instructions"]);
+    const [availableTitleTypes] = useState<string[]>(["H1", "H2", "H4"]);
     
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -79,10 +96,15 @@ export function TocTranslationsView() {
                 const entities = await dataSource.fetchCollection({ path: "toc", collection: baseColl });
                 setTocItems(entities);
                 hasFetchedToc.current = true;
-            } catch (e) { console.error(e); } finally { fetchingRef.current = false; }
+            } catch (e) { 
+                console.error(e); 
+                snackbar.open({ type: "error", message: "נכשלה טעינת רשימת הניווט" });
+            } finally { 
+                fetchingRef.current = false; 
+            }
         };
         fetchTocOnce();
-    }, [dataSource]);
+    }, [dataSource, snackbar]);
 
     const currentTocData = useMemo(() => tocItems.find(t => t.id === selectedTocId)?.values as any, [tocItems, selectedTocId]);
     const currentTranslationData = useMemo(() => {
@@ -97,6 +119,7 @@ export function TocTranslationsView() {
     // 2. שליפת פריטים
     const fetchItemsForGroup = async (partId: string) => {
         if (!currentTranslationData || !selectedPrayerId) return;
+        
         setLoading(true);
         try {
             const entities = await dataSource.fetchCollection({
@@ -118,7 +141,21 @@ export function TocTranslationsView() {
             setAllItems(sorted);
             setLocalValues(initialValues);
             setChangedIds(new Set());
-        } finally { setLoading(false); }
+            setSelectedGroupId(partId);
+        } catch (err) {
+            console.error(err);
+            snackbar.open({ type: "error", message: "שגיאה בטעינת פריטי המקטע" });
+        } finally { 
+            setLoading(false); 
+        }
+    };
+
+    const handleSectionClick = (partId: string) => {
+        if (changedIds.size > 0) {
+            const confirmLeave = window.confirm(`יש לך ${changedIds.size} שינויים שלא נשמרו במקטע הנוכחי. האם לעבור למקטע אחר ולאבד את השינויים?`);
+            if (!confirmLeave) return;
+        }
+        fetchItemsForGroup(partId);
     };
 
     const updateLocalItem = (id: string, field: string, value: any) => {
@@ -126,6 +163,7 @@ export function TocTranslationsView() {
         setChangedIds(prev => new Set(prev).add(id));
     };
 
+    // שמירת מקטע בודד ב-Firestore
     const handleSaveGroup = async () => {
         if (!currentTranslationData || changedIds.size === 0) return;
         setSaving(true);
@@ -136,8 +174,58 @@ export function TocTranslationsView() {
             }));
             await Promise.all(promises);
             setChangedIds(new Set());
-            snackbar.open({ type: "success", message: "נשמר בהצלחה" });
-        } catch (err) { snackbar.open({ type: "error", message: "שגיאה" }); } finally { setSaving(false); }
+            snackbar.open({ type: "success", message: "השינויים נשמרו בהצלחה" });
+        } catch (err) { 
+            console.error(err);
+            snackbar.open({ type: "error", message: "שגיאה בתהליך השמירה" }); 
+        } finally { 
+            setSaving(false); 
+        }
+    };
+
+    // פרסום סופי - עדכון זמני סנכרון ב-Firestore וב-BagelDB
+    const handleFinalPublish = async () => {
+        if (!selectedTocId) return;
+        
+        setSaving(true);
+        const newTimestamp = Date.now();
+
+        try {
+            // 1. עדכון Firestore (db-update-time)
+            await dataSource.saveEntity({
+                path: "db-update-time",
+                entityId: selectedTocId,
+                values: { maxTimestamp: newTimestamp },
+                status: "existing",
+                collection: dbUpdateTimeCollection
+            });
+
+            // 2. עדכון BagelDB (update time)
+            // שים לב: עליך להחליף את YOUR_BAGEL_API_TOKEN בטוקן האמיתי שלך
+// שימוש במשתנה הסביבה במקום במחרוזת גלויה
+// הוספת (import.meta as any) עוקפת את בדיקת הטיפוסים
+const BAGEL_TOKEN = (import.meta as any).env.VITE_BAGEL_TOKEN;
+           const COLLECTION_ID = "update_time"; 
+
+            const response = await fetch(`https://api.bageldb.com/v1/collection/${COLLECTION_ID}/items/${selectedTocId}`, {
+                method: 'PUT',
+                mode: 'cors',
+                headers: {
+                    'Authorization': `Bearer ${BAGEL_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ timestamp: newTimestamp } as BagelUpdatePayload)
+            });
+
+            if (!response.ok) throw new Error("BagelDB update failed");
+
+            snackbar.open({ type: "success", message: "העדכון פורסם בהצלחה לכל המשתמשים!" });
+        } catch (err) {
+            console.error(err);
+            snackbar.open({ type: "error", message: "נכשל עדכון זמני הסנכרון" });
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -146,7 +234,7 @@ export function TocTranslationsView() {
             <div className="w-24 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">1. נוסח</h4>
                 {tocItems.map(toc => (
-                    <button key={toc.id} onClick={() => { setSelectedTocId(toc.id); setSelectedTranslationIndex(null); setSelectedCategoryName(null); setSelectedPrayerId(null); setSelectedGroupId(null); }}
+                    <button key={toc.id} onClick={() => { setSelectedTocId(toc.id); setSelectedTranslationIndex(null); setSelectedCategoryName(null); setSelectedPrayerId(null); setSelectedGroupId(null); setAllItems([]); setChangedIds(new Set()); }}
                         className={`text-right p-1.5 rounded border ${selectedTocId === toc.id ? "bg-blue-600 text-white shadow-md" : "bg-gray-50 hover:bg-blue-50"}`}>
                         {toc.id}
                     </button>
@@ -156,7 +244,7 @@ export function TocTranslationsView() {
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">2. תרגום</h4>
                 {currentTocData?.translations?.map((trans: any, index: number) => (
-                    <button key={index} onClick={() => { setSelectedTranslationIndex(index); setSelectedCategoryName(null); setSelectedPrayerId(null); setSelectedGroupId(null); }}
+                    <button key={index} onClick={() => { setSelectedTranslationIndex(index); setSelectedCategoryName(null); setSelectedPrayerId(null); setSelectedGroupId(null); setAllItems([]); setChangedIds(new Set()); }}
                         className={`text-right p-1.5 rounded border ${selectedTranslationIndex === index ? "bg-purple-600 text-white shadow-md" : "bg-gray-50 hover:bg-purple-50"}`}>
                         {trans.translationId}
                     </button>
@@ -166,7 +254,7 @@ export function TocTranslationsView() {
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">3. קטגוריה</h4>
                 {categories.map((cat: any) => (
-                    <button key={cat.name} onClick={() => { setSelectedCategoryName(cat.name); setSelectedPrayerId(null); setSelectedGroupId(null); }}
+                    <button key={cat.name} onClick={() => { setSelectedCategoryName(cat.name); setSelectedPrayerId(null); setSelectedGroupId(null); setAllItems([]); setChangedIds(new Set()); }}
                         className={`text-right p-1.5 rounded border ${selectedCategoryName === cat.name ? "bg-indigo-600 text-white shadow-md" : "bg-gray-50 hover:bg-indigo-50"}`}>
                         {cat.name}
                     </button>
@@ -176,7 +264,7 @@ export function TocTranslationsView() {
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">4. תפילה</h4>
                 {prayers.map((p: any) => (
-                    <button key={p.id} onClick={() => { setSelectedPrayerId(p.id); setSelectedGroupId(null); }}
+                    <button key={p.id} onClick={() => { setSelectedPrayerId(p.id); setSelectedGroupId(null); setAllItems([]); setChangedIds(new Set()); }}
                         className={`text-right p-1.5 rounded border ${selectedPrayerId === p.id ? "bg-green-600 text-white shadow-md" : "bg-gray-50 hover:bg-green-50"}`}>
                         {p.name}
                     </button>
@@ -186,7 +274,7 @@ export function TocTranslationsView() {
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">5. מקטע</h4>
                 {sections.map((s: any) => (
-                    <button key={s.id} onClick={() => { setSelectedGroupId(s.id); fetchItemsForGroup(s.id); }}
+                    <button key={s.id} onClick={() => handleSectionClick(s.id)}
                         className={`text-right p-1.5 rounded border ${selectedGroupId === s.id ? "bg-orange-500 text-white shadow-md" : "bg-gray-50 hover:bg-orange-50"}`}>
                         {s.name}
                     </button>
@@ -195,7 +283,7 @@ export function TocTranslationsView() {
 
             {/* אזור עריכה */}
             <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
-                {loading ? <div className="m-auto animate-pulse text-blue-500 font-bold">טוען מה-DB...</div> : selectedGroupId ? (
+                {loading ? <div className="m-auto animate-pulse text-blue-500 font-bold text-sm">טוען נתונים...</div> : selectedGroupId ? (
                     <>
                         <div className="flex justify-between items-center mb-4 pb-2 border-b">
                             <div>
@@ -204,9 +292,24 @@ export function TocTranslationsView() {
                                 </h3>
                                 <p className="text-[8px] text-gray-400 uppercase tracking-tighter">{selectedTocId} / {selectedCategoryName} / {selectedPrayerId}</p>
                             </div>
-                            <button onClick={handleSaveGroup} disabled={saving || changedIds.size === 0} className="px-6 py-1.5 bg-green-600 text-white rounded font-bold shadow-md hover:bg-green-700 disabled:opacity-30">
-                                {saving ? "שומר..." : `שמור (${changedIds.size})`}
-                            </button>
+                            
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={handleSaveGroup} 
+                                    disabled={saving || changedIds.size === 0} 
+                                    className="px-4 py-1.5 bg-green-600 text-white rounded font-bold shadow-md hover:bg-green-700 disabled:opacity-30 transition-colors"
+                                >
+                                    {saving ? "שומר..." : `שמור מקטע (${changedIds.size})`}
+                                </button>
+
+                                <button 
+                                    onClick={handleFinalPublish} 
+                                    disabled={saving || !selectedTocId} 
+                                    className="px-4 py-1.5 bg-blue-800 text-white rounded font-bold shadow-md hover:bg-blue-900 transition-colors border-2 border-blue-400"
+                                >
+                                    🚀 פרסום סופי לאפליקציה
+                                </button>
+                            </div>
                         </div>
 
                         <div className="overflow-auto space-y-6 pb-10">
@@ -221,13 +324,13 @@ export function TocTranslationsView() {
                                                     {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
                                                 </select>
                                                 {localItem.type === "title" && (
-                                                    <select value={localItem.titleType} onChange={e => updateLocalItem(item.id, "titleType", e.target.value)} className="text-[9px] border rounded bg-white px-1 text-blue-700">
+                                                    <select value={localItem.titleType} onChange={e => updateLocalItem(item.id, "titleType", e.target.value)} className="text-[9px] border rounded bg-white px-1 text-blue-700 font-bold">
                                                         <option value="">רמה</option>
                                                         {availableTitleTypes.map(tt => <option key={tt} value={tt}>{tt}</option>)}
                                                     </select>
                                                 )}
                                                 {localItem.type === "body" && (
-                                                    <label className="flex items-center gap-1 text-[9px] cursor-pointer">
+                                                    <label className="flex items-center gap-1 text-[9px] cursor-pointer select-none">
                                                         <input type="checkbox" checked={!!localItem.fontTanach} onChange={e => updateLocalItem(item.id, "fontTanach", e.target.checked)} /> <b>תנ"ך</b>
                                                     </label>
                                                 )}
@@ -247,7 +350,7 @@ export function TocTranslationsView() {
                     </>
                 ) : <div className="m-auto text-gray-300 italic flex flex-col items-center gap-2">
                         <span className="text-3xl">👈</span>
-                        <p>בחר מקטע לניווט</p>
+                        <p className="text-sm">בחר מקטע מהתפריט הימני כדי להתחיל בעריכה</p>
                     </div>}
             </div>
         </div>

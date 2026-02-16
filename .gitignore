@@ -1,2 +1,6 @@
 node_modules
+<<<<<<< HEAD
 .env.local
+=======
+dist/
+>>>>>>> a13b38f50c11f3be0960dd88bcb572bf1882cb34

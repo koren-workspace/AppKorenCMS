@@ -4,6 +4,15 @@ import federation from "@originjs/vite-plugin-federation"
 
 // https://vitejs.dev/config/
 export default defineConfig({
+    server: {
+        proxy: {
+            "/api": {
+                target: "https://api.firecms.co",
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api/, ""),
+            },
+        },
+    },
     esbuild: {
         logOverride: { "this-is-undefined-in-esm": "silent" }
     },

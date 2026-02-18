@@ -4,7 +4,7 @@ import appConfig from "./index";
 
 function App() {
     return <FireCMSCloudApp
-        projectId={"koren-stage-b"}
+        projectId={"koren-stage"}
         appConfig={appConfig}
         backendApiHost={import.meta.env.DEV ? `${window.location.origin}/api` : undefined}
     />;

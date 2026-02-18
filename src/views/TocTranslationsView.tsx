@@ -69,7 +69,7 @@ export function TocTranslationsView() {
     const [tocItems, setTocItems] = useState<Entity<any>[]>([]);
     const [selectedTocId, setSelectedTocId] = useState<string | null>(null);
     const [selectedTranslationIndex, setSelectedTranslationIndex] = useState<number | null>(null);
-    const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null); 
+    const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null);
     const [selectedPrayerId, setSelectedPrayerId] = useState<string | null>(null);
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
@@ -78,10 +78,10 @@ export function TocTranslationsView() {
     const [entitiesToDelete, setEntitiesToDelete] = useState<Entity<any>[]>([]);
     const [localValues, setLocalValues] = useState<Record<string, any>>({});
     const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
-    
+
     const [availableTypes] = useState<string[]>(["body", "title", "smallInstructions", "instructions"]);
     const [availableTitleTypes] = useState<string[]>(["H1", "H2", "H4"]);
-    
+
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -138,9 +138,9 @@ export function TocTranslationsView() {
     };
 
     const updateLocalItem = (id: string, field: string, value: any) => {
-        setLocalValues(prev => ({ 
-            ...prev, 
-            [id]: { ...prev[id], [field]: value, timestamp: Date.now() } 
+        setLocalValues(prev => ({
+            ...prev,
+            [id]: { ...prev[id], [field]: value, timestamp: Date.now() }
         }));
         setChangedIds(prev => new Set(prev).add(id));
     };
@@ -173,7 +173,7 @@ export function TocTranslationsView() {
         const newEntity: any = { id: newId, values: newItemValues };
         const newAllItems = [...allItems];
         if (index === -1) newAllItems.push(newEntity); else newAllItems.splice(index, 0, newEntity);
-        
+
         setAllItems(newAllItems);
         setLocalValues(prev => ({ ...prev, [newId]: newItemValues }));
         setChangedIds(prev => new Set(prev).add(newId));
@@ -207,17 +207,17 @@ export function TocTranslationsView() {
 
             // 2. שמירות עם Timestamp מעודכן לרגע השמירה
             const savePromises = Array.from(changedIds).map(id => {
-                const isNew = !allItems.find(i => i.id === id)?.path; 
+                const isNew = !allItems.find(i => i.id === id)?.path;
                 const valuesWithFreshTimestamp = {
                     ...localValues[id],
                     timestamp: now // הבטחת רעננות הנתון ב-DB
                 };
 
                 return dataSource.saveEntity({
-                    path, 
-                    entityId: id, 
-                    values: valuesWithFreshTimestamp, 
-                    status: isNew ? "new" : "existing", 
+                    path,
+                    entityId: id,
+                    values: valuesWithFreshTimestamp,
+                    status: isNew ? "new" : "existing",
                     collection: itemsCollection,
                 });
             });
@@ -227,9 +227,9 @@ export function TocTranslationsView() {
             setEntitiesToDelete([]);
             fetchItemsForGroup(selectedGroupId!);
             snackbar.open({ type: "success", message: "נשמר בהצלחה עם חותמת זמן מעודכנת" });
-        } catch (err) { 
+        } catch (err) {
             console.error(err);
-            snackbar.open({ type: "error", message: "שגיאה בשמירה" }); 
+            snackbar.open({ type: "error", message: "שגיאה בשמירה" });
         } finally { setSaving(false); }
     };
 
@@ -243,9 +243,12 @@ export function TocTranslationsView() {
                 values: { maxTimestamp: newTimestamp }, status: "existing", collection: dbUpdateTimeCollection
             });
             const BAGEL_TOKEN = (import.meta as any).env.VITE_BAGEL_TOKEN;
-            await fetch(`https://api.bageldb.com/v1/collection/update_time/items/${selectedTocId}`, {
+            await fetch(`https://api.bageldb.com/v1/collection/updateTime/items/${selectedTocId}`, {
                 method: 'PUT',
-                headers: { 'Authorization': `Bearer ${BAGEL_TOKEN}`, 'Content-Type': 'application/json' },
+                headers: {
+                    'Authorization': `Bearer ${BAGEL_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({ timestamp: newTimestamp })
             });
             snackbar.open({ type: "success", message: "פורסם בהצלחה!" });
@@ -286,7 +289,7 @@ export function TocTranslationsView() {
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">4. תפילה</h4>
-                {currentTranslationData?.categories?.find((c:any)=>c.name === selectedCategoryName)?.prayers?.map((p: any) => (
+                {currentTranslationData?.categories?.find((c: any) => c.name === selectedCategoryName)?.prayers?.map((p: any) => (
                     <button key={p.id} onClick={() => { setSelectedPrayerId(p.id); setSelectedGroupId(null); setAllItems([]); setChangedIds(new Set()); }}
                         className={`text-right p-1.5 rounded border ${selectedPrayerId === p.id ? "bg-green-600 text-white shadow-md" : "bg-gray-50 hover:bg-green-50"}`}>
                         {p.name}
@@ -295,8 +298,8 @@ export function TocTranslationsView() {
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 uppercase text-[8px] mb-1">5. מקטע</h4>
-                {currentTranslationData?.categories?.find((c:any)=>c.name === selectedCategoryName)?.prayers?.find((p:any)=>p.id === selectedPrayerId)?.parts?.map((s: any) => (
-                    <button key={s.id} onClick={() => { if(changedIds.size > 0 && !window.confirm("שינויים לא נשמרו. להמשיך?")) return; fetchItemsForGroup(s.id); }}
+                {currentTranslationData?.categories?.find((c: any) => c.name === selectedCategoryName)?.prayers?.find((p: any) => p.id === selectedPrayerId)?.parts?.map((s: any) => (
+                    <button key={s.id} onClick={() => { if (changedIds.size > 0 && !window.confirm("שינויים לא נשמרו. להמשיך?")) return; fetchItemsForGroup(s.id); }}
                         className={`text-right p-1.5 rounded border ${selectedGroupId === s.id ? "bg-orange-500 text-white shadow-md" : "bg-gray-50 hover:bg-orange-50"}`}>
                         {s.name}
                     </button>
@@ -324,7 +327,7 @@ export function TocTranslationsView() {
 
                         <div className="overflow-auto space-y-2 pb-10 px-2">
                             <button onClick={() => addNewItemAt(0)} className="w-full py-1 opacity-0 hover:opacity-100 bg-blue-50 text-blue-500 border border-dashed border-blue-200 rounded transition-all font-bold">+ הוסף פריט בראש הרשימה</button>
-                            
+
                             {allItems.map((item, index) => {
                                 const localItem = localValues[item.id] || {};
                                 const isChanged = changedIds.has(item.id);
@@ -353,7 +356,7 @@ export function TocTranslationsView() {
                                                     <span>ID: {item.id}</span>
                                                 </div>
                                             </div>
-                                            <textarea 
+                                            <textarea
                                                 className={getItemStyle(localItem.type, localItem.titleType, localItem.fontTanach) + (isChanged ? " border-orange-400 ring-1 ring-orange-100" : "")}
                                                 value={localItem.content}
                                                 onChange={e => updateLocalItem(item.id, "content", e.target.value)}

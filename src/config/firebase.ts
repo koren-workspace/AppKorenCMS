@@ -1,4 +1,4 @@
-// Firebase configuration for koren-stage-b
+// Firebase configuration for koren-stage
 export const firebaseConfig = {
   apiKey: "AIzaSyBRg9Mh14mdRaz_Wik-Xg536GlhVq0vnco",
   authDomain: "koren-stage.firebaseapp.com",

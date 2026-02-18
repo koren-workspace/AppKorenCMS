@@ -6,7 +6,7 @@ import {
     buildCollection
 } from "@firecms/cloud";
 
-// --- 1. הגדרות אוספים מעודכנות ---
+// --- 1. הגדרות אוספים ---
 const itemsCollection = buildCollection({
     id: "items",
     path: "items",
@@ -25,7 +25,7 @@ const itemsCollection = buildCollection({
         mit_id: { dataType: "string", name: "MIT ID" },
         dateSetId: { dataType: "string", name: "Date Set ID" },
         timestamp: { dataType: "number", name: "זמן עדכון" },
-        // שינוי שם השדה ל-linkedItem כדי למנוע שגיאות Type ושאילתה
+        // השדה המדויק לפי ה-Database שלך
         linkedItem: { dataType: "array", name: "פריטים מקושרים", of: { dataType: "string" } }
     }
 });
@@ -34,7 +34,9 @@ const dbUpdateTimeCollection = buildCollection({
     id: "db-update-time",
     path: "db-update-time",
     name: "DB Update Time",
-    properties: { maxTimestamp: { dataType: "number", name: "זמן עדכון" } }
+    properties: {
+        maxTimestamp: { dataType: "number", name: "זמן עדכון מקסימלי" }
+    }
 });
 
 const baseColl = buildCollection({ id: "base", path: "base", name: "base", properties: {} });
@@ -56,6 +58,7 @@ export function TocTranslationsView() {
     const dataSource = useDataSource();
     const snackbar = useSnackbarController();
 
+    // ניווט
     const [tocItems, setTocItems] = useState<Entity<any>[]>([]);
     const [selectedTocId, setSelectedTocId] = useState<string | null>(null);
     const [selectedTranslationIndex, setSelectedTranslationIndex] = useState<number | null>(null);
@@ -63,11 +66,13 @@ export function TocTranslationsView() {
     const [selectedPrayerId, setSelectedPrayerId] = useState<string | null>(null);
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
+    // עריכה
     const [allItems, setAllItems] = useState<Entity<any>[]>([]);
     const [enhancements, setEnhancements] = useState<Record<string, Entity<any>[]>>({});
     const [localValues, setLocalValues] = useState<Record<string, any>>({});
     const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         dataSource.fetchCollection({ path: "toc", collection: baseColl }).then(setTocItems);
@@ -79,8 +84,7 @@ export function TocTranslationsView() {
     const fetchItemsWithEnhancements = async (partId: string) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData) return;
         setLoading(true);
-        console.log("🚀 שליפה למקטע:", partId);
-
+        console.log("🚀 שליפת נתונים למקטע:", partId);
         try {
             const itemsPath = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
             const sourceEntities = await dataSource.fetchCollection({
@@ -91,8 +95,6 @@ export function TocTranslationsView() {
                 (a.values?.mit_id || "").localeCompare(b.values?.mit_id || "", undefined, { numeric: true }));
 
             const sourceItemIds = sorted.map(i => i.values.itemId).filter(id => id);
-            console.log("📍 מזהי מקור (itemIds):", sourceItemIds);
-
             const idChunks = chunkArray(sourceItemIds, 30);
             const enhancementsMap: Record<string, Entity<any>[]> = {};
             
@@ -100,15 +102,14 @@ export function TocTranslationsView() {
                 if (trans.translationId === currentTranslationData.translationId) return;
                 const tPath = `translations/${trans.translationId}/prayers/${selectedPrayerId}/items`;
                 let allRelated: Entity<any>[] = [];
-
                 for (const chunk of idChunks) {
                     const related = await dataSource.fetchCollection({
                         path: tPath, collection: itemsCollection,
-                        filter: { linkedItem: ["array-contains-any", chunk] } // שימוש ב-linkedItem
+                        filter: { linkedItem: ["array-contains-any", chunk] }
                     });
                     allRelated = [...allRelated, ...related];
                 }
-                console.log(`📊 ${trans.translationId}: נמצאו ${allRelated.length}`);
+                console.log(`📊 ${trans.translationId}: נמצאו ${allRelated.length} פירושים`);
                 enhancementsMap[trans.translationId] = allRelated;
             });
 
@@ -123,82 +124,144 @@ export function TocTranslationsView() {
             setSelectedGroupId(partId);
             setChangedIds(new Set());
         } catch (err) {
-            console.error("❌ שגיאה:", err);
-            snackbar.open({ type: "error", message: "שגיאה בטעינה" });
+            snackbar.open({ type: "error", message: "שגיאה בטעינת נתונים" });
         } finally { setLoading(false); }
     };
 
     const updateLocalItem = (id: string, field: string, value: any) => {
-        setLocalValues(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+        setLocalValues(prev => ({ ...prev, [id]: { ...prev[id], [field]: value, timestamp: Date.now() } }));
         setChangedIds(prev => new Set(prev).add(id));
+    };
+
+    const handleSaveGroup = async () => {
+        if (!currentTranslationData || changedIds.size === 0) return;
+        setSaving(true);
+        const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
+        const now = Date.now();
+        try {
+            const savePromises = Array.from(changedIds).map(id => {
+                const isNew = id.startsWith("new_");
+                return dataSource.saveEntity({
+                    path,
+                    entityId: isNew ? undefined : id,
+                    values: { ...localValues[id], timestamp: now },
+                    status: isNew ? "new" : "existing",
+                    collection: itemsCollection,
+                });
+            });
+            await Promise.all(savePromises);
+            snackbar.open({ type: "success", message: "המקטע נשמר בהצלחה (מקומי)" });
+            setChangedIds(new Set());
+            fetchItemsWithEnhancements(selectedGroupId!);
+        } catch (err) { snackbar.open({ type: "error", message: "שגיאה בשמירה" }); }
+        finally { setSaving(false); }
+    };
+
+    const handleFinalPublish = async () => {
+        if (!selectedTocId) return;
+        setSaving(true);
+        const newTimestamp = Date.now();
+        try {
+            // 1. עדכון Firestore לצורך סנכרון פנימי
+            await dataSource.saveEntity({
+                path: "db-update-time", entityId: selectedTocId,
+                values: { maxTimestamp: newTimestamp }, status: "existing", collection: dbUpdateTimeCollection
+            });
+
+            // 2. עדכון BagelStudio (הטריגר של האפליקציה)
+            const BAGEL_TOKEN = (import.meta as any).env.VITE_BAGEL_TOKEN;
+            await fetch(`https://api.bageldb.com/v1/collection/updateTime/items/${selectedTocId}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${BAGEL_TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ timestamp: newTimestamp })
+            });
+
+            snackbar.open({ type: "success", message: "השינויים פורסמו בהצלחה לאפליקציה!" });
+        } catch (err) { 
+            console.error(err);
+            snackbar.open({ type: "error", message: "נכשל הפרסום ל-Bagel" }); 
+        }
+        finally { setSaving(false); }
     };
 
     const addNewItemAt = (index: number) => {
         const newId = `new_${Date.now()}`;
-        const newItem = { id: newId, values: { content: "", type: "body", partId: selectedGroupId, itemId: newId, mit_id: "" } };
+        const newItemValues = { content: "", type: "body", partId: selectedGroupId, itemId: newId, mit_id: "", timestamp: Date.now() };
         const updated = [...allItems];
-        updated.splice(index, 0, newItem as any);
+        updated.splice(index, 0, { id: newId, values: newItemValues } as any);
         setAllItems(updated);
-        setLocalValues(prev => ({ ...prev, [newId]: newItem.values }));
+        setLocalValues(prev => ({ ...prev, [newId]: newItemValues }));
         setChangedIds(prev => new Set(prev).add(newId));
     };
 
     return (
         <div className="flex w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-[10px]" dir="rtl">
-            {/* ניווט (מוצג במלואו כפי שביקשת) */}
+            {/* ניווט מלא */}
             <div className="w-24 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">1. נוסח</h4>
-                {tocItems.map(t => <button key={t.id} onClick={() => {setSelectedTocId(t.id); setSelectedTranslationIndex(null); setSelectedCategoryName(null); setSelectedPrayerId(null); setSelectedGroupId(null);}} className={`text-right p-1.5 rounded border ${selectedTocId === t.id ? "bg-blue-600 text-white" : "bg-gray-50"}`}>{t.id}</button>)}
+                {tocItems.map(t => <button key={t.id} onClick={() => {setSelectedTocId(t.id); setSelectedTranslationIndex(null);}} className={`text-right p-1.5 rounded border ${selectedTocId === t.id ? "bg-blue-600 text-white" : "bg-gray-50"}`}>{t.id}</button>)}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">2. תרגום</h4>
-                {currentTocData?.translations?.map((t:any, i:number) => <button key={i} onClick={() => {setSelectedTranslationIndex(i); setSelectedCategoryName(null); setSelectedPrayerId(null); setSelectedGroupId(null);}} className={`text-right p-1.5 rounded border ${selectedTranslationIndex === i ? "bg-purple-600 text-white" : "bg-gray-50"}`}>{t.translationId}</button>)}
+                {currentTocData?.translations?.map((t:any, i:number) => <button key={i} onClick={() => setSelectedTranslationIndex(i)} className={`text-right p-1.5 rounded border ${selectedTranslationIndex === i ? "bg-purple-600 text-white" : "bg-gray-50"}`}>{t.translationId}</button>)}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">3. קטגוריה</h4>
-                {currentTranslationData?.categories?.map((c:any) => <button key={c.name} onClick={() => {setSelectedCategoryName(c.name); setSelectedPrayerId(null); setSelectedGroupId(null);}} className={`text-right p-1.5 rounded border ${selectedCategoryName === c.name ? "bg-indigo-600 text-white" : "bg-gray-50"}`}>{c.name}</button>)}
+                {currentTranslationData?.categories?.map((c:any) => <button key={c.name} onClick={() => setSelectedCategoryName(c.name)} className={`text-right p-1.5 rounded border ${selectedCategoryName === c.name ? "bg-indigo-600 text-white" : "bg-gray-50"}`}>{c.name}</button>)}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">4. תפילה</h4>
-                {currentTranslationData?.categories?.find((c:any) => c.name === selectedCategoryName)?.prayers?.map((p:any) => <button key={p.id} onClick={() => {setSelectedPrayerId(p.id); setSelectedGroupId(null);}} className={`text-right p-1.5 rounded border ${selectedPrayerId === p.id ? "bg-green-600 text-white" : "bg-gray-50"}`}>{p.name}</button>)}
+                {currentTranslationData?.categories?.find((c:any) => c.name === selectedCategoryName)?.prayers?.map((p:any) => <button key={p.id} onClick={() => setSelectedPrayerId(p.id)} className={`text-right p-1.5 rounded border ${selectedPrayerId === p.id ? "bg-green-600 text-white" : "bg-gray-50"}`}>{p.name}</button>)}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
                 {currentTranslationData?.categories?.flatMap((c:any) => c.prayers).find((p:any) => p.id === selectedPrayerId)?.parts?.map((s:any) => <button key={s.id} onClick={() => fetchItemsWithEnhancements(s.id)} className={`text-right p-1.5 rounded border ${selectedGroupId === s.id ? "bg-orange-500 text-white" : "bg-gray-50"}`}>{s.name}</button>)}
             </div>
 
-            {/* אזור עריכה */}
+            {/* עריכה */}
             <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
-                {loading ? <div className="m-auto font-bold text-blue-500 animate-pulse text-lg">טוען נתונים...</div> : selectedGroupId && (
+                {selectedGroupId && (
+                    <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                        <h3 className="font-bold text-base">{selectedGroupId}</h3>
+                        <div className="flex gap-2">
+                            <button onClick={handleSaveGroup} disabled={saving || changedIds.size === 0} className="px-4 py-1.5 bg-green-600 text-white rounded font-bold disabled:opacity-30">
+                                {saving ? "שומר..." : "שמור מקטע"}
+                            </button>
+                            <button onClick={handleFinalPublish} disabled={saving} className="px-4 py-1.5 bg-blue-800 text-white rounded font-bold border-2 border-blue-400">
+                                🚀 פרסום (Publish)
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {loading ? <div className="m-auto font-bold text-blue-500 animate-pulse text-lg">טוען...</div> : selectedGroupId && (
                     <div className="overflow-auto space-y-4 px-2 pb-10">
-                        <button onClick={() => addNewItemAt(0)} className="w-full py-2 border-2 border-dashed border-blue-100 text-blue-300 font-bold hover:bg-blue-50 transition-all">+ הוסף בראש המקטע</button>
-                        
+                        <button onClick={() => addNewItemAt(0)} className="w-full py-2 border-2 border-dashed border-blue-100 text-blue-300 font-bold hover:bg-blue-50">+ הוסף בראש המקטע</button>
                         {allItems.map((item, index) => {
                             const val = localValues[item.id] || {};
-                            const curItemId = val.itemId;
-                            // חיפוש פירושים מקושרים לפי linkedItem
+                            const curId = val.itemId;
                             const related = Object.entries(enhancements).flatMap(([tId, list]) => 
                                 list.filter(e => {
                                     const link = e.values?.linkedItem;
-                                    return Array.isArray(link) ? link.includes(curItemId) : link === curItemId;
+                                    return Array.isArray(link) ? link.includes(curId) : link === curId;
                                 }).map(e => ({...e, tId}))
                             );
 
                             return (
                                 <React.Fragment key={item.id}>
-                                    <div className={`p-2 border rounded shadow-sm ${changedIds.has(item.id) ? "border-orange-300" : "border-gray-200"}`}>
-                                        <div className="flex justify-between text-[8px] text-gray-400 mb-1">
-                                            <span>itemId: {curItemId} | type: {val.type}</span>
-                                            <span>MIT: {val.mit_id}</span>
+                                    <div className={`p-2 border rounded ${changedIds.has(item.id) ? "border-orange-300" : "border-gray-200"}`}>
+                                        <div className="flex justify-between text-[7px] text-gray-400 mb-1 uppercase tracking-tighter">
+                                            <span>itemId: {curId} | MIT: {val.mit_id}</span>
+                                            <span>Update: {val.timestamp ? new Date(val.timestamp).toLocaleTimeString() : 'Never'}</span>
                                         </div>
                                         <textarea className={getItemStyle(val.type)} value={val.content} onChange={e => updateLocalItem(item.id, "content", e.target.value)} dir="rtl" />
                                     </div>
 
                                     {related.length > 0 && (
-                                        <div className="mr-10 border-r-4 border-blue-400 pr-3 space-y-1">
+                                        <div className="mr-8 border-r-4 border-blue-400 pr-3 space-y-1">
                                             {related.map(enh => (
-                                                <div key={enh.id} className="p-2 bg-blue-50 border border-blue-100 rounded text-[10px] shadow-sm">
-                                                    <div className="font-bold text-blue-600 text-[8px] border-b border-blue-100 mb-1 uppercase">{enh.tId}</div>
+                                                <div key={enh.id} className="p-2 bg-blue-50 border border-blue-100 rounded text-[10px]">
+                                                    <div className="font-bold text-blue-600 mb-1">{enh.tId}</div>
                                                     <div>{enh.values?.content}</div>
                                                 </div>
                                             ))}

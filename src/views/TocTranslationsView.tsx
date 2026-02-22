@@ -11,6 +11,7 @@ import {
     getPartsForPrayer
 } from "./toc-translations/services/navigationService";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
+import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
 
 // --- 1. הגדרות אוספים ---
 const itemsCollection = buildCollection({
@@ -63,6 +64,7 @@ const getItemStyle = (type: string, titleType?: string, fontTanach?: boolean) =>
 export function TocTranslationsView() {
     const dataSource = useDataSource();
     const snackbar = useSnackbarController();
+    const logPrefix = "[TocTranslations]";
 
     // ניווט
     const [tocItems, setTocItems] = useState<Entity<any>[]>([]);
@@ -81,7 +83,20 @@ export function TocTranslationsView() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        dataSource.fetchCollection({ path: "toc", collection: baseColl }).then(setTocItems);
+        const startedAt = Date.now();
+        console.info(`${logPrefix} TOC fetch start`, { online: navigator.onLine });
+        dataSource.fetchCollection({ path: "toc", collection: baseColl })
+            .then((items) => {
+                console.info(`${logPrefix} TOC fetch success`, {
+                    count: items.length,
+                    elapsedMs: Date.now() - startedAt
+                });
+                setTocItems(items);
+            })
+            .catch((error) => {
+                console.error(`${logPrefix} TOC fetch failed`, error);
+                snackbar.open({ type: "error", message: "שגיאה בטעינת רשימת נוסחים" });
+            });
     }, [dataSource]);
 
     const currentTocData = useMemo(() => tocItems.find(t => t.id === selectedTocId)?.values as any, [tocItems, selectedTocId]);
@@ -101,8 +116,14 @@ export function TocTranslationsView() {
 
     const fetchItemsWithEnhancements = async (partId: string) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData) return;
+        const startedAt = Date.now();
         setLoading(true);
-        console.log("🚀 שליפת נתונים למקטע:", partId);
+        console.info(`${logPrefix} Part fetch start`, {
+            tocId: selectedTocId,
+            translationId: currentTranslationData.translationId,
+            prayerId: selectedPrayerId,
+            partId
+        });
         try {
             const itemsPath = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
             const sourceEntities = await dataSource.fetchCollection({
@@ -127,7 +148,6 @@ export function TocTranslationsView() {
                     });
                     allRelated = [...allRelated, ...related];
                 }
-                console.log(`📊 ${trans.translationId}: נמצאו ${allRelated.length} פירושים`);
                 enhancementsMap[trans.translationId] = allRelated;
             });
 
@@ -141,7 +161,13 @@ export function TocTranslationsView() {
             setLocalValues(initialValues);
             setSelectedGroupId(partId);
             setChangedIds(new Set());
+            console.info(`${logPrefix} Part fetch success`, {
+                itemsCount: sorted.length,
+                enhancementsTranslationsCount: Object.keys(enhancementsMap).length,
+                elapsedMs: Date.now() - startedAt
+            });
         } catch (err) {
+            console.error(`${logPrefix} Part fetch failed`, err);
             snackbar.open({ type: "error", message: "שגיאה בטעינת נתונים" });
         } finally { setLoading(false); }
     };
@@ -153,11 +179,16 @@ export function TocTranslationsView() {
 
     const handleSaveGroup = async () => {
         if (!currentTranslationData || changedIds.size === 0) return;
+        const startedAt = Date.now();
         setSaving(true);
         const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
         const now = Date.now();
         const changedIdList = Array.from(changedIds);
         const hasNewItems = changedIdList.some(id => id.startsWith("new_"));
+        console.info(`${logPrefix} Save start`, {
+            changedItemsCount: changedIdList.length,
+            hasNewItems
+        });
         try {
             const savePromises = changedIdList.map(id => {
                 const isNew = id.startsWith("new_");
@@ -172,17 +203,26 @@ export function TocTranslationsView() {
             await Promise.all(savePromises);
             snackbar.open({ type: "success", message: "המקטע נשמר בהצלחה (מקומי)" });
             setChangedIds(new Set());
+            console.info(`${logPrefix} Save success`, {
+                elapsedMs: Date.now() - startedAt,
+                reloadedAfterSave: hasNewItems
+            });
             if (hasNewItems && selectedGroupId) {
                 await fetchItemsWithEnhancements(selectedGroupId);
             }
-        } catch (err) { snackbar.open({ type: "error", message: "שגיאה בשמירה" }); }
+        } catch (err) {
+            console.error(`${logPrefix} Save failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בשמירה" });
+        }
         finally { setSaving(false); }
     };
 
     const handleFinalPublish = async () => {
         if (!selectedTocId) return;
+        const startedAt = Date.now();
         setSaving(true);
         const newTimestamp = Date.now();
+        console.info(`${logPrefix} Publish start`, { tocId: selectedTocId });
         try {
             // 1. עדכון Firestore לצורך סנכרון פנימי
             await dataSource.saveEntity({
@@ -199,8 +239,11 @@ export function TocTranslationsView() {
             });
 
             snackbar.open({ type: "success", message: "השינויים פורסמו בהצלחה לאפליקציה!" });
+            console.info(`${logPrefix} Publish success`, {
+                elapsedMs: Date.now() - startedAt
+            });
         } catch (err) { 
-            console.error(err);
+            console.error(`${logPrefix} Publish failed`, err);
             snackbar.open({ type: "error", message: "נכשל הפרסום ל-Bagel" }); 
         }
         finally { setSaving(false); }
@@ -219,21 +262,39 @@ export function TocTranslationsView() {
     return (
         <div className="flex w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-[10px]" dir="rtl">
             {/* ניווט מלא */}
-            <div className="w-24 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">1. נוסח</h4>
-                {tocItems.map(t => <button key={t.id} onClick={() => {setSelectedTocId(t.id); setSelectedTranslationIndex(null);}} className={`text-right p-1.5 rounded border ${selectedTocId === t.id ? "bg-blue-600 text-white" : "bg-gray-50"}`}>{t.id}</button>)}
-            </div>
-            <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">2. תרגום</h4>
-                {currentTocData?.translations?.map((t:any, i:number) => <button key={i} onClick={() => setSelectedTranslationIndex(i)} className={`text-right p-1.5 rounded border ${selectedTranslationIndex === i ? "bg-purple-600 text-white" : "bg-gray-50"}`}>{t.translationId}</button>)}
-            </div>
+            <TocAndTranslationColumns
+                tocItems={tocItems}
+                selectedTocId={selectedTocId}
+                onSelectToc={(tocId) => {
+                    setSelectedTocId(tocId);
+                    setSelectedTranslationIndex(null);
+                    setSelectedCategoryName(null);
+                    setSelectedPrayerId(null);
+                    setSelectedGroupId(null);
+                }}
+                translations={currentTocData?.translations ?? []}
+                selectedTranslationIndex={selectedTranslationIndex}
+                onSelectTranslation={(index) => {
+                    setSelectedTranslationIndex(index);
+                    setSelectedCategoryName(null);
+                    setSelectedPrayerId(null);
+                    setSelectedGroupId(null);
+                }}
+            />
             <PrayerNavigationColumns
                 currentCategories={currentCategories}
                 selectedCategoryName={selectedCategoryName}
-                onSelectCategory={setSelectedCategoryName}
+                onSelectCategory={(categoryName) => {
+                    setSelectedCategoryName(categoryName);
+                    setSelectedPrayerId(null);
+                    setSelectedGroupId(null);
+                }}
                 currentPrayers={currentPrayers}
                 selectedPrayerId={selectedPrayerId}
-                onSelectPrayer={setSelectedPrayerId}
+                onSelectPrayer={(prayerId) => {
+                    setSelectedPrayerId(prayerId);
+                    setSelectedGroupId(null);
+                }}
                 currentParts={currentParts}
                 selectedGroupId={selectedGroupId}
                 onSelectPart={fetchItemsWithEnhancements}

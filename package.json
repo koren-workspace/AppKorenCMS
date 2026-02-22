@@ -7,7 +7,7 @@
     "dev": "vite --port 5001",
     "build": "vite build",
     "serve": "vite preview --port 5001",
-    "deploy": "run-s build && firecms deploy --project=koren-stage",
+    "deploy": "run-s build && firecms deploy --project=koren-stage-b",
     "login": "firecms login",
     "logout": "firecms logout"
   },

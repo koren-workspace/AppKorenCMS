@@ -10,9 +10,7 @@ import {
     getPrayersForCategory,
     getPartsForPrayer
 } from "./toc-translations/services/navigationService";
-import {
-    fetchTocItems,
-} from "./toc-translations/services/tocService";
+import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 
 // --- 1. הגדרות אוספים ---
 const itemsCollection = buildCollection({
@@ -46,6 +44,8 @@ const dbUpdateTimeCollection = buildCollection({
         maxTimestamp: { dataType: "number", name: "זמן עדכון מקסימלי" }
     }
 });
+
+const baseColl = buildCollection({ id: "base", path: "base", name: "base", properties: {} });
 
 const chunkArray = (arr: any[], size: number) => {
     return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
@@ -81,7 +81,7 @@ export function TocTranslationsView() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        fetchTocItems(dataSource).then(setTocItems);
+        dataSource.fetchCollection({ path: "toc", collection: baseColl }).then(setTocItems);
     }, [dataSource]);
 
     const currentTocData = useMemo(() => tocItems.find(t => t.id === selectedTocId)?.values as any, [tocItems, selectedTocId]);
@@ -156,8 +156,10 @@ export function TocTranslationsView() {
         setSaving(true);
         const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
         const now = Date.now();
+        const changedIdList = Array.from(changedIds);
+        const hasNewItems = changedIdList.some(id => id.startsWith("new_"));
         try {
-            const savePromises = Array.from(changedIds).map(id => {
+            const savePromises = changedIdList.map(id => {
                 const isNew = id.startsWith("new_");
                 return dataSource.saveEntity({
                     path,
@@ -170,7 +172,9 @@ export function TocTranslationsView() {
             await Promise.all(savePromises);
             snackbar.open({ type: "success", message: "המקטע נשמר בהצלחה (מקומי)" });
             setChangedIds(new Set());
-            fetchItemsWithEnhancements(selectedGroupId!);
+            if (hasNewItems && selectedGroupId) {
+                await fetchItemsWithEnhancements(selectedGroupId);
+            }
         } catch (err) { snackbar.open({ type: "error", message: "שגיאה בשמירה" }); }
         finally { setSaving(false); }
     };
@@ -223,18 +227,17 @@ export function TocTranslationsView() {
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">2. תרגום</h4>
                 {currentTocData?.translations?.map((t:any, i:number) => <button key={i} onClick={() => setSelectedTranslationIndex(i)} className={`text-right p-1.5 rounded border ${selectedTranslationIndex === i ? "bg-purple-600 text-white" : "bg-gray-50"}`}>{t.translationId}</button>)}
             </div>
-            <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">3. קטגוריה</h4>
-                {currentCategories.map((c:any) => <button key={c.name} onClick={() => setSelectedCategoryName(c.name)} className={`text-right p-1.5 rounded border ${selectedCategoryName === c.name ? "bg-indigo-600 text-white" : "bg-gray-50"}`}>{c.name}</button>)}
-            </div>
-            <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">4. תפילה</h4>
-                {currentPrayers.map((p:any) => <button key={p.id} onClick={() => setSelectedPrayerId(p.id)} className={`text-right p-1.5 rounded border ${selectedPrayerId === p.id ? "bg-green-600 text-white" : "bg-gray-50"}`}>{p.name}</button>)}
-            </div>
-            <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
-                {currentParts.map((s:any) => <button key={s.id} onClick={() => fetchItemsWithEnhancements(s.id)} className={`text-right p-1.5 rounded border ${selectedGroupId === s.id ? "bg-orange-500 text-white" : "bg-gray-50"}`}>{s.name}</button>)}
-            </div>
+            <PrayerNavigationColumns
+                currentCategories={currentCategories}
+                selectedCategoryName={selectedCategoryName}
+                onSelectCategory={setSelectedCategoryName}
+                currentPrayers={currentPrayers}
+                selectedPrayerId={selectedPrayerId}
+                onSelectPrayer={setSelectedPrayerId}
+                currentParts={currentParts}
+                selectedGroupId={selectedGroupId}
+                onSelectPart={fetchItemsWithEnhancements}
+            />
 
             {/* עריכה */}
             <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">

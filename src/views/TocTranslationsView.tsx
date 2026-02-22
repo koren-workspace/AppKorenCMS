@@ -83,16 +83,8 @@ export function TocTranslationsView() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        const startedAt = Date.now();
-        console.info(`${logPrefix} TOC fetch start`, { online: navigator.onLine });
         dataSource.fetchCollection({ path: "toc", collection: baseColl })
-            .then((items) => {
-                console.info(`${logPrefix} TOC fetch success`, {
-                    count: items.length,
-                    elapsedMs: Date.now() - startedAt
-                });
-                setTocItems(items);
-            })
+            .then(setTocItems)
             .catch((error) => {
                 console.error(`${logPrefix} TOC fetch failed`, error);
                 snackbar.open({ type: "error", message: "שגיאה בטעינת רשימת נוסחים" });
@@ -116,14 +108,7 @@ export function TocTranslationsView() {
 
     const fetchItemsWithEnhancements = async (partId: string) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData) return;
-        const startedAt = Date.now();
         setLoading(true);
-        console.info(`${logPrefix} Part fetch start`, {
-            tocId: selectedTocId,
-            translationId: currentTranslationData.translationId,
-            prayerId: selectedPrayerId,
-            partId
-        });
         try {
             const itemsPath = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
             const sourceEntities = await dataSource.fetchCollection({
@@ -161,11 +146,6 @@ export function TocTranslationsView() {
             setLocalValues(initialValues);
             setSelectedGroupId(partId);
             setChangedIds(new Set());
-            console.info(`${logPrefix} Part fetch success`, {
-                itemsCount: sorted.length,
-                enhancementsTranslationsCount: Object.keys(enhancementsMap).length,
-                elapsedMs: Date.now() - startedAt
-            });
         } catch (err) {
             console.error(`${logPrefix} Part fetch failed`, err);
             snackbar.open({ type: "error", message: "שגיאה בטעינת נתונים" });
@@ -179,16 +159,11 @@ export function TocTranslationsView() {
 
     const handleSaveGroup = async () => {
         if (!currentTranslationData || changedIds.size === 0) return;
-        const startedAt = Date.now();
         setSaving(true);
         const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
         const now = Date.now();
         const changedIdList = Array.from(changedIds);
         const hasNewItems = changedIdList.some(id => id.startsWith("new_"));
-        console.info(`${logPrefix} Save start`, {
-            changedItemsCount: changedIdList.length,
-            hasNewItems
-        });
         try {
             const savePromises = changedIdList.map(id => {
                 const isNew = id.startsWith("new_");
@@ -203,10 +178,6 @@ export function TocTranslationsView() {
             await Promise.all(savePromises);
             snackbar.open({ type: "success", message: "המקטע נשמר בהצלחה (מקומי)" });
             setChangedIds(new Set());
-            console.info(`${logPrefix} Save success`, {
-                elapsedMs: Date.now() - startedAt,
-                reloadedAfterSave: hasNewItems
-            });
             if (hasNewItems && selectedGroupId) {
                 await fetchItemsWithEnhancements(selectedGroupId);
             }
@@ -219,10 +190,8 @@ export function TocTranslationsView() {
 
     const handleFinalPublish = async () => {
         if (!selectedTocId) return;
-        const startedAt = Date.now();
         setSaving(true);
         const newTimestamp = Date.now();
-        console.info(`${logPrefix} Publish start`, { tocId: selectedTocId });
         try {
             // 1. עדכון Firestore לצורך סנכרון פנימי
             await dataSource.saveEntity({
@@ -239,9 +208,6 @@ export function TocTranslationsView() {
             });
 
             snackbar.open({ type: "success", message: "השינויים פורסמו בהצלחה לאפליקציה!" });
-            console.info(`${logPrefix} Publish success`, {
-                elapsedMs: Date.now() - startedAt
-            });
         } catch (err) { 
             console.error(`${logPrefix} Publish failed`, err);
             snackbar.open({ type: "error", message: "נכשל הפרסום ל-Bagel" }); 

@@ -5,6 +5,14 @@ import {
     Entity,
     buildCollection
 } from "@firecms/cloud";
+import {
+    getPrayerCategoriesFromTranslation,
+    getPrayersForCategory,
+    getPartsForPrayer
+} from "./toc-translations/services/navigationService";
+import {
+    fetchTocItems,
+} from "./toc-translations/services/tocService";
 
 // --- 1. הגדרות אוספים ---
 const itemsCollection = buildCollection({
@@ -38,8 +46,6 @@ const dbUpdateTimeCollection = buildCollection({
         maxTimestamp: { dataType: "number", name: "זמן עדכון מקסימלי" }
     }
 });
-
-const baseColl = buildCollection({ id: "base", path: "base", name: "base", properties: {} });
 
 const chunkArray = (arr: any[], size: number) => {
     return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
@@ -75,11 +81,23 @@ export function TocTranslationsView() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        dataSource.fetchCollection({ path: "toc", collection: baseColl }).then(setTocItems);
+        fetchTocItems(dataSource).then(setTocItems);
     }, [dataSource]);
 
     const currentTocData = useMemo(() => tocItems.find(t => t.id === selectedTocId)?.values as any, [tocItems, selectedTocId]);
     const currentTranslationData = useMemo(() => currentTocData?.translations?.[selectedTranslationIndex ?? -1], [currentTocData, selectedTranslationIndex]);
+    const currentCategories = useMemo(
+        () => getPrayerCategoriesFromTranslation(currentTranslationData),
+        [currentTranslationData]
+    );
+    const currentPrayers = useMemo(
+        () => getPrayersForCategory(currentCategories, selectedCategoryName),
+        [currentCategories, selectedCategoryName]
+    );
+    const currentParts = useMemo(
+        () => getPartsForPrayer(currentCategories, selectedPrayerId),
+        [currentCategories, selectedPrayerId]
+    );
 
     const fetchItemsWithEnhancements = async (partId: string) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData) return;
@@ -207,15 +225,15 @@ export function TocTranslationsView() {
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">3. קטגוריה</h4>
-                {currentTranslationData?.categories?.map((c:any) => <button key={c.name} onClick={() => setSelectedCategoryName(c.name)} className={`text-right p-1.5 rounded border ${selectedCategoryName === c.name ? "bg-indigo-600 text-white" : "bg-gray-50"}`}>{c.name}</button>)}
+                {currentCategories.map((c:any) => <button key={c.name} onClick={() => setSelectedCategoryName(c.name)} className={`text-right p-1.5 rounded border ${selectedCategoryName === c.name ? "bg-indigo-600 text-white" : "bg-gray-50"}`}>{c.name}</button>)}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">4. תפילה</h4>
-                {currentTranslationData?.categories?.find((c:any) => c.name === selectedCategoryName)?.prayers?.map((p:any) => <button key={p.id} onClick={() => setSelectedPrayerId(p.id)} className={`text-right p-1.5 rounded border ${selectedPrayerId === p.id ? "bg-green-600 text-white" : "bg-gray-50"}`}>{p.name}</button>)}
+                {currentPrayers.map((p:any) => <button key={p.id} onClick={() => setSelectedPrayerId(p.id)} className={`text-right p-1.5 rounded border ${selectedPrayerId === p.id ? "bg-green-600 text-white" : "bg-gray-50"}`}>{p.name}</button>)}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
-                {currentTranslationData?.categories?.flatMap((c:any) => c.prayers).find((p:any) => p.id === selectedPrayerId)?.parts?.map((s:any) => <button key={s.id} onClick={() => fetchItemsWithEnhancements(s.id)} className={`text-right p-1.5 rounded border ${selectedGroupId === s.id ? "bg-orange-500 text-white" : "bg-gray-50"}`}>{s.name}</button>)}
+                {currentParts.map((s:any) => <button key={s.id} onClick={() => fetchItemsWithEnhancements(s.id)} className={`text-right p-1.5 rounded border ${selectedGroupId === s.id ? "bg-orange-500 text-white" : "bg-gray-50"}`}>{s.name}</button>)}
             </div>
 
             {/* עריכה */}

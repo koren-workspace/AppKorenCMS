@@ -22,7 +22,8 @@ type PartItemRowProps = {
     isChanged: boolean;
     related: RelatedEntry[];
     onContentChange: (itemId: string, value: string) => void;
-    onAddAfter: () => void;
+    /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
+    onAddAfter?: () => void;
 };
 
 export function PartItemRow({
@@ -73,13 +74,15 @@ export function PartItemRow({
                     ))}
                 </div>
             )}
-            <button
-                type="button"
-                onClick={onAddAfter}
-                className="w-full py-1 opacity-0 hover:opacity-100 bg-green-50 text-green-500 border border-dashed border-green-200 text-[8px] font-bold"
-            >
-                + הוסף מקטע כאן
-            </button>
+            {onAddAfter && (
+                <button
+                    type="button"
+                    onClick={onAddAfter}
+                    className="w-full py-1 opacity-0 hover:opacity-100 bg-green-50 text-green-500 border border-dashed border-green-200 text-[8px] font-bold"
+                >
+                    + הוסף מקטע כאן
+                </button>
+            )}
         </React.Fragment>
     );
 }

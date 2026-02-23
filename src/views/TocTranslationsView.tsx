@@ -17,11 +17,14 @@ import React from "react";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
+import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBanner";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
+import { isBaseTranslation } from "./toc-translations/services/navigationService";
 
 export function TocTranslationsView() {
     const nav = useTocNavigation();
+    const allowAdditions = isBaseTranslation(nav.currentTranslationData?.translationId);
     const partEdit = usePartEdit({
         currentTocData: nav.currentTocData,
         currentTranslationData: nav.currentTranslationData,
@@ -29,8 +32,16 @@ export function TocTranslationsView() {
         selectedTocId: nav.selectedTocId,
     });
 
+    const hasTranslationSelection =
+        !!nav.selectedTocId && nav.selectedTranslationIndex != null;
+
     return (
-        <div className="flex w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-[10px]" dir="rtl">
+        <div className="flex flex-col w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-[10px]" dir="rtl">
+            <EditorGuideBanner
+                translationId={nav.currentTranslationData?.translationId}
+                hasSelection={hasTranslationSelection}
+            />
+            <div className="flex flex-1 min-h-0 gap-1">
             {/* עמודה 1–2: בחירת נוסח (TOC) ותרגום */}
             <TocAndTranslationColumns
                 tocItems={nav.tocItems}
@@ -51,17 +62,18 @@ export function TocTranslationsView() {
                 selectedCategoryName={nav.selectedCategoryName}
                 onSelectCategory={nav.onSelectCategory}
                 onAddCategory={nav.addCategory}
-                onDeleteCategory={nav.deleteCategory}
-                showAddCategory={!!nav.selectedTocId && nav.selectedTranslationIndex != null}
+                onDeleteCategory={allowAdditions ? nav.deleteCategory : undefined}
+                showAddCategory={!!nav.selectedTocId && nav.selectedTranslationIndex != null && allowAdditions}
                 currentPrayers={nav.currentPrayers}
                 selectedPrayerId={nav.selectedPrayerId}
                 onSelectPrayer={nav.onSelectPrayer}
                 onAddPrayer={nav.addPrayer}
-                onDeletePrayer={nav.deletePrayer}
+                onDeletePrayer={allowAdditions ? nav.deletePrayer : undefined}
                 showAddPrayer={
                     !!nav.selectedTocId &&
                     nav.selectedTranslationIndex != null &&
-                    !!nav.selectedCategoryName
+                    !!nav.selectedCategoryName &&
+                    allowAdditions
                 }
                 currentParts={nav.currentParts}
                 selectedGroupId={partEdit.selectedGroupId}
@@ -82,7 +94,9 @@ export function TocTranslationsView() {
                     partEdit.updateLocalItem(id, "content", value)
                 }
                 onAddNewItemAt={partEdit.addNewItemAt}
+                allowAddPart={allowAdditions}
             />
+            </div>
         </div>
     );
 }

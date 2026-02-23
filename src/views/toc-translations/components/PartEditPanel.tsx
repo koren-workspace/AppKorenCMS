@@ -26,6 +26,8 @@ export type PartEditPanelProps = {
     onFinalPublish: () => void;
     onContentChange: (itemId: string, value: string) => void;
     onAddNewItemAt: (index: number) => void;
+    /** רק בנוסח הבסיסי (0-*) מותר להוסיף מקטעים; בשאר הנוסחים – עריכה בלבד */
+    allowAddPart?: boolean;
 };
 
 export function PartEditPanel({
@@ -40,6 +42,7 @@ export function PartEditPanel({
     onFinalPublish,
     onContentChange,
     onAddNewItemAt,
+    allowAddPart = true,
 }: PartEditPanelProps) {
     return (
         <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
@@ -57,14 +60,16 @@ export function PartEditPanel({
             ) : (
                 selectedGroupId && (
                     <div className="overflow-auto space-y-4 px-2 pb-10">
-                        {/* הוספת פריט בתחילת הרשימה */}
-                        <button
-                            type="button"
-                            onClick={() => onAddNewItemAt(0)}
-                            className="w-full py-2 border-2 border-dashed border-blue-100 text-blue-300 font-bold hover:bg-blue-50"
-                        >
-                            + הוסף בראש המקטע
-                        </button>
+                        {/* הוספת פריט בתחילת הרשימה – רק בנוסח הבסיסי (0-*) */}
+                        {allowAddPart && (
+                            <button
+                                type="button"
+                                onClick={() => onAddNewItemAt(0)}
+                                className="w-full py-2 border-2 border-dashed border-blue-100 text-blue-300 font-bold hover:bg-blue-50"
+                            >
+                                + הוסף בראש המקטע
+                            </button>
+                        )}
                         {/* לכל פריט: ערכים מקומיים + תרגומים מקושרים (לפי itemId/linkedItem) */}
                         {allItems.map((item, index) => {
                             const val = localValues[item.id] || {};
@@ -88,8 +93,10 @@ export function PartEditPanel({
                                     isChanged={changedIds.has(item.id)}
                                     related={related}
                                     onContentChange={onContentChange}
-                                    onAddAfter={() =>
-                                        onAddNewItemAt(index + 1)
+                                    onAddAfter={
+                                        allowAddPart
+                                            ? () => onAddNewItemAt(index + 1)
+                                            : undefined
                                     }
                                 />
                             );

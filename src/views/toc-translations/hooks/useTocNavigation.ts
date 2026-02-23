@@ -143,12 +143,22 @@ export function useTocNavigation() {
     };
 
     /**
-     * מוסיף תרגום לנוסח הנבחר: יוצר מסמך ב-collection "translations" ומעדכן את מערך translations במסמך ה-TOC.
-     * מזהה התרגום מתחיל בנוסח (למשל 0-ashkenaz, 1-ashkenaz). מציע מזהה הבא; המשתמש יכול לאשר או לערוך.
+     * מוסיף תרגום לנוסח הנבחר: יוצר מסמך ב-collection "translations", מעתיק קטגוריות ותפילות
+     * מהנוסח הבסיסי (0-*) לאותו נוסח, ומעדכן את מערך translations במסמך ה-TOC.
+     * מזהה התרגום מתחיל בנוסח (למשל 0-ashkenaz, 1-ashkenaz).
      */
     const addTranslation = async (translationId: string) => {
         const id = translationId?.trim();
         if (!id || !selectedTocId || !currentTocData) return;
+        const baseTranslation = (currentTocData.translations ?? []).find(
+            (t: any) => String(t.translationId ?? "").startsWith("0-")
+        );
+        const categories =
+            baseTranslation?.categories?.length > 0
+                ? JSON.parse(JSON.stringify(baseTranslation.categories))
+                : [];
+        const newEntry = { translationId: id, categories };
+        const updatedTranslations = [...(currentTocData.translations ?? []), newEntry];
         try {
             await dataSource.saveEntity({
                 path: "translations",
@@ -157,8 +167,6 @@ export function useTocNavigation() {
                 status: "new",
                 collection: baseColl,
             });
-            const newEntry = { translationId: id, categories: [] as any[] };
-            const updatedTranslations = [...(currentTocData.translations ?? []), newEntry];
             const tocEntity = tocItems.find((t) => t.id === selectedTocId);
             if (!tocEntity) return;
             await dataSource.saveEntity({
@@ -175,7 +183,12 @@ export function useTocNavigation() {
                         : t
                 )
             );
-            snackbar.open({ type: "success", message: "תרגום נוסף בהצלחה" });
+            snackbar.open({
+                type: "success",
+                message: categories.length > 0
+                    ? `תרגום נוסף בהצלחה (הועתקו ${categories.length} קטגוריות מהנוסח הבסיסי)`
+                    : "תרגום נוסף בהצלחה",
+            });
             setSelectedTranslationIndex(updatedTranslations.length - 1);
             setSelectedCategoryName(null);
             setSelectedPrayerId(null);
@@ -198,7 +211,7 @@ export function useTocNavigation() {
         return `${maxIndex + 1}-${selectedTocId}`;
     };
 
-    /** מוסיף קטגוריה לתרגום הנבחר (בתוך toc.translations[index].categories); קטגוריה = { id, name, prayers: [] } */
+    /** מוסיף קטגוריה: בנוסח הבסיסי (0-*) מוסיף לכל התרגומים באותו נוסח; אחרת רק לתרגום הנבחר. קטגוריה = { id, name, prayers: [] } */
     const addCategory = async (categoryName: string) => {
         const name = categoryName?.trim();
         if (
@@ -213,10 +226,15 @@ export function useTocNavigation() {
         const trans = currentTocData.translations[idx];
         if (!trans) return;
         const newCategory = { id: String(Date.now()), name, prayers: [] as any[] };
-        const updatedCategories = [...(trans.categories ?? []), newCategory];
-        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
-            i === idx ? { ...t, categories: updatedCategories } : t
-        );
+        const isBase = String(trans.translationId ?? "").startsWith("0-");
+        const updatedTranslations = isBase
+            ? currentTocData.translations.map((t: any) => ({
+                  ...t,
+                  categories: [...(t.categories ?? []), newCategory],
+              }))
+            : currentTocData.translations.map((t: any, i: number) =>
+                  i === idx ? { ...t, categories: [...(t.categories ?? []), newCategory] } : t
+              );
         try {
             await dataSource.saveEntity({
                 path: "toc",
@@ -241,23 +259,50 @@ export function useTocNavigation() {
         }
     };
 
-    /** מוחק קטגוריה מהתרגום הנבחר (לפי id) */
+    /** מוחק קטגוריה: רק בנוסח הבסיסי (0-*). מוציא את הקטגוריה מכל התרגומים ב-TOC ומוחק מסמכי תפילות (ופריטים) בכל תרגום. */
     const deleteCategory = async (categoryId: string) => {
         if (
             !selectedTocId ||
             selectedTranslationIndex == null ||
             selectedTranslationIndex < 0 ||
-            !currentTocData?.translations?.length
+            !currentTocData?.translations?.length ||
+            !currentTranslationData?.translationId
         )
             return;
-        const idx = selectedTranslationIndex;
-        const trans = currentTocData.translations[idx];
+        const trans = currentTocData.translations[selectedTranslationIndex];
         if (!trans?.categories) return;
-        const updatedCategories = trans.categories.filter((c: any) => c.id !== categoryId);
-        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
-            i === idx ? { ...t, categories: updatedCategories } : t
-        );
+        const isBase = String(trans.translationId ?? "").startsWith("0-");
+        if (!isBase) return;
+        const categoryToDelete = trans.categories.find((c: any) => c.id === categoryId);
+        const prayerIds = categoryToDelete ? (categoryToDelete.prayers ?? []).map((p: any) => p.id) : [];
+        const updatedTranslations = currentTocData.translations.map((t: any) => ({
+            ...t,
+            categories: (t.categories ?? []).filter((c: any) => c.id !== categoryId),
+        }));
         try {
+            for (const t of currentTocData.translations ?? []) {
+                const tid = t.translationId;
+                if (!tid) continue;
+                const prayersPath = `translations/${tid}/prayers`;
+                for (const prayerId of prayerIds) {
+                    const itemsPath = `${prayersPath}/${prayerId}/items`;
+                    try {
+                        const itemsList = await dataSource.fetchCollection({
+                            path: itemsPath,
+                            collection: baseColl,
+                        });
+                        for (const item of itemsList) await dataSource.deleteEntity({ entity: item });
+                    } catch (_) {}
+                    try {
+                        const prayersList = await dataSource.fetchCollection({
+                            path: prayersPath,
+                            collection: baseColl,
+                        });
+                        const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                        if (prayerEntity) await dataSource.deleteEntity({ entity: prayerEntity });
+                    } catch (_) {}
+                }
+            }
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
@@ -272,8 +317,7 @@ export function useTocNavigation() {
                         : t
                 )
             );
-            const deletedWasSelected =
-                currentCategories?.some((c: any) => c.id === categoryId);
+            const deletedWasSelected = currentCategories?.some((c: any) => c.id === categoryId);
             if (deletedWasSelected) {
                 setSelectedCategoryName(null);
                 setSelectedPrayerId(null);
@@ -283,7 +327,7 @@ export function useTocNavigation() {
                 );
                 if (!stillSelected) setSelectedCategoryName(null);
             }
-            snackbar.open({ type: "success", message: "קטגוריה נמחקה" });
+            snackbar.open({ type: "success", message: "קטגוריה נמחקה מכל התרגומים" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete category failed`, err);
             snackbar.open({ type: "error", message: "שגיאה במחיקת קטגוריה" });
@@ -291,8 +335,8 @@ export function useTocNavigation() {
     };
 
     /**
-     * מוסיף תפילה ב-2 מקומות: (1) ב-TOC – בקטגוריה הנבחרת (translations[].categories[].prayers),
-     * (2) ב-Firestore – מסמך חדש תחת translations/{translationId}/prayers/{prayerId} עם nusach, tefilaId, timestamp, translationId, type.
+     * מוסיף תפילה: בנוסח הבסיסי (0-*) מוסיף את התפילה לאותה קטגוריה (לפי שם) בכל התרגומים באותו נוסח ב-TOC;
+     * מסמך Firestore נוצר רק עבור הנוסח הבסיסי. אחרת רק בתרגום הנבחר.
      */
     const addPrayer = async (prayerName: string) => {
         const name = prayerName?.trim();
@@ -316,14 +360,28 @@ export function useTocNavigation() {
         const lastPrayer = prayers[prayers.length - 1];
         const newPrayerId = midIdBetween(lastPrayer?.id, undefined);
         const newPrayer = { id: newPrayerId, name, parts: [] as any[] };
-        const updatedCategories = (trans.categories ?? []).map((c: any) =>
-            c.name === selectedCategoryName
-                ? { ...c, prayers: [...(c.prayers ?? []), newPrayer] }
-                : c
-        );
-        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
-            i === transIdx ? { ...t, categories: updatedCategories } : t
-        );
+        const isBase = String(currentTranslationData.translationId ?? "").startsWith("0-");
+        const updatedTranslations = isBase
+            ? currentTocData.translations.map((t: any) => ({
+                  ...t,
+                  categories: (t.categories ?? []).map((c: any) =>
+                      c.name === selectedCategoryName
+                          ? { ...c, prayers: [...(c.prayers ?? []), newPrayer] }
+                          : c
+                  ),
+              }))
+            : currentTocData.translations.map((t: any, i: number) =>
+                  i === transIdx
+                      ? {
+                            ...t,
+                            categories: (t.categories ?? []).map((c: any) =>
+                                c.name === selectedCategoryName
+                                    ? { ...c, prayers: [...(c.prayers ?? []), newPrayer] }
+                                    : c
+                            ),
+                        }
+                      : t
+              );
         const prayerPath = `translations/${currentTranslationData.translationId}/prayers`;
         try {
             await dataSource.saveEntity({
@@ -362,7 +420,7 @@ export function useTocNavigation() {
     };
 
     /**
-     * מוחק תפילה מ-2 מקומות: (1) מוציא מ-TOC מהקטגוריה הרלוונטית, (2) מוחק מסמך translations/{translationId}/prayers/{prayerId}.
+     * מוחק תפילה: רק בנוסח הבסיסי (0-*). מוציא את התפילה מכל התרגומים ב-TOC ומוחק מסמך התפילה (ופריטים) בכל תרגום.
      */
     const deletePrayer = async (prayerId: string) => {
         if (
@@ -373,23 +431,38 @@ export function useTocNavigation() {
             !currentTranslationData?.translationId
         )
             return;
-        const transIdx = selectedTranslationIndex;
-        const trans = currentTocData.translations[transIdx];
-        const updatedCategories = (trans.categories ?? []).map((c: any) => ({
-            ...c,
-            prayers: (c.prayers ?? []).filter((p: any) => p.id !== prayerId),
+        const trans = currentTocData.translations[selectedTranslationIndex];
+        const isBase = String(trans?.translationId ?? "").startsWith("0-");
+        if (!isBase) return;
+        const updatedTranslations = currentTocData.translations.map((t: any) => ({
+            ...t,
+            categories: (t.categories ?? []).map((c: any) => ({
+                ...c,
+                prayers: (c.prayers ?? []).filter((p: any) => p.id !== prayerId),
+            })),
         }));
-        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
-            i === transIdx ? { ...t, categories: updatedCategories } : t
-        );
         try {
-            const prayerPath = `translations/${currentTranslationData.translationId}/prayers`;
-            const prayersList = await dataSource.fetchCollection({
-                path: prayerPath,
-                collection: baseColl,
-            });
-            const prayerEntity = prayersList.find((e) => e.id === prayerId);
-            if (prayerEntity) await dataSource.deleteEntity({ entity: prayerEntity });
+            for (const t of currentTocData.translations ?? []) {
+                const tid = t.translationId;
+                if (!tid) continue;
+                const prayersPath = `translations/${tid}/prayers`;
+                const itemsPath = `${prayersPath}/${prayerId}/items`;
+                try {
+                    const itemsList = await dataSource.fetchCollection({
+                        path: itemsPath,
+                        collection: baseColl,
+                    });
+                    for (const item of itemsList) await dataSource.deleteEntity({ entity: item });
+                } catch (_) {}
+                try {
+                    const prayersList = await dataSource.fetchCollection({
+                        path: prayersPath,
+                        collection: baseColl,
+                    });
+                    const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                    if (prayerEntity) await dataSource.deleteEntity({ entity: prayerEntity });
+                } catch (_) {}
+            }
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
@@ -405,20 +478,42 @@ export function useTocNavigation() {
                 )
             );
             if (selectedPrayerId === prayerId) setSelectedPrayerId(null);
-            snackbar.open({ type: "success", message: "תפילה נמחקה" });
+            snackbar.open({ type: "success", message: "תפילה נמחקה מכל התרגומים" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete prayer failed`, err);
             snackbar.open({ type: "error", message: "שגיאה במחיקת תפילה" });
         }
     };
 
-    /** מוחק תרגום: מוציא מהמערך במסמך ה-TOC ומוחק את המסמך ב-collection "translations" */
+    /** מוחק תרגום: מוחק את כל המסמכים תחת התרגום (items, prayers), את מסמך התרגום ב-translations, ומוציא מהמערך ב-TOC */
     const deleteTranslation = async (translationId: string) => {
         if (!selectedTocId || !currentTocData) return;
         const updated = (currentTocData.translations ?? []).filter(
             (t: any) => t.translationId !== translationId
         );
         try {
+            const prayersPath = `translations/${translationId}/prayers`;
+            const prayersList = await dataSource.fetchCollection({
+                path: prayersPath,
+                collection: baseColl,
+            });
+            for (const prayer of prayersList) {
+                const itemsPath = `${prayersPath}/${prayer.id}/items`;
+                const itemsList = await dataSource.fetchCollection({
+                    path: itemsPath,
+                    collection: baseColl,
+                });
+                for (const item of itemsList) {
+                    await dataSource.deleteEntity({ entity: item });
+                }
+                await dataSource.deleteEntity({ entity: prayer });
+            }
+            const transList = await dataSource.fetchCollection({
+                path: "translations",
+                collection: baseColl,
+            });
+            const transEntity = transList.find((e) => e.id === translationId);
+            if (transEntity) await dataSource.deleteEntity({ entity: transEntity });
             const tocEntity = tocItems.find((t) => t.id === selectedTocId);
             if (!tocEntity) return;
             await dataSource.saveEntity({
@@ -428,12 +523,6 @@ export function useTocNavigation() {
                 status: "existing",
                 collection: baseColl,
             });
-            const transList = await dataSource.fetchCollection({
-                path: "translations",
-                collection: baseColl,
-            });
-            const transEntity = transList.find((e) => e.id === translationId);
-            if (transEntity) await dataSource.deleteEntity({ entity: transEntity });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId

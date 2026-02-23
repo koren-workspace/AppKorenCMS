@@ -118,6 +118,108 @@ export function useTocNavigation() {
         }
     };
 
+    /**
+     * מוסיף תרגום לנוסח הנבחר: יוצר מסמך ב-collection "translations" ומעדכן את מערך translations במסמך ה-TOC.
+     * מזהה התרגום מתחיל בנוסח (למשל 0-ashkenaz, 1-ashkenaz). מציע מזהה הבא; המשתמש יכול לאשר או לערוך.
+     */
+    const addTranslation = async (translationId: string) => {
+        const id = translationId?.trim();
+        if (!id || !selectedTocId || !currentTocData) return;
+        try {
+            await dataSource.saveEntity({
+                path: "translations",
+                entityId: id,
+                values: {},
+                status: "new",
+                collection: baseColl,
+            });
+            const newEntry = { translationId: id, categories: [] as any[] };
+            const updatedTranslations = [...(currentTocData.translations ?? []), newEntry];
+            const tocEntity = tocItems.find((t) => t.id === selectedTocId);
+            if (!tocEntity) return;
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+            snackbar.open({ type: "success", message: "תרגום נוסף בהצלחה" });
+            setSelectedTranslationIndex(updatedTranslations.length - 1);
+            setSelectedCategoryName(null);
+            setSelectedPrayerId(null);
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Add translation failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בהוספת תרגום" });
+        }
+    };
+
+    /** מחזיר מזהה מוצע לתרגום חדש: המספר הבא בנוסח הנבחר (למשל 0-ashkenaz, 1-ashkenaz → 2-ashkenaz) */
+    const getSuggestedTranslationId = (): string => {
+        if (!selectedTocId || !currentTocData?.translations?.length) return `${0}-${selectedTocId}`;
+        const existing = currentTocData.translations.map((t: any) => t.translationId).filter(Boolean);
+        const regex = new RegExp(`^(\\d+)-${selectedTocId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(-.*)?$`);
+        let maxIndex = -1;
+        for (const id of existing) {
+            const m = id.match(regex);
+            if (m) maxIndex = Math.max(maxIndex, parseInt(m[1], 10));
+        }
+        return `${maxIndex + 1}-${selectedTocId}`;
+    };
+
+    /** מוחק תרגום: מוציא מהמערך במסמך ה-TOC ומוחק את המסמך ב-collection "translations" */
+    const deleteTranslation = async (translationId: string) => {
+        if (!selectedTocId || !currentTocData) return;
+        const updated = (currentTocData.translations ?? []).filter(
+            (t: any) => t.translationId !== translationId
+        );
+        try {
+            const tocEntity = tocItems.find((t) => t.id === selectedTocId);
+            if (!tocEntity) return;
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updated },
+                status: "existing",
+                collection: baseColl,
+            });
+            const transList = await dataSource.fetchCollection({
+                path: "translations",
+                collection: baseColl,
+            });
+            const transEntity = transList.find((e) => e.id === translationId);
+            if (transEntity) await dataSource.deleteEntity({ entity: transEntity });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updated } }
+                        : t
+                )
+            );
+            if (currentTranslationData?.translationId === translationId) {
+                setSelectedTranslationIndex(null);
+                setSelectedCategoryName(null);
+                setSelectedPrayerId(null);
+            } else {
+                const newIndex = updated.findIndex(
+                    (t: any) => t.translationId === currentTranslationData?.translationId
+                );
+                setSelectedTranslationIndex(newIndex >= 0 ? newIndex : null);
+            }
+            snackbar.open({ type: "success", message: "התרגום נמחק" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Delete translation failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה במחיקת תרגום" });
+        }
+    };
+
     /** מוחק רק את מסמך הנוסח (TOC) ב-collection "toc"; לא נוגע בתרגומים */
     const deleteToc = async (tocId: string) => {
         const toc = tocItems.find((t) => t.id === tocId);
@@ -156,5 +258,8 @@ export function useTocNavigation() {
         onSelectPrayer,
         addToc,
         deleteToc,
+        addTranslation,
+        getSuggestedTranslationId,
+        deleteTranslation,
     };
 }

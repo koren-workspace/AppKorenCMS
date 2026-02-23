@@ -41,6 +41,9 @@ export function TocTranslationsView() {
                 translations={nav.currentTocData?.translations ?? []}
                 selectedTranslationIndex={nav.selectedTranslationIndex}
                 onSelectTranslation={nav.onSelectTranslation}
+                onAddTranslation={nav.addTranslation}
+                getSuggestedTranslationId={nav.getSuggestedTranslationId}
+                onDeleteTranslation={nav.deleteTranslation}
             />
             {/* עמודה 3–5: קטגוריה → תפילה → מקטע; בחירת מקטע טוענת את הפריטים */}
             <PrayerNavigationColumns

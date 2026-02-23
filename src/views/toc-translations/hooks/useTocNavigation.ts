@@ -21,6 +21,30 @@ import { baseColl } from "../collections";
 
 const LOG_PREFIX = "[TocTranslations]";
 
+/** מרווח ברירת מחדל כשאין "אחרי" (הוספה בסוף) או אין "לפני" (הוספה בהתחלה) */
+const DEFAULT_ID_GAP = 10;
+
+/**
+ * מחשב ID חדש בין idBefore ל-idAfter (חצי ביניהם).
+ * אם יש רק לפני – מחזיר לפני + GAP (הוספה בסוף).
+ * אם יש רק אחרי – מחזיר אחרי − GAP (הוספה בהתחלה).
+ * אם אין אף אחד – מחזיר ערך התחלתי.
+ */
+function midIdBetween(
+    idBefore: string | null | undefined,
+    idAfter: string | null | undefined
+): string {
+    const before = idBefore != null ? Number(idBefore) : NaN;
+    const after = idAfter != null ? Number(idAfter) : NaN;
+    if (!Number.isNaN(before) && !Number.isNaN(after)) {
+        const mid = (before + after) / 2;
+        return mid === Math.floor(mid) ? String(Math.floor(mid)) : String(mid);
+    }
+    if (!Number.isNaN(before)) return String(before + DEFAULT_ID_GAP);
+    if (!Number.isNaN(after)) return String(after - DEFAULT_ID_GAP);
+    return "1000000";
+}
+
 export function useTocNavigation() {
     const dataSource = useDataSource();
     const snackbar = useSnackbarController();
@@ -174,6 +198,220 @@ export function useTocNavigation() {
         return `${maxIndex + 1}-${selectedTocId}`;
     };
 
+    /** מוסיף קטגוריה לתרגום הנבחר (בתוך toc.translations[index].categories); קטגוריה = { id, name, prayers: [] } */
+    const addCategory = async (categoryName: string) => {
+        const name = categoryName?.trim();
+        if (
+            !name ||
+            selectedTocId == null ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !currentTocData?.translations?.length
+        )
+            return;
+        const idx = selectedTranslationIndex;
+        const trans = currentTocData.translations[idx];
+        if (!trans) return;
+        const newCategory = { id: String(Date.now()), name, prayers: [] as any[] };
+        const updatedCategories = [...(trans.categories ?? []), newCategory];
+        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
+            i === idx ? { ...t, categories: updatedCategories } : t
+        );
+        try {
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+            snackbar.open({ type: "success", message: "קטגוריה נוספה" });
+            setSelectedCategoryName(null);
+            setSelectedPrayerId(null);
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Add category failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בהוספת קטגוריה" });
+        }
+    };
+
+    /** מוחק קטגוריה מהתרגום הנבחר (לפי id) */
+    const deleteCategory = async (categoryId: string) => {
+        if (
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !currentTocData?.translations?.length
+        )
+            return;
+        const idx = selectedTranslationIndex;
+        const trans = currentTocData.translations[idx];
+        if (!trans?.categories) return;
+        const updatedCategories = trans.categories.filter((c: any) => c.id !== categoryId);
+        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
+            i === idx ? { ...t, categories: updatedCategories } : t
+        );
+        try {
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+            const deletedWasSelected =
+                currentCategories?.some((c: any) => c.id === categoryId);
+            if (deletedWasSelected) {
+                setSelectedCategoryName(null);
+                setSelectedPrayerId(null);
+            } else {
+                const stillSelected = currentCategories?.find(
+                    (c: any) => c.name === selectedCategoryName
+                );
+                if (!stillSelected) setSelectedCategoryName(null);
+            }
+            snackbar.open({ type: "success", message: "קטגוריה נמחקה" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Delete category failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה במחיקת קטגוריה" });
+        }
+    };
+
+    /**
+     * מוסיף תפילה ב-2 מקומות: (1) ב-TOC – בקטגוריה הנבחרת (translations[].categories[].prayers),
+     * (2) ב-Firestore – מסמך חדש תחת translations/{translationId}/prayers/{prayerId} עם nusach, tefilaId, timestamp, translationId, type.
+     */
+    const addPrayer = async (prayerName: string) => {
+        const name = prayerName?.trim();
+        if (
+            !name ||
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !selectedCategoryName ||
+            !currentTocData?.translations?.length ||
+            !currentTranslationData?.translationId
+        )
+            return;
+        const transIdx = selectedTranslationIndex;
+        const trans = currentTocData.translations[transIdx];
+        const category = (trans.categories ?? []).find(
+            (c: any) => c.name === selectedCategoryName
+        );
+        if (!category) return;
+        const prayers = category.prayers ?? [];
+        const lastPrayer = prayers[prayers.length - 1];
+        const newPrayerId = midIdBetween(lastPrayer?.id, undefined);
+        const newPrayer = { id: newPrayerId, name, parts: [] as any[] };
+        const updatedCategories = (trans.categories ?? []).map((c: any) =>
+            c.name === selectedCategoryName
+                ? { ...c, prayers: [...(c.prayers ?? []), newPrayer] }
+                : c
+        );
+        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
+            i === transIdx ? { ...t, categories: updatedCategories } : t
+        );
+        const prayerPath = `translations/${currentTranslationData.translationId}/prayers`;
+        try {
+            await dataSource.saveEntity({
+                path: prayerPath,
+                entityId: newPrayerId,
+                values: {
+                    nusach: selectedTocId,
+                    tefilaId: newPrayerId,
+                    timestamp: Date.now(),
+                    translationId: currentTranslationData.translationId,
+                    type: name,
+                },
+                status: "new",
+                collection: baseColl,
+            });
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+            snackbar.open({ type: "success", message: "תפילה נוספה" });
+            setSelectedPrayerId(null);
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Add prayer failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בהוספת תפילה" });
+        }
+    };
+
+    /**
+     * מוחק תפילה מ-2 מקומות: (1) מוציא מ-TOC מהקטגוריה הרלוונטית, (2) מוחק מסמך translations/{translationId}/prayers/{prayerId}.
+     */
+    const deletePrayer = async (prayerId: string) => {
+        if (
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !currentTocData?.translations?.length ||
+            !currentTranslationData?.translationId
+        )
+            return;
+        const transIdx = selectedTranslationIndex;
+        const trans = currentTocData.translations[transIdx];
+        const updatedCategories = (trans.categories ?? []).map((c: any) => ({
+            ...c,
+            prayers: (c.prayers ?? []).filter((p: any) => p.id !== prayerId),
+        }));
+        const updatedTranslations = currentTocData.translations.map((t: any, i: number) =>
+            i === transIdx ? { ...t, categories: updatedCategories } : t
+        );
+        try {
+            const prayerPath = `translations/${currentTranslationData.translationId}/prayers`;
+            const prayersList = await dataSource.fetchCollection({
+                path: prayerPath,
+                collection: baseColl,
+            });
+            const prayerEntity = prayersList.find((e) => e.id === prayerId);
+            if (prayerEntity) await dataSource.deleteEntity({ entity: prayerEntity });
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+            if (selectedPrayerId === prayerId) setSelectedPrayerId(null);
+            snackbar.open({ type: "success", message: "תפילה נמחקה" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Delete prayer failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה במחיקת תפילה" });
+        }
+    };
+
     /** מוחק תרגום: מוציא מהמערך במסמך ה-TOC ומוחק את המסמך ב-collection "translations" */
     const deleteTranslation = async (translationId: string) => {
         if (!selectedTocId || !currentTocData) return;
@@ -261,5 +499,9 @@ export function useTocNavigation() {
         addTranslation,
         getSuggestedTranslationId,
         deleteTranslation,
+        addCategory,
+        deleteCategory,
+        addPrayer,
+        deletePrayer,
     };
 }

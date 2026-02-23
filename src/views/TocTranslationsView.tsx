@@ -50,9 +50,19 @@ export function TocTranslationsView() {
                 currentCategories={nav.currentCategories}
                 selectedCategoryName={nav.selectedCategoryName}
                 onSelectCategory={nav.onSelectCategory}
+                onAddCategory={nav.addCategory}
+                onDeleteCategory={nav.deleteCategory}
+                showAddCategory={!!nav.selectedTocId && nav.selectedTranslationIndex != null}
                 currentPrayers={nav.currentPrayers}
                 selectedPrayerId={nav.selectedPrayerId}
                 onSelectPrayer={nav.onSelectPrayer}
+                onAddPrayer={nav.addPrayer}
+                onDeletePrayer={nav.deletePrayer}
+                showAddPrayer={
+                    !!nav.selectedTocId &&
+                    nav.selectedTranslationIndex != null &&
+                    !!nav.selectedCategoryName
+                }
                 currentParts={nav.currentParts}
                 selectedGroupId={partEdit.selectedGroupId}
                 onSelectPart={partEdit.fetchItemsWithEnhancements}

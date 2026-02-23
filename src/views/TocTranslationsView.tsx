@@ -36,6 +36,8 @@ export function TocTranslationsView() {
                 tocItems={nav.tocItems}
                 selectedTocId={nav.selectedTocId}
                 onSelectToc={nav.onSelectToc}
+                onAddToc={nav.addToc}
+                onDeleteToc={nav.deleteToc}
                 translations={nav.currentTocData?.translations ?? []}
                 selectedTranslationIndex={nav.selectedTranslationIndex}
                 onSelectTranslation={nav.onSelectTranslation}

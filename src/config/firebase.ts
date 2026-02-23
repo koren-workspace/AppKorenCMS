@@ -9,12 +9,12 @@
 //   measurementId: "G-PSHCVTZ2VR"
 // };
 export const firebaseConfig = {
-  apiKey: "AIzaSyCobDIvRsGtIxq2gEf9zT0hlOSzEOZGJc8",
-  authDomain: "koren-stage-b.firebaseapp.com",
-  projectId: "koren-stage-b",
-  storageBucket: "koren-stage-b.firebasestorage.app",
-  messagingSenderId: "477877012371",
-  appId: "1:477877012371:web:128b918cb90aa55e068a66",
-  measurementId: "G-H65LF74QX3"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 

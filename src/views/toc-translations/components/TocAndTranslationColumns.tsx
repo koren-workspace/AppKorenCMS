@@ -1,3 +1,12 @@
+/**
+ * TocAndTranslationColumns – עמודות ניווט 1 ו-2
+ *
+ * עמודה 1: רשימת נוסחים (TOC) – כפתור לכל toc.id
+ * עמודה 2: רשימת תרגומים של הנוסח הנבחר – כפתור לפי index
+ *
+ * מקבל את הרשימות וה-handlers מה-parent (useTocNavigation).
+ */
+
 import React from "react";
 
 type TocAndTranslationColumnsProps = {

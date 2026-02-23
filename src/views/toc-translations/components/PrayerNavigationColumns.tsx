@@ -1,3 +1,13 @@
+/**
+ * PrayerNavigationColumns – עמודות ניווט 3, 4 ו-5
+ *
+ * עמודה 3: קטגוריות (לפי currentCategories)
+ * עמודה 4: תפילות של הקטגוריה הנבחרת (currentPrayers)
+ * עמודה 5: מקטעים (parts) של התפילה הנבחרת – לחיצה טוענת את פריטי המקטע (onSelectPart)
+ *
+ * מקבל את הרשימות וה-handlers מ-useTocNavigation ו-usePartEdit.
+ */
+
 import React from "react";
 
 type PrayerNavigationColumnsProps = {

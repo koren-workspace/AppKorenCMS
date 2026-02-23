@@ -1,3 +1,10 @@
+/**
+ * הערה: בקונפיגורציה של FireCMS Cloud, המפתח של Firebase לא מגיע מכאן!
+ * FireCMSCloudApp טוען את firebase_config מ-Firestore של FireCMS Cloud (מסמך projects/{projectId}).
+ * כדי לעדכן את המפתח - עבור ל-dashboard של FireCMS Cloud (app.firecms.co) → הגדרות הפרויקט.
+ *
+ * הקובץ הזה משמש רק אם יש קוד שמייבא אותו ישירות (למשל שירותים חיצוניים).
+ */
 // Firebase configuration for koren-stage
 // export const firebaseConfig = {
 //   apiKey: "AIzaSyBRg9Mh14mdRaz_Wik-Xg536GlhVq0vnco",

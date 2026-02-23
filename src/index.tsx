@@ -5,6 +5,9 @@ import { demoCollection } from "./collections/demo";
 
 const appConfig: FireCMSAppConfig = {
     version: "1",
+    onFirebaseInit: (config) => {
+        console.log("[Firebase] האפליקציה משתמשת במפתח (מ-FireCMS Cloud):", (config as { apiKey?: string }).apiKey);
+    },
     collections: [
         demoCollection
     ],

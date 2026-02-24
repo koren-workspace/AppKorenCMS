@@ -21,6 +21,8 @@ type TocAndTranslationColumnsProps = {
     onAddTranslation?: (translationId: string) => void;
     getSuggestedTranslationId?: () => string;
     onDeleteTranslation?: (translationId: string) => void;
+    /** במהלך שמירה – כפתורי הפעולה מושבתים ומציגים מצב טעינה */
+    isSaving?: boolean;
 };
 
 export function TocAndTranslationColumns({
@@ -35,7 +37,9 @@ export function TocAndTranslationColumns({
     onAddTranslation,
     getSuggestedTranslationId,
     onDeleteTranslation,
+    isSaving = false,
 }: TocAndTranslationColumnsProps) {
+    const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const handleDeleteToc = (e: React.MouseEvent, tocId: string) => {
         e.stopPropagation();
         if (window.confirm("למחוק את הנוסח? (רק הרשומה ב-TOC, לא התרגומים)")) {
@@ -75,7 +79,8 @@ export function TocAndTranslationColumns({
                         <button
                             type="button"
                             onClick={() => onSelectToc(toc.id)}
-                            className={`flex-1 text-right p-1.5 rounded border ${selectedTocId === toc.id ? "bg-blue-600 text-white" : "bg-gray-50"}`}
+                            disabled={isSaving}
+                            className={`flex-1 text-right p-1.5 rounded border ${selectedTocId === toc.id ? "bg-blue-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
                             title={toc.id}
                         >
                             {toc.values?.nusach ?? toc.id}
@@ -84,7 +89,8 @@ export function TocAndTranslationColumns({
                             <button
                                 type="button"
                                 onClick={(e) => handleDeleteToc(e, toc.id)}
-                                className="shrink-0 p-1 rounded border border-red-200 text-red-600 hover:bg-red-50 text-[8px]"
+                                disabled={isSaving}
+                                className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-[8px] ${isSaving ? savingClass : "hover:bg-red-50"}`}
                                 title="מחק נוסח"
                             >
                                 ✕
@@ -96,9 +102,10 @@ export function TocAndTranslationColumns({
                     <button
                         type="button"
                         onClick={handleAddToc}
-                        className="mt-1 py-1.5 rounded border-2 border-dashed border-blue-200 text-blue-600 font-bold text-[9px] hover:bg-blue-50"
+                        disabled={isSaving}
+                        className={`mt-1 py-1.5 rounded border-2 border-dashed border-blue-200 font-bold text-[9px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "text-blue-600 hover:bg-blue-50"}`}
                     >
-                        + הוסף נוסח
+                        {isSaving ? "שומר…" : "+ הוסף נוסח"}
                     </button>
                 )}
             </div>
@@ -109,7 +116,8 @@ export function TocAndTranslationColumns({
                         <button
                             type="button"
                             onClick={() => onSelectTranslation(index)}
-                            className={`flex-1 text-right p-1.5 rounded border ${selectedTranslationIndex === index ? "bg-purple-600 text-white" : "bg-gray-50"}`}
+                            disabled={isSaving}
+                            className={`flex-1 text-right p-1.5 rounded border ${selectedTranslationIndex === index ? "bg-purple-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
                         >
                             {translation.translationId}
                         </button>
@@ -117,7 +125,8 @@ export function TocAndTranslationColumns({
                             <button
                                 type="button"
                                 onClick={(e) => handleDeleteTranslation(e, translation.translationId)}
-                                className="shrink-0 p-1 rounded border border-red-200 text-red-600 hover:bg-red-50 text-[8px]"
+                                disabled={isSaving}
+                                className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-[8px] ${isSaving ? savingClass : "hover:bg-red-50"}`}
                                 title="מחק תרגום"
                             >
                                 ✕
@@ -129,9 +138,10 @@ export function TocAndTranslationColumns({
                     <button
                         type="button"
                         onClick={handleAddTranslation}
-                        className="mt-1 py-1.5 rounded border-2 border-dashed border-purple-200 text-purple-600 font-bold text-[9px] hover:bg-purple-50"
+                        disabled={isSaving}
+                        className={`mt-1 py-1.5 rounded border-2 border-dashed border-purple-200 font-bold text-[9px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "text-purple-600 hover:bg-purple-50"}`}
                     >
-                        + הוסף תרגום
+                        {isSaving ? "שומר…" : "+ הוסף תרגום"}
                     </button>
                 )}
             </div>

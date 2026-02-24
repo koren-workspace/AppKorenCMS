@@ -26,6 +26,8 @@ export type PartEditPanelProps = {
     onFinalPublish: () => void;
     onContentChange: (itemId: string, value: string) => void;
     onAddNewItemAt: (index: number) => void;
+    /** מוחק מקטע ואת כל התרגומים המקושרים */
+    onDeleteItem?: (item: Entity<any>, itemId: string) => void;
     /** רק בנוסח הבסיסי (0-*) מותר להוסיף מקטעים; בשאר הנוסחים – עריכה בלבד */
     allowAddPart?: boolean;
 };
@@ -42,6 +44,7 @@ export function PartEditPanel({
     onFinalPublish,
     onContentChange,
     onAddNewItemAt,
+    onDeleteItem,
     allowAddPart = true,
 }: PartEditPanelProps) {
     return (
@@ -93,6 +96,7 @@ export function PartEditPanel({
                                     isChanged={changedIds.has(item.id)}
                                     related={related}
                                     onContentChange={onContentChange}
+                                    onDelete={onDeleteItem}
                                     onAddAfter={
                                         allowAddPart
                                             ? () => onAddNewItemAt(index + 1)

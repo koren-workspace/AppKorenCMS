@@ -22,6 +22,8 @@ type PartItemRowProps = {
     isChanged: boolean;
     related: RelatedEntry[];
     onContentChange: (itemId: string, value: string) => void;
+    /** מוחק את המקטע ואת כל התרגומים המקושרים */
+    onDelete?: (item: Entity<any>, itemId: string) => void;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
 };
@@ -32,6 +34,7 @@ export function PartItemRow({
     isChanged,
     related,
     onContentChange,
+    onDelete,
     onAddAfter,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
@@ -41,14 +44,29 @@ export function PartItemRow({
             <div
                 className={`p-2 border rounded ${isChanged ? "border-orange-300" : "border-gray-200"}`}
             >
-                <div className="flex justify-between text-[7px] text-gray-400 mb-1 uppercase tracking-tighter">
+                <div className="flex justify-between items-center text-[7px] text-gray-400 mb-1 uppercase tracking-tighter">
                     <span>itemId: {curId} | MIT: {localVal.mit_id}</span>
-                    <span>
-                        Update:{" "}
-                        {localVal.timestamp
-                            ? new Date(localVal.timestamp).toLocaleTimeString()
-                            : "Never"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        {onDelete && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (window.confirm("למחוק את המקטע ואת כל התרגומים המקושרים אליו?"))
+                                        onDelete(item, curId ?? item.id);
+                                }}
+                                className="px-1.5 py-0.5 text-red-500 hover:bg-red-50 border border-red-200 rounded text-[8px] font-bold"
+                                title="מחק מקטע וכל התרגומים המקושרים"
+                            >
+                                מחק מקטע
+                            </button>
+                        )}
+                        <span>
+                            Update:{" "}
+                            {localVal.timestamp
+                                ? new Date(localVal.timestamp).toLocaleTimeString()
+                                : "Never"}
+                        </span>
+                    </div>
                 </div>
                 <textarea
                     className={getItemStyle(localVal.type)}

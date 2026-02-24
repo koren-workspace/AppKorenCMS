@@ -128,6 +128,46 @@ export async function savePartItems(
 }
 
 /**
+ * מוחק פריט מקטע (בתרגום הנוכחי) ואת כל הפריטים בתרגומים האחרים שמקושרים אליו (linkedItem).
+ */
+export type DeletePartItemParams = {
+    itemEntity: Entity<any>;
+    itemId: string;
+    currentTranslationId: string;
+    selectedPrayerId: string;
+    translations: any[];
+};
+
+export async function deletePartItemAndRelatedTranslations(
+    dataSource: DataSource,
+    params: DeletePartItemParams
+): Promise<void> {
+    const {
+        itemEntity,
+        itemId,
+        currentTranslationId,
+        selectedPrayerId,
+        translations,
+    } = params;
+
+    await dataSource.deleteEntity({ entity: itemEntity });
+
+    for (const trans of translations) {
+        const tid = trans?.translationId;
+        if (!tid || tid === currentTranslationId) continue;
+        const itemsPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+        const related = await dataSource.fetchCollection({
+            path: itemsPath,
+            collection: itemsCollection,
+            filter: { linkedItem: ["array-contains", itemId] },
+        });
+        for (const entity of related) {
+            await dataSource.deleteEntity({ entity });
+        }
+    }
+}
+
+/**
  * מעדכן מסמך db-update-time עם maxTimestamp (לפי selectedTocId).
  * קורא ל-API של Bagel עם VITE_BAGEL_TOKEN – האפליקציה מסתנכרנת לפי timestamp.
  */

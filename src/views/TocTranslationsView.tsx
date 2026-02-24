@@ -37,6 +37,12 @@ export function TocTranslationsView() {
 
     return (
         <div className="flex flex-col w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-[10px]" dir="rtl">
+            {nav.isSaving && (
+                <div className="flex items-center justify-center gap-2 py-2 px-3 bg-blue-100 border border-blue-300 rounded text-blue-800 font-medium shrink-0" role="status" aria-live="polite">
+                    <span className="inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                    <span>{nav.savingMessage ?? "שומר..."}</span>
+                </div>
+            )}
             <EditorGuideBanner
                 translationId={nav.currentTranslationData?.translationId}
                 hasSelection={hasTranslationSelection}
@@ -55,6 +61,7 @@ export function TocTranslationsView() {
                 onAddTranslation={nav.addTranslation}
                 getSuggestedTranslationId={nav.getSuggestedTranslationId}
                 onDeleteTranslation={nav.deleteTranslation}
+                isSaving={nav.isSaving}
             />
             {/* עמודה 3–5: קטגוריה → תפילה → מקטע; בחירת מקטע טוענת את הפריטים */}
             <PrayerNavigationColumns
@@ -78,6 +85,7 @@ export function TocTranslationsView() {
                 currentParts={nav.currentParts}
                 selectedGroupId={partEdit.selectedGroupId}
                 onSelectPart={partEdit.fetchItemsWithEnhancements}
+                isSaving={nav.isSaving}
             />
             {/* אזור העריכה: toolbar + רשימת פריטים (לאחר טעינה) */}
             <PartEditPanel
@@ -94,6 +102,7 @@ export function TocTranslationsView() {
                     partEdit.updateLocalItem(id, "content", value)
                 }
                 onAddNewItemAt={partEdit.addNewItemAt}
+                onDeleteItem={partEdit.handleDeleteItem}
                 allowAddPart={allowAdditions}
             />
             </div>

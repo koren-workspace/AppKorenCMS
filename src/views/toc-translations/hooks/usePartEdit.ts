@@ -21,7 +21,9 @@ import {
     fetchPartWithEnhancements,
     savePartItems,
     publishToBagel,
+    deletePartItemAndRelatedTranslations,
 } from "../services/partEditService";
+import { isBaseTranslation } from "../services/navigationService";
 
 /** הקשר הניווט – מועבר מ-useTocNavigation כדי לדעת איזה תרגום/תפילה נבחרו */
 export type PartEditContext = {
@@ -156,6 +158,57 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
+    /** מוחק פריט מקטע ואת כל התרגומים המקושרים אליו (linkedItem); מרענן את הרשימה */
+    const handleDeleteItem = async (item: Entity<any>, itemId: string) => {
+        if (!currentTranslationData || !selectedPrayerId || !currentTocData?.translations)
+            return;
+        if (item.id.startsWith("new_")) {
+            setAllItems((prev) => prev.filter((e) => e.id !== item.id));
+            setLocalValues((prev) => {
+                const next = { ...prev };
+                delete next[item.id];
+                return next;
+            });
+            setChangedIds((prev) => {
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+            });
+            return;
+        }
+        setSaving(true);
+        try {
+            const isBase = isBaseTranslation(currentTranslationData.translationId);
+            if (isBase) {
+                await deletePartItemAndRelatedTranslations(dataSource, {
+                    itemEntity: item,
+                    itemId,
+                    currentTranslationId: currentTranslationData.translationId,
+                    selectedPrayerId,
+                    translations: currentTocData.translations,
+                });
+                snackbar.open({
+                    type: "success",
+                    message: "המקטע וכל התרגומים המקושרים נמחקו",
+                });
+            } else {
+                await dataSource.deleteEntity({ entity: item });
+                snackbar.open({
+                    type: "success",
+                    message: "המקטע נמחק (תרגום זה בלבד)",
+                });
+            }
+            if (selectedGroupId) {
+                await fetchItemsWithEnhancements(selectedGroupId);
+            }
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Delete part item failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה במחיקת מקטע" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
     /** מוסיף פריט חדש (מזהה new_xxx) במקום index; מסומן אוטומטית כ־changed */
     const addNewItemAt = (index: number) => {
         const newId = `new_${Date.now()}`;
@@ -190,5 +243,6 @@ export function usePartEdit(context: PartEditContext) {
         handleSaveGroup,
         handleFinalPublish,
         addNewItemAt,
+        handleDeleteItem,
     };
 }

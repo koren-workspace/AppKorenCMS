@@ -16,6 +16,8 @@
 import React from "react";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
+import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
+import { DateSetIdConfigModal } from "./toc-translations/components/DateSetIdConfigModal";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
 import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBanner";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
@@ -24,7 +26,10 @@ import { isBaseTranslation } from "./toc-translations/services/navigationService
 
 export function TocTranslationsView() {
     const nav = useTocNavigation();
-    const allowAdditions = isBaseTranslation(nav.currentTranslationData?.translationId);
+    const isBase = isBaseTranslation(nav.currentTranslationData?.translationId);
+    /** בסיס: מותר להוסיף מקטעים בלבד (ללא הבחנה בין מקטע להוראה). תרגום: מותר להוסיף רק הוראות */
+    const allowAddPart = isBase;
+    const allowAddInstruction = !isBase;
     const partEdit = usePartEdit({
         currentTocData: nav.currentTocData,
         currentTranslationData: nav.currentTranslationData,
@@ -34,6 +39,23 @@ export function TocTranslationsView() {
 
     const hasTranslationSelection =
         !!nav.selectedTocId && nav.selectedTranslationIndex != null;
+
+    /** כל הפריטים שמקושרים לפריט הבסיס – מכל התרגומים (להצגה במודל הוספת תרגום) */
+    const addTranslationExistingLinked = (() => {
+        const item = partEdit.addTranslationBaseItem;
+        if (!item || !partEdit.enhancements) return [];
+        const baseItemId = partEdit.localValues[item.id]?.itemId ?? item.values?.itemId;
+        if (!baseItemId) return [];
+        const out: { id: string; tId: string; values: any }[] = [];
+        Object.entries(partEdit.enhancements).forEach(([tId, list]) => {
+            list.forEach((e: any) => {
+                const link = e.values?.linkedItem;
+                const linked = Array.isArray(link) ? link.includes(baseItemId) : link === baseItemId;
+                if (linked) out.push({ id: e.id, tId, values: e.values });
+            });
+        });
+        return out;
+    })();
 
     return (
         <div className="flex flex-col w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-[10px]" dir="rtl">
@@ -69,18 +91,18 @@ export function TocTranslationsView() {
                 selectedCategoryName={nav.selectedCategoryName}
                 onSelectCategory={nav.onSelectCategory}
                 onAddCategory={nav.addCategory}
-                onDeleteCategory={allowAdditions ? nav.deleteCategory : undefined}
-                showAddCategory={!!nav.selectedTocId && nav.selectedTranslationIndex != null && allowAdditions}
+                onDeleteCategory={allowAddPart ? nav.deleteCategory : undefined}
+                showAddCategory={!!nav.selectedTocId && nav.selectedTranslationIndex != null && allowAddPart}
                 currentPrayers={nav.currentPrayers}
                 selectedPrayerId={nav.selectedPrayerId}
                 onSelectPrayer={nav.onSelectPrayer}
                 onAddPrayer={nav.addPrayer}
-                onDeletePrayer={allowAdditions ? nav.deletePrayer : undefined}
+                onDeletePrayer={allowAddPart ? nav.deletePrayer : undefined}
                 showAddPrayer={
                     !!nav.selectedTocId &&
                     nav.selectedTranslationIndex != null &&
                     !!nav.selectedCategoryName &&
-                    allowAdditions
+                    allowAddPart
                 }
                 currentParts={nav.currentParts}
                 selectedGroupId={partEdit.selectedGroupId}
@@ -101,9 +123,59 @@ export function TocTranslationsView() {
                 onContentChange={(id, value) =>
                     partEdit.updateLocalItem(id, "content", value)
                 }
+                onFieldChange={(id, field, value) =>
+                    partEdit.updateLocalItem(id, field, value)
+                }
+                onEnhancementFieldChange={partEdit.updateEnhancementLocalItem}
+                enhancementLocalValues={partEdit.enhancementLocalValues}
+                enhancementChangedIds={partEdit.enhancementChangedIds}
                 onAddNewItemAt={partEdit.addNewItemAt}
                 onDeleteItem={partEdit.handleDeleteItem}
-                allowAddPart={allowAdditions}
+                allowAddPart={allowAddPart}
+                allowAddInstruction={allowAddInstruction}
+                onAddNewInstructionAt={partEdit.addNewInstructionAt}
+                onAddTranslation={partEdit.openAddTranslation}
+                restrictTypeToInstructions={!isBase}
+                lastAddedItemId={partEdit.lastAddedItemId}
+                onOpenDateSetIdForItem={partEdit.openDateSetIdModalForEdit}
+            />
+            <DateSetIdConfigModal
+                open={partEdit.dateSetIdModalOpen}
+                onClose={partEdit.closeDateSetIdModal}
+                dataSource={partEdit.dataSource}
+                onSelect={partEdit.onDateSetIdSelected}
+                title={partEdit.dateSetIdModalTitle}
+                initialDateSetId={partEdit.dateSetIdInitialForEdit}
+            />
+            <AddTranslationModal
+                open={partEdit.addTranslationOpen}
+                onClose={partEdit.closeAddTranslation}
+                baseItemId={
+                    partEdit.addTranslationBaseItem
+                        ? (partEdit.localValues[partEdit.addTranslationBaseItem.id]?.itemId ??
+                           partEdit.addTranslationBaseItem.values?.itemId) ?? ""
+                        : ""
+                }
+                baseContentPreview={
+                    partEdit.addTranslationBaseItem
+                        ? (partEdit.localValues[partEdit.addTranslationBaseItem.id]?.content ??
+                           partEdit.addTranslationBaseItem.values?.content) ?? ""
+                        : ""
+                }
+                existingLinked={addTranslationExistingLinked}
+                translations={nav.currentTocData?.translations ?? []}
+                currentTranslationId={nav.currentTranslationData?.translationId ?? null}
+                targetPartItemsLinkedToBase={partEdit.addTranslationTargetLinkedItems}
+                onLoadTargetPartItems={partEdit.loadTargetPartItemsForAddTranslation}
+                targetTranslationId={partEdit.addTranslationTargetId}
+                onSelectTargetTranslation={partEdit.setAddTranslationTargetId}
+                insertAfterItemId={partEdit.addTranslationInsertAfterId}
+                onInsertAfterChange={partEdit.setAddTranslationInsertAfterId}
+                form={partEdit.addTranslationForm}
+                onFormFieldChange={partEdit.setAddTranslationFormField}
+                onSubmit={partEdit.submitAddTranslation}
+                saving={partEdit.saving}
+                onOpenDateSetIdConfig={partEdit.openDateSetIdModalForAddTranslation}
             />
             </div>
         </div>

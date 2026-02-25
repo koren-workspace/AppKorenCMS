@@ -17,9 +17,18 @@ export const itemsCollection = buildCollection({
         content: { dataType: "string", name: "תוכן" },
         type: { dataType: "string", name: "סוג" },
         titleType: { dataType: "string", name: "סוג כותרת" },
+        title: { dataType: "string", name: "כותרת" },
         fontTanach: { dataType: "boolean", name: "גופן תנך" },
         noSpace: { dataType: "boolean", name: "ללא רווח" },
+        block: { dataType: "boolean", name: "בלוק" },
         role: { dataType: "string", name: "תפקיד" },
+        reference: { dataType: "string", name: "Reference" },
+        specialSign: { dataType: "string", name: "סימן מיוחד" },
+        specialDate: { dataType: "boolean", name: "תאריך מיוחד" },
+        firstInPage: { dataType: "boolean", name: "ראשון בעמוד" },
+        cohanim: { dataType: "boolean", name: "כהנים" },
+        hazan: { dataType: "boolean", name: "חזן" },
+        minyan: { dataType: "boolean", name: "מניין" },
         partId: { dataType: "string", name: "מזהה חלק" },
         partName: { dataType: "string", name: "שם חלק" },
         partIdAndName: { dataType: "string", name: "מזהה ושם" },
@@ -43,3 +52,24 @@ export const dbUpdateTimeCollection = buildCollection({
 
 /** Collection לטעינת רשימת הנוסחים (path: "toc") – ללא שדות, רק מסמכים */
 export const baseColl = buildCollection({ id: "base", path: "base", name: "base", properties: {} });
+
+/** לוח שנה – מסמכים עם dateSetId כ־document id, תואם ל־CalendarItem ב־Android (calendar.json / Firestore calendar) */
+export const calendarCollection = buildCollection({
+    id: "calendar",
+    path: "calendar",
+    name: "Calendar",
+    properties: {
+        dateSetId: { dataType: "string", name: "Date Set ID" },
+        simha: { dataType: "boolean", name: "שמחה" },
+        beitEvel: { dataType: "boolean", name: "בית אבל" },
+        abroad: { dataType: "boolean", name: "חו\"ל" },
+        yad: { dataType: "boolean", name: "יד" },
+        tv: { dataType: "boolean", name: "ט\"ו" },
+        dates_when_we_say_prayer: { dataType: "array", name: "תאריכים שאומרים", of: { dataType: "map" } },
+        dates_when_we_say_prayer_abroad: { dataType: "array", name: "תאריכים שאומרים חו\"ל", of: { dataType: "map" } },
+        dates_when_we_dont_say_prayer: { dataType: "array", name: "תאריכים שלא אומרים", of: { dataType: "map" } },
+        dates_when_we_dont_say_prayer_abroad: { dataType: "array", name: "תאריכים שלא אומרים חו\"ל", of: { dataType: "map" } },
+        weekdays: { dataType: "array", name: "ימי השבוע", of: { dataType: "number" } },
+        timestamp: { dataType: "number", name: "זמן עדכון" },
+    }
+});

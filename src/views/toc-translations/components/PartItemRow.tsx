@@ -3,15 +3,17 @@
  *
  * מציג:
  *   - כרטיס: itemId, MIT, זמן עדכון + textarea לתוכן (עם עיצוב לפי type)
- *   - בלוק "תרגומים מקושרים": פריטים מתרגומים אחרים שמקושרים ל-itemId (linkedItem)
- *   - כפתור "הוסף מקטע כאן" (מופיע ב-hover)
+ *   - בלוק מאפיינים (סוג, כותרת, גופן, תפקיד, וכו') – ניתן להרחבה
+ *   - בלוק "תרגומים מקושרים": פריטים מתרגומים אחרים שמקושרים ל-itemId (linkedItem) – ניתן לעריכה
+ *   - כפתור "הוסף מקטע כאן" / "הוסף הוראה כאן" / "הוסף תרגום לטקסט זה"
  *
  * קומפוננטה תצוגתית – כל הנתונים וה-callbacks ב-props.
  */
 
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Entity } from "@firecms/cloud";
 import { getItemStyle } from "../utils/itemUtils";
+import { ITEM_TYPE_OPTIONS, INSTRUCTION_TYPE_OPTIONS, TITLE_TYPE_OPTIONS, ITEM_FIELD_HELP } from "../constants/itemFields";
 
 /** פריט מתרגום אחר שמקושר לפריט הנוכחי (לפי linkedItem); tId = מזהה התרגום */
 export type RelatedEntry = { id: string; tId: string; values: any };
@@ -21,11 +23,29 @@ type PartItemRowProps = {
     localVal: Record<string, any>;
     isChanged: boolean;
     related: RelatedEntry[];
+    /** ערכים מקומיים לעריכת תרגומים מקושרים (entityId -> values) */
+    enhancementLocalValues?: Record<string, any>;
+    /** עדכון שדה של תרגום מקושר (entityId, translationId, field, value) */
+    onEnhancementFieldChange?: (entityId: string, translationId: string, field: string, value: unknown) => void;
+    /** האם פריט תרגום מקושר סומן כ־שונה (לשמירה) */
+    isEnhancementChanged?: (entityId: string) => boolean;
     onContentChange: (itemId: string, value: string) => void;
+    /** עדכון שדה מאפיין (entityId, fieldName, value) */
+    onFieldChange?: (entityId: string, field: string, value: unknown) => void;
     /** מוחק את המקטע ואת כל התרגומים המקושרים */
     onDelete?: (item: Entity<any>, itemId: string) => void;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
+    /** מוצג רק בתרגום: הוסף פריט הוראה אחרי שורה זו */
+    onAddInstructionAfter?: () => void;
+    /** פותח מודל הוספת תרגום לפריט הזה */
+    onAddTranslation?: (item: Entity<any>) => void;
+    /** בתרגום (לא בסיס): במאפיינים סוג ניתן לשינוי רק בין סוגי הוראות */
+    restrictTypeToInstructions?: boolean;
+    /** העברת פוקוס לשדה התוכן (למקטע שנוסף זה עתה) */
+    autoFocus?: boolean;
+    /** פותח מודל הגדרת/עריכת dateSetId (לחיצה על שדה dateSetId) */
+    onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string) => void;
 };
 
 export function PartItemRow({
@@ -33,11 +53,32 @@ export function PartItemRow({
     localVal,
     isChanged,
     related,
+    enhancementLocalValues = {},
+    onEnhancementFieldChange,
+    isEnhancementChanged,
     onContentChange,
+    onFieldChange,
     onDelete,
     onAddAfter,
+    onAddInstructionAfter,
+    onAddTranslation,
+    restrictTypeToInstructions = false,
+    autoFocus = false,
+    onOpenDateSetIdConfig,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
+    const [showProps, setShowProps] = useState(false);
+    const entityId = item.id;
+    const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (!autoFocus) return;
+        const t = setTimeout(() => {
+            contentTextareaRef.current?.focus();
+            contentTextareaRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 50);
+        return () => clearTimeout(t);
+    }, [autoFocus]);
 
     return (
         <React.Fragment>
@@ -47,6 +88,15 @@ export function PartItemRow({
                 <div className="flex justify-between items-center text-[7px] text-gray-400 mb-1 uppercase tracking-tighter">
                     <span>itemId: {curId} | MIT: {localVal.mit_id}</span>
                     <div className="flex items-center gap-2">
+                        {onFieldChange && (
+                            <button
+                                type="button"
+                                onClick={() => setShowProps((p) => !p)}
+                                className="px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-[8px]"
+                            >
+                                {showProps ? "הסתר מאפיינים" : "מאפיינים"}
+                            </button>
+                        )}
                         {onDelete && (
                             <button
                                 type="button"
@@ -68,7 +118,176 @@ export function PartItemRow({
                         </span>
                     </div>
                 </div>
+                {showProps && onFieldChange && (
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 p-2 bg-gray-50 rounded text-[10px]">
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.type}>
+                            <span className="text-gray-600 w-20 shrink-0">סוג</span>
+                            <select
+                                value={
+                                    restrictTypeToInstructions
+                                        ? (INSTRUCTION_TYPE_OPTIONS.some((o) => o.value === (localVal.type ?? "body"))
+                                            ? (localVal.type ?? "body")
+                                            : "instructions")
+                                        : (localVal.type ?? "body")
+                                }
+                                onChange={(e) => onFieldChange(entityId, "type", e.target.value)}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            >
+                                {(restrictTypeToInstructions ? INSTRUCTION_TYPE_OPTIONS : ITEM_TYPE_OPTIONS).map((o) => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                            </select>
+                        </label>
+                        {(localVal.type ?? "body") === "title" && (
+                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.titleType}>
+                                <span className="text-gray-600 w-20 shrink-0">סוג כותרת</span>
+                                <select
+                                    value={localVal.titleType ?? ""}
+                                    onChange={(e) => onFieldChange(entityId, "titleType", e.target.value)}
+                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                >
+                                    {TITLE_TYPE_OPTIONS.map((o) => (
+                                        <option key={o.value || "_"} value={o.value}>{o.label}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+                        {(["title", "commentary"] as const).includes((localVal.type ?? "body") as any) && (
+                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.title}>
+                                <span className="text-gray-600 w-20 shrink-0">כותרת</span>
+                                <input
+                                    type="text"
+                                    value={localVal.title ?? ""}
+                                    onChange={(e) => onFieldChange(entityId, "title", e.target.value)}
+                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                    dir="rtl"
+                                />
+                            </label>
+                        )}
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.fontTanach}
+                                onChange={(e) => onFieldChange(entityId, "fontTanach", e.target.checked)}
+                            />
+                            <span className="text-gray-600">גופן תנ"ך</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.noSpace}
+                                onChange={(e) => onFieldChange(entityId, "noSpace", e.target.checked)}
+                            />
+                            <span className="text-gray-600">ללא רווח</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.block}
+                                onChange={(e) => onFieldChange(entityId, "block", e.target.checked)}
+                            />
+                            <span className="text-gray-600">בלוק</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.firstInPage}
+                                onChange={(e) => onFieldChange(entityId, "firstInPage", e.target.checked)}
+                            />
+                            <span className="text-gray-600">ראשון בעמוד</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialDate}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.specialDate}
+                                onChange={(e) => onFieldChange(entityId, "specialDate", e.target.checked)}
+                            />
+                            <span className="text-gray-600">תאריך מיוחד</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.cohanim}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.cohanim}
+                                onChange={(e) => onFieldChange(entityId, "cohanim", e.target.checked)}
+                            />
+                            <span className="text-gray-600">כהנים</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.hazan}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.hazan}
+                                onChange={(e) => onFieldChange(entityId, "hazan", e.target.checked)}
+                            />
+                            <span className="text-gray-600">חזן</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.minyan}>
+                            <input
+                                type="checkbox"
+                                checked={!!localVal.minyan}
+                                onChange={(e) => onFieldChange(entityId, "minyan", e.target.checked)}
+                            />
+                            <span className="text-gray-600">מניין</span>
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
+                            <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
+                            <input
+                                type="text"
+                                value={localVal.role ?? ""}
+                                onChange={(e) => onFieldChange(entityId, "role", e.target.value)}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                dir="rtl"
+                            />
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.reference}>
+                            <span className="text-gray-600 w-20 shrink-0">reference</span>
+                            <input
+                                type="text"
+                                value={localVal.reference ?? ""}
+                                onChange={(e) => onFieldChange(entityId, "reference", e.target.value)}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            />
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialSign}>
+                            <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
+                            <input
+                                type="text"
+                                value={localVal.specialSign ?? ""}
+                                onChange={(e) => onFieldChange(entityId, "specialSign", e.target.value)}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            />
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.mit_id}>
+                            <span className="text-gray-600 w-20 shrink-0">MIT ID</span>
+                            <input
+                                type="text"
+                                value={localVal.mit_id ?? ""}
+                                onChange={(e) => onFieldChange(entityId, "mit_id", e.target.value)}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            />
+                        </label>
+                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.dateSetId}>
+                            <span className="text-gray-600 w-20 shrink-0">dateSetId</span>
+                            {onOpenDateSetIdConfig ? (
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenDateSetIdConfig(entityId, localVal.dateSetId ?? "")}
+                                    className="border border-gray-300 rounded px-2 py-0.5 flex-1 min-w-0 text-right bg-white hover:bg-blue-50 text-gray-700"
+                                >
+                                    {localVal.dateSetId ? localVal.dateSetId : "לחץ להגדרה"}
+                                </button>
+                            ) : (
+                                <input
+                                    type="text"
+                                    value={localVal.dateSetId ?? ""}
+                                    onChange={(e) => onFieldChange(entityId, "dateSetId", e.target.value)}
+                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                />
+                            )}
+                        </label>
+                    </div>
+                )}
                 <textarea
+                    ref={contentTextareaRef}
                     className={getItemStyle(localVal.type)}
                     value={localVal.content ?? ""}
                     onChange={(e) => onContentChange(item.id, e.target.value)}
@@ -76,29 +295,60 @@ export function PartItemRow({
                 />
             </div>
 
-            {/* תרגומים מקושרים מאותו פריט בתרגומים אחרים */}
+            {/* תרגומים מקושרים – ניתן לעריכה */}
             {related.length > 0 && (
                 <div className="mr-8 border-r-4 border-blue-400 pr-3 space-y-1">
-                    {related.map((enh) => (
-                        <div
-                            key={enh.id}
-                            className="p-2 bg-blue-50 border border-blue-100 rounded text-[10px]"
-                        >
-                            <div className="font-bold text-blue-600 mb-1">
-                                {enh.tId}
+                    {related.map((enh) => {
+                        const displayVal = { ...enh.values, ...enhancementLocalValues[enh.id] };
+                        const enhChanged = isEnhancementChanged?.(enh.id) ?? false;
+                        return (
+                            <div
+                                key={enh.id}
+                                className={`p-2 rounded text-[10px] ${enhChanged ? "bg-amber-50 border border-amber-200" : "bg-blue-50 border border-blue-100"}`}
+                            >
+                                <div className="font-bold text-blue-600 mb-1">
+                                    {enh.tId}
+                                </div>
+                                {onEnhancementFieldChange ? (
+                                    <textarea
+                                        value={displayVal?.content ?? ""}
+                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "content", e.target.value)}
+                                        className="w-full p-1.5 border border-gray-200 rounded text-[10px] min-h-[60px]"
+                                        dir="rtl"
+                                    />
+                                ) : (
+                                    <div>{displayVal?.content}</div>
+                                )}
                             </div>
-                            <div>{enh.values?.content}</div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
+            )}
+            {onAddTranslation && (
+                <button
+                    type="button"
+                    onClick={() => onAddTranslation(item)}
+                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 transition-colors shadow-sm"
+                >
+                    + הוסף תרגום לטקסט זה
+                </button>
             )}
             {onAddAfter && (
                 <button
                     type="button"
                     onClick={onAddAfter}
-                    className="w-full py-1 opacity-0 hover:opacity-100 bg-green-50 text-green-500 border border-dashed border-green-200 text-[8px] font-bold"
+                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
                 >
                     + הוסף מקטע כאן
+                </button>
+            )}
+            {onAddInstructionAfter && (
+                <button
+                    type="button"
+                    onClick={onAddInstructionAfter}
+                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
+                >
+                    + הוסף הוראה כאן
                 </button>
             )}
         </React.Fragment>

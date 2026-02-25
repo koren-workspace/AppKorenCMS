@@ -18,41 +18,72 @@ export type PartEditPanelProps = {
     selectedGroupId: string | null;
     saving: boolean;
     changedIds: Set<string>;
+    /** יש שינויים בתרגומים המקושרים (להצגת כפתור שמירה) */
+    enhancementChangedIds?: Set<string>;
     loading: boolean;
     allItems: Entity<any>[];
     localValues: Record<string, any>;
     enhancements: Record<string, Entity<any>[]>;
+    /** ערכים מקומיים לעריכת תרגומים מקושרים */
+    enhancementLocalValues?: Record<string, any>;
     onSaveGroup: () => void;
     onFinalPublish: () => void;
     onContentChange: (itemId: string, value: string) => void;
+    /** עדכון שדה מאפיין של פריט (entityId, field, value) */
+    onFieldChange?: (entityId: string, field: string, value: unknown) => void;
+    /** עדכון שדה של תרגום מקושר (entityId, translationId, field, value) */
+    onEnhancementFieldChange?: (entityId: string, translationId: string, field: string, value: unknown) => void;
     onAddNewItemAt: (index: number) => void;
     /** מוחק מקטע ואת כל התרגומים המקושרים */
     onDeleteItem?: (item: Entity<any>, itemId: string) => void;
     /** רק בנוסח הבסיסי (0-*) מותר להוסיף מקטעים; בשאר הנוסחים – עריכה בלבד */
     allowAddPart?: boolean;
+    /** רק בתרגום (לא בסיס) מותר להוסיף הוראות – טקסט שלא מקושר לבסיס */
+    allowAddInstruction?: boolean;
+    /** מוסיף פריט הוראה חדש במיקום index (רק allowAddInstruction) */
+    onAddNewInstructionAt?: (index: number) => void;
+    /** פותח מודל הוספת תרגום לפריט */
+    onAddTranslation?: (item: Entity<any>) => void;
+    /** בתרגום (לא בסיס): במאפיינים לשנות סוג רק בין סוגי הוראות */
+    restrictTypeToInstructions?: boolean;
+    /** מזהה הפריט שנוסף לאחרונה – להעברת פוקוס לשדה התוכן */
+    lastAddedItemId?: string | null;
+    /** פותח מודל הגדרת/עריכת dateSetId בלחיצה על השדה במאפיינים */
+    onOpenDateSetIdForItem?: (entityId: string, currentDateSetId: string) => void;
 };
 
 export function PartEditPanel({
     selectedGroupId,
     saving,
     changedIds,
+    enhancementChangedIds = new Set(),
     loading,
     allItems,
     localValues,
     enhancements,
+    enhancementLocalValues = {},
     onSaveGroup,
     onFinalPublish,
     onContentChange,
+    onFieldChange,
+    onEnhancementFieldChange,
     onAddNewItemAt,
     onDeleteItem,
     allowAddPart = true,
+    allowAddInstruction = false,
+    onAddNewInstructionAt,
+    onAddTranslation,
+    restrictTypeToInstructions = false,
+    lastAddedItemId = null,
+    onOpenDateSetIdForItem,
 }: PartEditPanelProps) {
+    const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0;
     return (
         <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
             <PartEditToolbar
                 selectedGroupId={selectedGroupId}
                 saving={saving}
-                hasChanges={changedIds.size > 0}
+                hasChanges={hasAnyChanges}
                 onSaveGroup={onSaveGroup}
                 onFinalPublish={onFinalPublish}
             />
@@ -68,9 +99,19 @@ export function PartEditPanel({
                             <button
                                 type="button"
                                 onClick={() => onAddNewItemAt(0)}
-                                className="w-full py-2 border-2 border-dashed border-blue-100 text-blue-300 font-bold hover:bg-blue-50"
+                                className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
                             >
                                 + הוסף בראש המקטע
+                            </button>
+                        )}
+                        {/* הוספת הוראה – רק בתרגום (לא בבסיס); הוראות לא מקושרות לבסיס */}
+                        {allowAddInstruction && onAddNewInstructionAt && (
+                            <button
+                                type="button"
+                                onClick={() => onAddNewInstructionAt(0)}
+                                className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
+                            >
+                                + הוסף הוראה
                             </button>
                         )}
                         {/* לכל פריט: ערכים מקומיים + תרגומים מקושרים (לפי itemId/linkedItem) */}
@@ -95,13 +136,26 @@ export function PartEditPanel({
                                     localVal={val}
                                     isChanged={changedIds.has(item.id)}
                                     related={related}
+                                    enhancementLocalValues={enhancementLocalValues}
+                                    onEnhancementFieldChange={onEnhancementFieldChange}
+                                    isEnhancementChanged={(eid) => enhancementChangedIds.has(eid)}
                                     onContentChange={onContentChange}
+                                    onFieldChange={onFieldChange}
                                     onDelete={onDeleteItem}
                                     onAddAfter={
                                         allowAddPart
                                             ? () => onAddNewItemAt(index + 1)
                                             : undefined
                                     }
+                                    onAddInstructionAfter={
+                                        allowAddInstruction && onAddNewInstructionAt
+                                            ? () => onAddNewInstructionAt(index + 1)
+                                            : undefined
+                                    }
+                                    onAddTranslation={onAddTranslation}
+                                    restrictTypeToInstructions={restrictTypeToInstructions}
+                                    autoFocus={lastAddedItemId === item.id}
+                                    onOpenDateSetIdConfig={onOpenDateSetIdForItem}
                                 />
                             );
                         })}

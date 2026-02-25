@@ -276,10 +276,12 @@ export function usePartEdit(context: PartEditContext) {
                 message: "השינויים פורסמו בהצלחה לאפליקציה!",
             });
         } catch (err) {
+            const message =
+                err instanceof Error ? err.message : "נכשל הפרסום ל-Bagel";
             console.error(`${LOG_PREFIX} Publish failed`, err);
             snackbar.open({
                 type: "error",
-                message: "נכשל הפרסום ל-Bagel",
+                message,
             });
         } finally {
             setSaving(false);
@@ -320,7 +322,12 @@ export function usePartEdit(context: PartEditContext) {
                     message: "המקטע וכל התרגומים המקושרים נמחקו",
                 });
             } else {
-                await dataSource.deleteEntity({ entity: item });
+                await dataSource.saveEntity({
+                    path: item.path,
+                    entityId: item.id,
+                    values: { ...item.values, deleted: true, timestamp: Date.now() },
+                    status: "existing",
+                });
                 snackbar.open({
                     type: "success",
                     message: "המקטע נמחק (תרגום זה בלבד)",

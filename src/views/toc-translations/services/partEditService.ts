@@ -13,10 +13,11 @@ import { Entity } from "@firecms/cloud";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import { chunkArray, mitIdBetween } from "../utils/itemUtils";
 
-/** ממשק מינימלי ל-DataSource (fetchCollection, saveEntity) – מאפשר טסטים עם mock */
+/** ממשק מינימלי ל-DataSource (fetchCollection, saveEntity, deleteEntity) – מאפשר טסטים עם mock */
 type DataSource = {
     fetchCollection: (opts: any) => Promise<Entity<any>[]>;
     saveEntity: (opts: any) => Promise<any>;
+    deleteEntity: (opts: any) => Promise<void>;
 };
 
 /** פרמטרים לטעינת מקטע: מזהה תרגום, תפילה, מקטע, ורשימת תרגומים (לשליפת enhancements) */
@@ -54,11 +55,11 @@ export async function fetchPartWithEnhancements(
     } = params;
 
     const itemsPath = `translations/${translationId}/prayers/${selectedPrayerId}/items`;
-    const sourceEntities = await dataSource.fetchCollection({
+    const sourceEntities = (await dataSource.fetchCollection({
         path: itemsPath,
         collection: itemsCollection,
         filter: { partId: ["==", partId] },
-    });
+    })).filter((e) => e.values?.deleted !== true);
 
     const sorted = [...sourceEntities].sort(
         (a: any, b: any) =>
@@ -81,11 +82,11 @@ export async function fetchPartWithEnhancements(
         const tPath = `translations/${trans.translationId}/prayers/${selectedPrayerId}/items`;
         let allRelated: Entity<any>[] = [];
         for (const chunk of idChunks) {
-            const related = await dataSource.fetchCollection({
+            const related = (await dataSource.fetchCollection({
                 path: tPath,
                 collection: itemsCollection,
                 filter: { linkedItem: ["array-contains-any", chunk] },
-            });
+            })).filter((e) => e.values?.deleted !== true);
             allRelated = [...allRelated, ...related];
         }
         enhancementsMap[trans.translationId] = allRelated;
@@ -104,11 +105,11 @@ export async function fetchPartWithEnhancements(
         const baseTranslationId = baseEntry?.translationId;
         if (baseTranslationId) {
             const basePath = `translations/${baseTranslationId}/prayers/${selectedPrayerId}/items`;
-            const baseEntities = await dataSource.fetchCollection({
+            const baseEntities = (await dataSource.fetchCollection({
                 path: basePath,
                 collection: itemsCollection,
                 filter: { partId: ["==", partId] },
-            });
+            })).filter((e) => e.values?.deleted !== true);
             baseItems = [...baseEntities].sort(
                 (a: any, b: any) =>
                     (a.values?.mit_id || "").localeCompare(
@@ -154,7 +155,8 @@ export async function savePartItems(
 }
 
 /**
- * מוחק פריט מקטע (בתרגום הנוכחי) ואת כל הפריטים בתרגומים האחרים שמקושרים אליו (linkedItem).
+ * מסמן פריט מקטע כמחוק (deleted: true) בתרגום הנוכחי ובכל התרגומים המקושרים אליו (linkedItem).
+ * לא מוחק את הדוקומנט — מאפשר לאנדרואיד לזהות את המחיקה בסנכרון מבוסס-timestamp.
  */
 export type DeletePartItemParams = {
     itemEntity: Entity<any>;
@@ -163,6 +165,15 @@ export type DeletePartItemParams = {
     selectedPrayerId: string;
     translations: any[];
 };
+
+async function softDeleteEntity(dataSource: DataSource, entity: Entity<any>): Promise<void> {
+    await dataSource.saveEntity({
+        path: entity.path,
+        entityId: entity.id,
+        values: { ...entity.values, deleted: true, timestamp: Date.now() },
+        status: "existing",
+    });
+}
 
 export async function deletePartItemAndRelatedTranslations(
     dataSource: DataSource,
@@ -176,7 +187,7 @@ export async function deletePartItemAndRelatedTranslations(
         translations,
     } = params;
 
-    await dataSource.deleteEntity({ entity: itemEntity });
+    await softDeleteEntity(dataSource, itemEntity);
 
     for (const trans of translations) {
         const tid = trans?.translationId;
@@ -188,7 +199,7 @@ export async function deletePartItemAndRelatedTranslations(
             filter: { linkedItem: ["array-contains", itemId] },
         });
         for (const entity of related) {
-            await dataSource.deleteEntity({ entity });
+            await softDeleteEntity(dataSource, entity);
         }
     }
 }
@@ -203,11 +214,11 @@ export async function fetchPartItems(
     partId: string
 ): Promise<Entity<any>[]> {
     const path = `translations/${translationId}/prayers/${selectedPrayerId}/items`;
-    const entities = await dataSource.fetchCollection({
+    const entities = (await dataSource.fetchCollection({
         path,
         collection: itemsCollection,
         filter: { partId: ["==", partId] },
-    });
+    })).filter((e) => e.values?.deleted !== true);
     return [...entities].sort(
         (a: any, b: any) =>
             (a.values?.mit_id || "").localeCompare(
@@ -351,17 +362,13 @@ export async function createTranslationItem(
         collection: itemsCollection,
     });
 }
-
-/**
- * מעדכן מסמך db-update-time עם maxTimestamp (לפי selectedTocId).
- * קורא ל-API של Bagel עם VITE_BAGEL_TOKEN – האפליקציה מסתנכרנת לפי timestamp.
- */
 export async function publishToBagel(
     dataSource: DataSource,
     selectedTocId: string
 ): Promise<void> {
     const newTimestamp = Date.now();
 
+    // שלב א': עדכון Firestore (עובד תקין)
     await dataSource.saveEntity({
         path: "db-update-time",
         entityId: selectedTocId,
@@ -371,15 +378,45 @@ export async function publishToBagel(
     });
 
     const BAGEL_TOKEN = (import.meta as any).env.VITE_BAGEL_TOKEN;
-    await fetch(
-        `https://api.bageldb.com/v1/collection/updateTime/items/${selectedTocId}`,
-        {
-            method: "PUT",
-            headers: {
-                Authorization: `Bearer ${BAGEL_TOKEN}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ timestamp: newTimestamp }),
-        }
-    );
+    if (!BAGEL_TOKEN?.trim()) {
+        throw new Error("חסר טוקן Bagel (VITE_BAGEL_TOKEN) – בדוק את קובץ .env");
+    }
+
+    let response: Response;
+    try {
+        // שינוי הכתובת ל-api.bageldb.com במקום bagelstudio.co
+        const url = `https://api.bageldb.com/api/public/collection/updateTime/items/${selectedTocId}`;
+        
+        response = await fetch(url, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${BAGEL_TOKEN}`,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json" // הוספת Accept לעיתים עוזרת לשרת להבין מה להחזיר
+                },
+                body: JSON.stringify({ timestamp: newTimestamp }),
+            }
+        );
+    } catch (networkErr: any) {
+        const msg =
+            networkErr?.message?.includes("fetch") || networkErr?.name === "TypeError"
+                ? "לא ניתן להתחבר ל-Bagel (בעיית רשת או שרת לא זמין). בדוק חיבור אינטרנט וכתובת API."
+                : `שגיאת רשת: ${networkErr?.message ?? String(networkErr)}`;
+        throw new Error(msg);
+    }
+
+    if (!response.ok) {
+        const status = response.status;
+        let body = "";
+        try { body = await response.text(); } catch { /* ignore */ }
+        
+        let userMsg: string;
+        if (status === 401) userMsg = `טוקן Bagel לא תקין (401).`;
+        else if (status === 403) userMsg = `אין הרשאת כתיבה ל-Bagel (403).`;
+        else if (status === 404) userMsg = `הפריט '${selectedTocId}' לא נמצא בקולקציה ב-Bagel.`;
+        else if (status >= 500) userMsg = `שרת Bagel חווה תקלה (503/500). ודא שהכתובת api.bageldb.com תקינה.`;
+        else userMsg = `שגיאה ב-Bagel (${status}): ${body}`;
+        
+        throw new Error(userMsg);
+    }
 }

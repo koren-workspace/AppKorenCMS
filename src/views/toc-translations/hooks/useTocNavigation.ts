@@ -321,7 +321,7 @@ export function useTocNavigation() {
                             path: itemsPath,
                             collection: baseColl,
                         });
-                        for (const item of itemsList) await dataSource.deleteEntity({ entity: item });
+                        for (const item of itemsList) await dataSource.saveEntity({ path: item.path, entityId: item.id, values: { ...item.values, deleted: true, timestamp: Date.now() }, status: "existing" });
                     } catch (_) {}
                     try {
                         const prayersList = await dataSource.fetchCollection({
@@ -329,7 +329,7 @@ export function useTocNavigation() {
                             collection: baseColl,
                         });
                         const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
-                        if (prayerEntity) await dataSource.deleteEntity({ entity: prayerEntity });
+                        if (prayerEntity) await dataSource.saveEntity({ path: prayerEntity.path, entityId: prayerEntity.id, values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() }, status: "existing" });
                     } catch (_) {}
                 }
             }
@@ -537,7 +537,7 @@ export function useTocNavigation() {
                         path: itemsPath,
                         collection: baseColl,
                     });
-                    for (const item of itemsList) await dataSource.deleteEntity({ entity: item });
+                    for (const item of itemsList) await dataSource.saveEntity({ path: item.path, entityId: item.id, values: { ...item.values, deleted: true, timestamp: Date.now() }, status: "existing" });
                 } catch (_) {}
                 try {
                     const prayersList = await dataSource.fetchCollection({
@@ -545,7 +545,7 @@ export function useTocNavigation() {
                         collection: baseColl,
                     });
                     const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
-                    if (prayerEntity) await dataSource.deleteEntity({ entity: prayerEntity });
+                    if (prayerEntity) await dataSource.saveEntity({ path: prayerEntity.path, entityId: prayerEntity.id, values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() }, status: "existing" });
                 } catch (_) {}
             }
             await dataSource.saveEntity({
@@ -594,16 +594,16 @@ export function useTocNavigation() {
                     collection: baseColl,
                 });
                 for (const item of itemsList) {
-                    await dataSource.deleteEntity({ entity: item });
+                    await dataSource.saveEntity({ path: item.path, entityId: item.id, values: { ...item.values, deleted: true, timestamp: Date.now() }, status: "existing" });
                 }
-                await dataSource.deleteEntity({ entity: prayer });
+                await dataSource.saveEntity({ path: prayer.path, entityId: prayer.id, values: { ...prayer.values, deleted: true, timestamp: Date.now() }, status: "existing" });
             }
             const transList = await dataSource.fetchCollection({
                 path: "translations",
                 collection: baseColl,
             });
             const transEntity = transList.find((e) => e.id === translationId);
-            if (transEntity) await dataSource.deleteEntity({ entity: transEntity });
+            if (transEntity) await dataSource.saveEntity({ path: transEntity.path, entityId: transEntity.id, values: { ...transEntity.values, deleted: true, timestamp: Date.now() }, status: "existing" });
             const tocEntity = tocItems.find((t) => t.id === selectedTocId);
             if (!tocEntity) return;
             await dataSource.saveEntity({
@@ -647,8 +647,7 @@ export function useTocNavigation() {
         setIsSaving(true);
         setSavingMessage("מוחק נוסח...");
         try {
-            // deleteEntity מצפה ל-{ entity } כאשר entity כולל path/reference (databaseId)
-            await dataSource.deleteEntity({ entity: toc });
+            await dataSource.saveEntity({ path: toc.path, entityId: toc.id, values: { ...toc.values, deleted: true, timestamp: Date.now() }, status: "existing" });
             snackbar.open({ type: "success", message: "הנוסח נמחק" });
             setTocItems((prev) => prev.filter((t) => t.id !== tocId));
             if (selectedTocId === tocId) {

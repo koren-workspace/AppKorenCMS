@@ -28,6 +28,10 @@ type PrayerNavigationColumnsProps = {
     currentParts: any[];
     selectedGroupId: string | null;
     onSelectPart: (partId: string) => void;
+    onAddPart?: (partName: string, afterPartId: string | null) => void;
+    onDeletePart?: (partId: string) => void;
+    /** מציג את כפתור "הוסף מקטע" רק כשנבחרו נוסח, תרגום, קטגוריה ותפילה */
+    showAddPart?: boolean;
     /** במהלך שמירה – כפתורי הוספה/מחיקה מושבתים ומציגים מצב טעינה */
     isSaving?: boolean;
 };
@@ -48,6 +52,9 @@ export function PrayerNavigationColumns({
     currentParts,
     selectedGroupId,
     onSelectPart,
+    onAddPart,
+    onDeletePart,
+    showAddPart,
     isSaving = false,
 }: PrayerNavigationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
@@ -69,6 +76,16 @@ export function PrayerNavigationColumns({
     const handleDeletePrayer = (e: React.MouseEvent, prayerId: string) => {
         e.stopPropagation();
         if (window.confirm("למחוק את התפילה?")) onDeletePrayer?.(prayerId);
+    };
+
+    const handleAddPartAfter = (afterPartId: string | null) => {
+        const name = window.prompt("שם המקטע החדש:");
+        if (name?.trim()) onAddPart?.(name.trim(), afterPartId);
+    };
+
+    const handleDeletePart = (e: React.MouseEvent, partId: string) => {
+        e.stopPropagation();
+        if (window.confirm("למחוק את המקטע וכל הפריטים שלו מכל התרגומים?")) onDeletePart?.(partId);
     };
 
     return (
@@ -173,15 +190,51 @@ export function PrayerNavigationColumns({
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
-                {currentParts.map((part: any) => (
+                {currentParts.length === 0 && onAddPart && showAddPart && (
                     <button
-                        key={part.id}
-                        onClick={() => onSelectPart(part.id)}
+                        type="button"
+                        onClick={() => handleAddPartAfter(null)}
                         disabled={isSaving}
-                        className={`text-right p-1.5 rounded border ${selectedGroupId === part.id ? "bg-orange-500 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
+                        className={`py-1.5 rounded border-2 border-dashed font-bold text-[9px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-600 hover:bg-orange-50"}`}
                     >
-                        {part.name}
+                        {isSaving ? "שומר…" : "+ הוסף מקטע"}
                     </button>
+                )}
+                {currentParts.map((part: any) => (
+                    <React.Fragment key={part.id}>
+                        <div className="flex items-center gap-0.5">
+                            <button
+                                type="button"
+                                onClick={() => onSelectPart(part.id)}
+                                disabled={isSaving}
+                                className={`flex-1 text-right p-1.5 rounded border ${selectedGroupId === part.id ? "bg-orange-500 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
+                            >
+                                {part.name}
+                            </button>
+                            {onDeletePart && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => handleDeletePart(e, part.id)}
+                                    disabled={isSaving}
+                                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-[8px] ${isSaving ? savingClass : "hover:bg-red-50"}`}
+                                    title="מחק מקטע"
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+                        {onAddPart && showAddPart && (
+                            <button
+                                type="button"
+                                onClick={() => handleAddPartAfter(part.id)}
+                                disabled={isSaving}
+                                className={`w-full py-0.5 rounded border border-dashed text-[8px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-500 hover:bg-orange-50"}`}
+                                title={isSaving ? undefined : `הוסף מקטע אחרי "${part.name}"`}
+                            >
+                                {isSaving ? "שומר…" : "+ הוסף כאן"}
+                            </button>
+                        )}
+                    </React.Fragment>
                 ))}
             </div>
         </>

@@ -27,6 +27,7 @@ import {
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { mitIdBetween } from "../utils/itemUtils";
+import { LOGGED_FIELDS } from "../constants/itemFields";
 
 /** הקשר הניווט – מועבר מ-useTocNavigation כדי לדעת איזה תרגום/תפילה נבחרו */
 export type PartEditContext = {
@@ -37,6 +38,46 @@ export type PartEditContext = {
 };
 
 const LOG_PREFIX = "[TocTranslations]";
+
+/** רשומת שינוי ביומן – נוצרת בשמירה ומתעדת ערך לפני/אחרי עם סטטוס */
+export type ChangeLogEntry = {
+    id: string;
+    timestamp: number;
+    tocId: string | null;
+    translationId: string;
+    prayerId: string | null;
+    partId: string | null;
+    itemId: string;
+    mitId: string;
+    entityId: string;
+    isEnhancement: boolean;
+    enhancementTranslationId?: string;
+    field: string;
+    oldValue: unknown;
+    newValue: unknown;
+    savedToFirestore: boolean;
+    publishedToBagel: boolean;
+};
+
+/** השוואת שני אובייקטי ערכים – מחזיר רק שדות שהשתנו (מתוך LOGGED_FIELDS) */
+function diffValues(
+    orig: Record<string, any>,
+    curr: Record<string, any>
+): Array<{ field: string; oldValue: unknown; newValue: unknown }> {
+    const diffs: Array<{ field: string; oldValue: unknown; newValue: unknown }> = [];
+    const normalize = (v: unknown) => (v === undefined ? null : v);
+    LOGGED_FIELDS.forEach((field) => {
+        const oldVal = normalize(orig[field]);
+        const newVal = normalize(curr[field]);
+        if (oldVal !== newVal) diffs.push({ field, oldValue: orig[field], newValue: curr[field] });
+    });
+    return diffs;
+}
+
+/** יצירת מזהה ייחודי לרשומת יומן */
+function makeLogId() {
+    return `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export function usePartEdit(context: PartEditContext) {
     const {
@@ -53,6 +94,16 @@ export function usePartEdit(context: PartEditContext) {
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
     const [allItems, setAllItems] = useState<Entity<any>[]>([]);
     const [baseItems, setBaseItems] = useState<Entity<any>[]>([]);
+    /**
+     * גבולות מהמקטעים הסמוכים – נטענים ב-fetchItemsWithEnhancements.
+     * משמשים לחישוב itemId/mit_id כשהמקטע ריק או כשמוסיפים בקצה הרשימה.
+     */
+    const [neighborBounds, setNeighborBounds] = useState<{
+        prevLastItemId?: string;
+        prevLastMitId?: string;
+        nextFirstItemId?: string;
+        nextFirstMitId?: string;
+    }>({});
     const [enhancements, setEnhancements] = useState<
         Record<string, Entity<any>[]>
     >({});
@@ -62,6 +113,13 @@ export function usePartEdit(context: PartEditContext) {
     const [saving, setSaving] = useState(false);
     /** מזהה הפריט שנוסף לאחרונה – להעברת פוקוס (מנוקה אחרי זמן קצר) */
     const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
+
+    /** ערכים מקוריים של פריטים (snapshot בטעינה) – לחישוב diff בשמירה */
+    const [originalValues, setOriginalValues] = useState<Record<string, any>>({});
+    /** ערכים מקוריים של enhancements (snapshot בטעינה) – לחישוב diff בשמירה */
+    const [originalEnhancementValues, setOriginalEnhancementValues] = useState<Record<string, any>>({});
+    /** שינויי השמירה האחרונה בלבד – מתאפס בכל שמירה חדשה */
+    const [lastSaveEntries, setLastSaveEntries] = useState<ChangeLogEntry[]>([]);
 
     /** מודל הגדרת dateSetId לפני הוספת מקטע/הוראה או בעריכת מקטע קיים */
     const [dateSetIdModalOpen, setDateSetIdModalOpen] = useState(false);
@@ -108,6 +166,7 @@ export function usePartEdit(context: PartEditContext) {
         setSelectedGroupId(null);
         setAllItems([]);
         setBaseItems([]);
+        setNeighborBounds({});
         setLocalValues({});
         setEnhancements({});
         setChangedIds(new Set());
@@ -141,28 +200,84 @@ export function usePartEdit(context: PartEditContext) {
         });
     }, [currentTocData, currentTranslationData, selectedPrayerId]);
 
-    /** טוען פריטי מקטע + enhancements ומעדכן את כל state העריכה */
+    /** מחלץ את רשימת המקטעים לתפילה הנוכחית מתוך currentTocData לפי translationId */
+    const getPartsFromToc = (translationId: string, prayerId: string): any[] => {
+        const trans = (currentTocData?.translations ?? []).find(
+            (t: any) => t.translationId === translationId
+        );
+        if (!trans) return [];
+        for (const cat of trans.categories ?? []) {
+            const prayer = (cat.prayers ?? []).find((p: any) => p.id === prayerId);
+            if (prayer) return prayer.parts ?? [];
+        }
+        return [];
+    };
+
+    /** טוען פריטי מקטע + enhancements + גבולות מהמקטעים הסמוכים (במקביל) */
     const fetchItemsWithEnhancements = async (partId: string) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData)
             return;
         setLoading(true);
         try {
-            const result = await fetchPartWithEnhancements(dataSource, {
-                translationId: currentTranslationData.translationId,
-                selectedPrayerId,
-                partId,
-                translations: currentTocData.translations ?? [],
-                currentTranslationId: currentTranslationData.translationId,
-            });
+            const translationId = currentTranslationData.translationId;
+
+            // מזהה מקטעים סמוכים מה-TOC
+            const parts = getPartsFromToc(translationId, selectedPrayerId);
+            const partIdx = parts.findIndex((p: any) => p.id === partId);
+            const prevPartId: string | null = partIdx > 0 ? parts[partIdx - 1]?.id ?? null : null;
+            const nextPartId: string | null =
+                partIdx >= 0 && partIdx < parts.length - 1 ? parts[partIdx + 1]?.id ?? null : null;
+
+            // טוענים הכל במקביל: פריטי המקטע + פריטי מקטע קודם + פריטי מקטע הבא
+            const [result, prevItems, nextItems] = await Promise.all([
+                fetchPartWithEnhancements(dataSource, {
+                    translationId,
+                    selectedPrayerId,
+                    partId,
+                    translations: currentTocData.translations ?? [],
+                    currentTranslationId: translationId,
+                }),
+                prevPartId
+                    ? fetchPartItems(dataSource, translationId, selectedPrayerId, prevPartId)
+                    : Promise.resolve([] as Entity<any>[]),
+                nextPartId
+                    ? fetchPartItems(dataSource, translationId, selectedPrayerId, nextPartId)
+                    : Promise.resolve([] as Entity<any>[]),
+            ]);
+
+            // חישוב גבולות מהפריטים שנטענו
+            const bounds: typeof neighborBounds = {};
+            if (prevItems.length > 0) {
+                const last = prevItems[prevItems.length - 1];
+                bounds.prevLastItemId = last.values?.itemId ?? undefined;
+                bounds.prevLastMitId =
+                    last.values?.mit_id ?? last.values?.itemId ?? undefined;
+            }
+            if (nextItems.length > 0) {
+                const first = nextItems[0];
+                bounds.nextFirstItemId = first.values?.itemId ?? undefined;
+                bounds.nextFirstMitId =
+                    first.values?.mit_id ?? first.values?.itemId ?? undefined;
+            }
+
             setAllItems(result.sorted);
             setBaseItems(result.baseItems ?? []);
             setEnhancements(result.enhancementsMap);
             setLocalValues(result.initialValues);
+            setNeighborBounds(bounds);
             setSelectedGroupId(partId);
             setChangedIds(new Set());
             setEnhancementLocalValues({});
             setEnhancementChangedIds(new Set());
             setEnhancementTranslationIds({});
+
+            // שמירת snapshot של ערכי הפריטים לפני עריכה (לחישוב diff ביומן)
+            const origMap: Record<string, any> = {};
+            result.sorted.forEach((item) => { origMap[item.id] = { ...item.values }; });
+            setOriginalValues(origMap);
+            const origEnhMap: Record<string, any> = {};
+            Object.values(result.enhancementsMap).flat().forEach((e) => { origEnhMap[e.id] = { ...e.values }; });
+            setOriginalEnhancementValues(origEnhMap);
         } catch (err) {
             console.error(`${LOG_PREFIX} Part fetch failed`, err);
             snackbar.open({
@@ -253,6 +368,88 @@ export function usePartEdit(context: PartEditContext) {
                 type: "success",
                 message: "המקטע נשמר בהצלחה (מקומי)",
             });
+
+            // --- יומן שינויים: חישוב diff לפני ניקוי state ---
+            const now = Date.now();
+            const newLogEntries: ChangeLogEntry[] = [];
+
+            // diff לפריטים הראשיים
+            changedIdList.forEach((id) => {
+                const orig = originalValues[id] ?? {};
+                const curr = localValues[id] ?? {};
+                diffValues(orig, curr).forEach(({ field, oldValue, newValue }) => {
+                    newLogEntries.push({
+                        id: makeLogId(),
+                        timestamp: now,
+                        tocId: selectedTocId,
+                        translationId: currentTranslationData.translationId,
+                        prayerId: selectedPrayerId,
+                        partId: selectedGroupId,
+                        itemId: (curr.itemId ?? orig.itemId ?? id) as string,
+                        mitId: (curr.mit_id ?? orig.mit_id ?? "") as string,
+                        entityId: id,
+                        isEnhancement: false,
+                        field,
+                        oldValue,
+                        newValue,
+                        savedToFirestore: true,
+                        publishedToBagel: false,
+                    });
+                });
+            });
+
+            // diff ל-enhancements
+            if (hadEnhancementChanges) {
+                Array.from(enhancementChangedIds).forEach((eid) => {
+                    const tid = enhancementTranslationIds[eid];
+                    if (!tid) return;
+                    const orig = originalEnhancementValues[eid] ?? {};
+                    const localEnh = enhancementLocalValues[eid] ?? {};
+                    // חובה להשוות מול האובייקט המלא (orig + שינויים), לא רק מול השינויים
+                    const curr = { ...orig, ...localEnh };
+                    diffValues(orig, curr).forEach(({ field, oldValue, newValue }) => {
+                        newLogEntries.push({
+                            id: makeLogId(),
+                            timestamp: now,
+                            tocId: selectedTocId,
+                            translationId: currentTranslationData.translationId,
+                            prayerId: selectedPrayerId,
+                            partId: selectedGroupId,
+                            itemId: (curr.itemId ?? orig.itemId ?? eid) as string,
+                            mitId: (curr.mit_id ?? orig.mit_id ?? "") as string,
+                            entityId: eid,
+                            isEnhancement: true,
+                            enhancementTranslationId: tid,
+                            field,
+                            oldValue,
+                            newValue,
+                            savedToFirestore: true,
+                            publishedToBagel: false,
+                        });
+                    });
+                });
+            }
+
+            // מחליף (לא מצטבר) – רק השמירה הנוכחית
+            setLastSaveEntries(newLogEntries);
+
+            // עדכון snapshot אחרי שמירה (הערכים הנוכחיים הופכים ל"מקוריים")
+            setOriginalValues((prev) => {
+                const next = { ...prev };
+                changedIdList.forEach((id) => { next[id] = { ...localValues[id] }; });
+                return next;
+            });
+            if (hadEnhancementChanges) {
+                setOriginalEnhancementValues((prev) => {
+                    const next = { ...prev };
+                    Array.from(enhancementChangedIds).forEach((eid) => {
+                        next[eid] = { ...(prev[eid] ?? {}), ...(enhancementLocalValues[eid] ?? {}) };
+                    });
+                    return next;
+                });
+            }
+            // --- סוף יומן שינויים ---
+
             setChangedIds(new Set());
             if ((hasNewItems || hadEnhancementChanges) && selectedGroupId) {
                 await fetchItemsWithEnhancements(selectedGroupId);
@@ -275,6 +472,10 @@ export function usePartEdit(context: PartEditContext) {
                 type: "success",
                 message: "השינויים פורסמו בהצלחה לאפליקציה!",
             });
+            // סמן את כל הרשומות השמורות כ-"פורסמו ל-Bagel"
+            setLastSaveEntries((prev) =>
+                prev.map((e) => ({ ...e, publishedToBagel: true }))
+            );
         } catch (err) {
             const message =
                 err instanceof Error ? err.message : "נכשל הפרסום ל-Bagel";
@@ -403,6 +604,7 @@ export function usePartEdit(context: PartEditContext) {
      * מחשב mit_id לפריט חדש במיקום index. לוקח בחשבון גם שכנים בתרגום וגם בבסיס:
      * idBefore = מקסימום בין (שכן למעלה בתרגום) ל(פריט הבסיס המקביל) – כך ההוראה אחרי שניהם.
      * idAfter = מינימום בין (שכן למטה בתרגום), (פריט הבסיס המקביל), ו(פריט הבסיס הבא) – כך ההוראה לפני כולם.
+     * בקצוות (index=0 / index=allItems.length) + מקטע ריק: neighborBounds מספק את הגבולות.
      */
     const computeMitIdForIndex = (index: number): string => {
         let idBefore: string | null = null;
@@ -413,6 +615,9 @@ export function usePartEdit(context: PartEditContext) {
             const aboveInTranslation = getEffectiveMitId(itemAbove);
             const aboveInBase = getMitIdForPosition(itemAbove);
             idBefore = baseItems.length > 0 ? maxMitId(aboveInTranslation, aboveInBase) : aboveInBase;
+        } else if (neighborBounds.prevLastMitId) {
+            // מקטע ריק או הוספה לפני כל הפריטים – גבול תחתון מהמקטע הקודם
+            idBefore = neighborBounds.prevLastMitId;
         }
 
         if (index < allItems.length) {
@@ -429,16 +634,28 @@ export function usePartEdit(context: PartEditContext) {
             idAfter = getNextBaseMitIdAfter(idBefore) ?? undefined;
         }
 
+        // אם עדיין אין גבול עליון (הוספה בסוף המקטע, כולל מקטע ריק) – גבול מהמקטע הבא
+        if ((idAfter === undefined || idAfter === null) && neighborBounds.nextFirstMitId) {
+            idAfter = neighborBounds.nextFirstMitId;
+        }
+
         return mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
     };
 
     /**
-     * מחשב itemId לפריט חדש במיקום index – כמו קטגוריות/תפילות: ערך "בין" שני שכנים + ייחודיות.
-     * משמש גם למיון (אם ממיינים לפי itemId) וגם כמזהה ייחודי לקישור (linkedItem).
+     * מחשב itemId לפריט חדש במיקום index – ערך "בין" שני שכנים + ייחודיות.
+     * בקצוות הרשימה (index=0 או index=allItems.length) נעזרים ב-neighborBounds
+     * כדי לא ליפול ל-"0" כשהמקטע ריק או כשמוסיפים לפני/אחרי כל הפריטים.
      */
     const computeItemIdForIndex = (index: number): string => {
-        const itemIdBefore = index > 0 ? getEffectiveItemId(allItems[index - 1]) : null;
-        const itemIdAfter = index < allItems.length ? getEffectiveItemId(allItems[index]) : null;
+        const itemIdBefore =
+            index > 0
+                ? getEffectiveItemId(allItems[index - 1])
+                : (neighborBounds.prevLastItemId ?? null);
+        const itemIdAfter =
+            index < allItems.length
+                ? getEffectiveItemId(allItems[index])
+                : (neighborBounds.nextFirstItemId ?? null);
         const existingIds = new Set(
             allItems.map((i) => getEffectiveItemId(i)).filter((id) => id !== "")
         );
@@ -712,5 +929,7 @@ export function usePartEdit(context: PartEditContext) {
         openDateSetIdModalForAddTranslation,
         openDateSetIdModalForEdit,
         dateSetIdInitialForEdit,
+        lastSaveEntries,
+        clearLastSave: () => setLastSaveEntries([]),
     };
 }

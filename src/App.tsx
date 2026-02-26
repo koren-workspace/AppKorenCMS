@@ -4,8 +4,7 @@ import appConfig from "./index";
 
 function App() {
     return <FireCMSCloudApp
-        // projectId={"koren-stage"}
-        projectId={"koren-stage-b"}
+        projectId={"koren-stage"}
         appConfig={appConfig}
     />;
 }

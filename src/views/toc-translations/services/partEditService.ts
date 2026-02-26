@@ -143,10 +143,14 @@ export async function savePartItems(
 
     const savePromises = changedIds.map((id) => {
         const isNew = id.startsWith("new_");
+        const values = localValues[id];
+        // לפריט חדש: document ID = itemId (כמו createTranslationItem) כדי שהמסמך יישמר בשם הנכון.
+        // אם itemId חסר מסיבה כלשהי – Firestore מפיק ID אוטומטי.
+        const entityId = isNew ? (values?.itemId || undefined) : id;
         return dataSource.saveEntity({
             path,
-            entityId: isNew ? undefined : id,
-            values: { ...localValues[id], timestamp: now },
+            entityId,
+            values: { ...values, timestamp: now },
             status: isNew ? "new" : "existing",
             collection: itemsCollection,
         });

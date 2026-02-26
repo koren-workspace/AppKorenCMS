@@ -37,6 +37,20 @@ export function TocTranslationsView() {
         selectedTocId: nav.selectedTocId,
     });
 
+    const hasUnsaved = partEdit.changedIds.size > 0 || partEdit.enhancementChangedIds.size > 0;
+
+    /** עוטף פונקציית ניווט – שואל לאישור אם יש שינויים לא שמורים */
+    function withUnsavedCheck<T extends unknown[]>(fn: (...args: T) => void) {
+        return (...args: T) => {
+            if (
+                hasUnsaved &&
+                !window.confirm("יש שינויים שלא נשמרו. לעבור בכל זאת?\n(השינויים יאבדו)")
+            )
+                return;
+            fn(...args);
+        };
+    }
+
     const hasTranslationSelection =
         !!nav.selectedTocId && nav.selectedTranslationIndex != null;
 
@@ -74,12 +88,12 @@ export function TocTranslationsView() {
             <TocAndTranslationColumns
                 tocItems={nav.tocItems}
                 selectedTocId={nav.selectedTocId}
-                onSelectToc={nav.onSelectToc}
+                onSelectToc={withUnsavedCheck(nav.onSelectToc)}
                 onAddToc={nav.addToc}
                 onDeleteToc={nav.deleteToc}
                 translations={nav.currentTocData?.translations ?? []}
                 selectedTranslationIndex={nav.selectedTranslationIndex}
-                onSelectTranslation={nav.onSelectTranslation}
+                onSelectTranslation={withUnsavedCheck(nav.onSelectTranslation)}
                 onAddTranslation={nav.addTranslation}
                 getSuggestedTranslationId={nav.getSuggestedTranslationId}
                 onDeleteTranslation={nav.deleteTranslation}
@@ -95,7 +109,7 @@ export function TocTranslationsView() {
                 showAddCategory={!!nav.selectedTocId && nav.selectedTranslationIndex != null && allowAddPart}
                 currentPrayers={nav.currentPrayers}
                 selectedPrayerId={nav.selectedPrayerId}
-                onSelectPrayer={nav.onSelectPrayer}
+                onSelectPrayer={withUnsavedCheck(nav.onSelectPrayer)}
                 onAddPrayer={nav.addPrayer}
                 onDeletePrayer={allowAddPart ? nav.deletePrayer : undefined}
                 showAddPrayer={
@@ -106,7 +120,15 @@ export function TocTranslationsView() {
                 }
                 currentParts={nav.currentParts}
                 selectedGroupId={partEdit.selectedGroupId}
-                onSelectPart={partEdit.fetchItemsWithEnhancements}
+                onSelectPart={withUnsavedCheck(partEdit.fetchItemsWithEnhancements)}
+                onAddPart={nav.addPart}
+                onDeletePart={allowAddPart ? nav.deletePart : undefined}
+                showAddPart={
+                    !!nav.selectedTocId &&
+                    nav.selectedTranslationIndex != null &&
+                    !!nav.selectedPrayerId &&
+                    allowAddPart
+                }
                 isSaving={nav.isSaving}
             />
             {/* אזור העריכה: toolbar + רשימת פריטים (לאחר טעינה) */}
@@ -138,6 +160,8 @@ export function TocTranslationsView() {
                 restrictTypeToInstructions={!isBase}
                 lastAddedItemId={partEdit.lastAddedItemId}
                 onOpenDateSetIdForItem={partEdit.openDateSetIdModalForEdit}
+                lastSaveEntries={partEdit.lastSaveEntries}
+                onClearLastSave={partEdit.clearLastSave}
             />
             <DateSetIdConfigModal
                 open={partEdit.dateSetIdModalOpen}

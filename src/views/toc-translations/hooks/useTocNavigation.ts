@@ -665,6 +665,164 @@ export function useTocNavigation() {
         }
     };
 
+    /** מוסיף מקטע אחרי מקטע קיים (או בסוף אם afterPartId null). רק בנוסח הבסיסי מעדכן את כל התרגומים. */
+    const addPart = async (partName: string, afterPartId: string | null) => {
+        const name = partName?.trim();
+        if (
+            !name ||
+            selectedTocId == null ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !selectedPrayerId ||
+            !currentTocData?.translations?.length
+        )
+            return;
+        const idx = selectedTranslationIndex;
+        const trans = currentTocData.translations[idx];
+        if (!trans) return;
+        const isBase = String(trans.translationId ?? "").startsWith("0-");
+
+        const getParts = (t: any): any[] => {
+            for (const cat of t.categories ?? []) {
+                const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
+                if (prayer) return prayer.parts ?? [];
+            }
+            return [];
+        };
+
+        const allParts = getParts(trans);
+        const maxId = allParts.length
+            ? Math.max(0, ...allParts.map((p: any) => Number(p.id) || 0))
+            : 0;
+        const newPartId = String(maxId + 10);
+        const newPart = { id: newPartId, name };
+
+        const insertAt = (parts: any[]) => {
+            if (afterPartId == null) return [...parts, newPart];
+            const i = parts.findIndex((p: any) => p.id === afterPartId);
+            const pos = i >= 0 ? i + 1 : parts.length;
+            return [...parts.slice(0, pos), newPart, ...parts.slice(pos)];
+        };
+
+        const updateTranslation = (t: any) => ({
+            ...t,
+            categories: (t.categories ?? []).map((cat: any) => ({
+                ...cat,
+                prayers: (cat.prayers ?? []).map((p: any) =>
+                    p.id === selectedPrayerId
+                        ? { ...p, parts: insertAt(p.parts ?? []) }
+                        : p
+                ),
+            })),
+        });
+
+        const updatedTranslations = isBase
+            ? currentTocData.translations.map(updateTranslation)
+            : currentTocData.translations.map((t: any, i: number) =>
+                  i === idx ? updateTranslation(t) : t
+              );
+
+        setIsSaving(true);
+        setSavingMessage("מוסיף מקטע...");
+        try {
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+            snackbar.open({ type: "success", message: "מקטע נוסף" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Add part failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בהוספת מקטע" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
+    /** מוחק מקטע: רק בנוסח הבסיסי (0-*). מוציא את המקטע מכל התרגומים ב-TOC ומסמן פריטים כמחוקים. */
+    const deletePart = async (partId: string) => {
+        if (
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !selectedPrayerId ||
+            !currentTocData?.translations?.length ||
+            !currentTranslationData?.translationId
+        )
+            return;
+        const trans = currentTocData.translations[selectedTranslationIndex];
+        const isBase = String(trans?.translationId ?? "").startsWith("0-");
+        if (!isBase) return;
+
+        const updatedTranslations = currentTocData.translations.map((t: any) => ({
+            ...t,
+            categories: (t.categories ?? []).map((cat: any) => ({
+                ...cat,
+                prayers: (cat.prayers ?? []).map((p: any) =>
+                    p.id === selectedPrayerId
+                        ? { ...p, parts: (p.parts ?? []).filter((part: any) => part.id !== partId) }
+                        : p
+                ),
+            })),
+        }));
+
+        setIsSaving(true);
+        setSavingMessage("מוחק מקטע...");
+        try {
+            for (const t of currentTocData.translations ?? []) {
+                const tid = t.translationId;
+                if (!tid) continue;
+                const itemsPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+                try {
+                    const itemsList = await dataSource.fetchCollection({
+                        path: itemsPath,
+                        collection: baseColl,
+                        filter: { partId: ["==", partId] },
+                    });
+                    for (const item of itemsList) {
+                        await dataSource.saveEntity({
+                            path: item.path,
+                            entityId: item.id,
+                            values: { ...item.values, deleted: true, timestamp: Date.now() },
+                            status: "existing",
+                        });
+                    }
+                } catch (_) {}
+            }
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+            snackbar.open({ type: "success", message: "מקטע נמחק מכל התרגומים" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Delete part failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה במחיקת מקטע" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
     return {
         tocItems,
         selectedTocId,
@@ -691,5 +849,7 @@ export function useTocNavigation() {
         deleteCategory,
         addPrayer,
         deletePrayer,
+        addPart,
+        deletePart,
     };
 }

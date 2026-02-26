@@ -47,3 +47,32 @@ export const TITLE_TYPE_OPTIONS: { value: string; label: string }[] = [
     { value: "H3", label: "H3" },
     { value: "H4", label: "H4" },
 ];
+
+/** תוויות עבריות לשדות – לתצוגה ביומן השינויים */
+export const FIELD_LABELS: Record<string, string> = {
+    content: "תוכן",
+    type: "סוג",
+    titleType: "סוג כותרת",
+    title: "כותרת",
+    fontTanach: 'גופן תנ"ך',
+    noSpace: "ללא רווח",
+    block: "בלוק",
+    firstInPage: "ראשון בעמוד",
+    specialDate: "תאריך מיוחד",
+    cohanim: "כהנים",
+    hazan: "חזן",
+    minyan: "מניין",
+    role: "תפקיד",
+    reference: "reference",
+    specialSign: "סימן מיוחד",
+    dateSetId: "dateSetId",
+    mit_id: "MIT ID",
+};
+
+/** שדות שמועמדים לתיעוד ביומן (לא כוללים שדות מבניים כמו timestamp, itemId, partId) */
+export const LOGGED_FIELDS = new Set([
+    "content", "type", "titleType", "title",
+    "fontTanach", "noSpace", "block", "firstInPage", "specialDate",
+    "cohanim", "hazan", "minyan", "role", "reference", "specialSign",
+    "dateSetId", "mit_id",
+]);

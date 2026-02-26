@@ -13,6 +13,7 @@ import React from "react";
 import { Entity } from "@firecms/cloud";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
+import { ChangeLogEntry } from "../hooks/usePartEdit";
 
 export type PartEditPanelProps = {
     selectedGroupId: string | null;
@@ -50,6 +51,9 @@ export type PartEditPanelProps = {
     lastAddedItemId?: string | null;
     /** פותח מודל הגדרת/עריכת dateSetId בלחיצה על השדה במאפיינים */
     onOpenDateSetIdForItem?: (entityId: string, currentDateSetId: string) => void;
+    /** שינויי השמירה האחרונה – לסיכום קטן בטולבר */
+    lastSaveEntries?: ChangeLogEntry[];
+    onClearLastSave?: () => void;
 };
 
 export function PartEditPanel({
@@ -76,6 +80,8 @@ export function PartEditPanel({
     restrictTypeToInstructions = false,
     lastAddedItemId = null,
     onOpenDateSetIdForItem,
+    lastSaveEntries = [],
+    onClearLastSave,
 }: PartEditPanelProps) {
     const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0;
     return (
@@ -86,6 +92,8 @@ export function PartEditPanel({
                 hasChanges={hasAnyChanges}
                 onSaveGroup={onSaveGroup}
                 onFinalPublish={onFinalPublish}
+                lastSaveEntries={lastSaveEntries}
+                onClearLastSave={onClearLastSave}
             />
             {loading ? (
                 <div className="m-auto font-bold text-blue-500 animate-pulse text-lg">

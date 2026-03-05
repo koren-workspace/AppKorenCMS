@@ -18,6 +18,7 @@ import {
     getPartsForPrayer,
 } from "../services/navigationService";
 import { baseColl } from "../collections";
+import { appendChangeLog } from "../services/changeLogService";
 
 const LOG_PREFIX = "[TocTranslations]";
 
@@ -134,6 +135,13 @@ export function useTocNavigation() {
                 status: "new",
                 collection: baseColl,
             });
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "add_toc",
+                context: {},
+                details: { newTocId: newId, nusachName: name },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "נוסח חדש נוצר בהצלחה" });
             setTocItems((prev) => [...prev, saved]);
             setSelectedTocId(newId);
@@ -192,6 +200,13 @@ export function useTocNavigation() {
                         : t
                 )
             );
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "add_translation",
+                context: { tocId: selectedTocId },
+                details: { newTranslationId: id },
+                savedToFirestore: true,
+            });
             snackbar.open({
                 type: "success",
                 message: categories.length > 0
@@ -275,6 +290,13 @@ export function useTocNavigation() {
                         : t
                 )
             );
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "add_category",
+                context: { tocId: selectedTocId, translationId: trans?.translationId },
+                details: { newCategoryId, categoryName: name, afterCategoryId: afterCategoryId },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "קטגוריה נוספה" });
             setSelectedCategoryName(null);
             setSelectedPrayerId(null);
@@ -357,6 +379,13 @@ export function useTocNavigation() {
                 );
                 if (!stillSelected) setSelectedCategoryName(null);
             }
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "delete_category",
+                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId },
+                details: { deletedId: categoryId, deletedName: categoryToDelete?.name },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "קטגוריה נמחקה מכל התרגומים" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete category failed`, err);
@@ -491,6 +520,13 @@ export function useTocNavigation() {
                         : t
                 )
             );
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "add_prayer",
+                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, categoryName: selectedCategoryName },
+                details: { newPrayerId, prayerName: name, afterPrayerId: afterPrayerId },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "תפילה נוספה" });
             setSelectedPrayerId(null);
         } catch (err) {
@@ -563,6 +599,14 @@ export function useTocNavigation() {
                 )
             );
             if (selectedPrayerId === prayerId) setSelectedPrayerId(null);
+            const prayerName = trans?.categories?.flatMap((c: any) => c.prayers ?? []).find((p: any) => p.id === prayerId)?.name;
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "delete_prayer",
+                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId },
+                details: { deletedId: prayerId, deletedName: prayerName },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "תפילה נמחקה מכל התרגומים" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete prayer failed`, err);
@@ -630,6 +674,13 @@ export function useTocNavigation() {
                 );
                 setSelectedTranslationIndex(newIndex >= 0 ? newIndex : null);
             }
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "delete_translation",
+                context: { tocId: selectedTocId },
+                details: { deletedId: translationId },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "התרגום נמחק" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete translation failed`, err);
@@ -648,6 +699,13 @@ export function useTocNavigation() {
         setSavingMessage("מוחק נוסח...");
         try {
             await dataSource.saveEntity({ path: toc.path, entityId: toc.id, values: { ...toc.values, deleted: true, timestamp: Date.now() }, status: "existing" });
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "delete_toc",
+                context: {},
+                details: { deletedId: tocId, deletedName: (toc.values as any)?.nusach },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "הנוסח נמחק" });
             setTocItems((prev) => prev.filter((t) => t.id !== tocId));
             if (selectedTocId === tocId) {
@@ -739,6 +797,13 @@ export function useTocNavigation() {
                         : t
                 )
             );
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "add_part",
+                context: { tocId: selectedTocId, translationId: trans?.translationId, prayerId: selectedPrayerId },
+                details: { newPartId, partName: name, afterPartId: afterPartId },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "מקטע נוסף" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Add part failed`, err);
@@ -813,6 +878,14 @@ export function useTocNavigation() {
                         : t
                 )
             );
+            const partName = trans?.categories?.flatMap((c: any) => c.prayers ?? []).find((p: any) => p.id === selectedPrayerId)?.parts?.find((pt: any) => pt.id === partId)?.name;
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "delete_part",
+                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId: selectedPrayerId },
+                details: { deletedId: partId, deletedName: partName },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "מקטע נמחק מכל התרגומים" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete part failed`, err);

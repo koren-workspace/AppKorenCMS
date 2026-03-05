@@ -21,6 +21,8 @@ export type PartEditPanelProps = {
     changedIds: Set<string>;
     /** יש שינויים בתרגומים המקושרים (להצגת כפתור שמירה) */
     enhancementChangedIds?: Set<string>;
+    /** מספר פריטים שסומנו למחיקה (מתבצעת בשמירה) */
+    pendingDeletesCount?: number;
     loading: boolean;
     allItems: Entity<any>[];
     localValues: Record<string, any>;
@@ -35,8 +37,12 @@ export type PartEditPanelProps = {
     /** עדכון שדה של תרגום מקושר (entityId, translationId, field, value) */
     onEnhancementFieldChange?: (entityId: string, translationId: string, field: string, value: unknown) => void;
     onAddNewItemAt: (index: number) => void;
-    /** מוחק מקטע ואת כל התרגומים המקושרים */
+    /** מוחק מקטע ואת כל התרגומים המקושרים (סימון למחיקה בשמירה) */
     onDeleteItem?: (item: Entity<any>, itemId: string) => void;
+    /** פריטים שסומנו למחיקה – מוצגים עם עיצוב "ימוחק בשמירה" וכפתור החזר */
+    pendingDeletes?: Array<{ entity: Entity<any>; itemId: string }>;
+    /** מחזיר פריט מרשימת המחיקות המתינות */
+    onRestoreItem?: (item: Entity<any>, itemId: string) => void;
     /** רק בנוסח הבסיסי (0-*) מותר להוסיף מקטעים; בשאר הנוסחים – עריכה בלבד */
     allowAddPart?: boolean;
     /** רק בתרגום (לא בסיס) מותר להוסיף הוראות – טקסט שלא מקושר לבסיס */
@@ -61,6 +67,7 @@ export function PartEditPanel({
     saving,
     changedIds,
     enhancementChangedIds = new Set(),
+    pendingDeletesCount = 0,
     loading,
     allItems,
     localValues,
@@ -73,6 +80,8 @@ export function PartEditPanel({
     onEnhancementFieldChange,
     onAddNewItemAt,
     onDeleteItem,
+    pendingDeletes = [],
+    onRestoreItem,
     allowAddPart = true,
     allowAddInstruction = false,
     onAddNewInstructionAt,
@@ -83,7 +92,8 @@ export function PartEditPanel({
     lastSaveEntries = [],
     onClearLastSave,
 }: PartEditPanelProps) {
-    const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0;
+    const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
+    const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0 || pendingDeletesCount > 0;
     return (
         <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
             <PartEditToolbar
@@ -150,6 +160,8 @@ export function PartEditPanel({
                                     onContentChange={onContentChange}
                                     onFieldChange={onFieldChange}
                                     onDelete={onDeleteItem}
+                                    isPendingDelete={pendingDeleteIds.has(item.id)}
+                                    onRestore={onRestoreItem}
                                     onAddAfter={
                                         allowAddPart
                                             ? () => onAddNewItemAt(index + 1)

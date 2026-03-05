@@ -265,13 +265,16 @@ export type CreateTranslationItemParams = {
     dateSetId?: string;
 };
 
+/** תוצאה מ-createTranslationItem – מזההים ללוג שינויים */
+export type CreateTranslationItemResult = { newItemId: string; newMitId: string };
+
 /**
  * יוצר פריט תרגום חדש בתרגום היעד, מקושר לפריט הבסיס (linkedItem).
  */
 export async function createTranslationItem(
     dataSource: DataSource,
     params: CreateTranslationItemParams
-): Promise<void> {
+): Promise<CreateTranslationItemResult> {
     const {
         targetTranslationId,
         selectedPrayerId,
@@ -372,6 +375,7 @@ export async function createTranslationItem(
         status: "new",
         collection: itemsCollection,
     });
+    return { newItemId, newMitId };
 }
 export async function publishToBagel(
     dataSource: DataSource,

@@ -23,6 +23,7 @@ import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBann
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
 import { isBaseTranslation } from "./toc-translations/services/navigationService";
+import { exportChangeLogAsJson, exportChangeLogAsText, getChangeLogEntries } from "./toc-translations/services/changeLogService";
 
 export function TocTranslationsView() {
     const nav = useTocNavigation();
@@ -37,7 +38,7 @@ export function TocTranslationsView() {
         selectedTocId: nav.selectedTocId,
     });
 
-    const hasUnsaved = partEdit.changedIds.size > 0 || partEdit.enhancementChangedIds.size > 0;
+    const hasUnsaved = partEdit.changedIds.size > 0 || partEdit.enhancementChangedIds.size > 0 || partEdit.pendingDeletes.length > 0;
 
     /** עוטף פונקציית ניווט – שואל לאישור אם יש שינויים לא שמורים */
     function withUnsavedCheck<T extends unknown[]>(fn: (...args: T) => void) {
@@ -79,6 +80,26 @@ export function TocTranslationsView() {
                     <span>{nav.savingMessage ?? "שומר..."}</span>
                 </div>
             )}
+            <div className="flex items-center justify-end gap-2 py-1 px-2 bg-gray-100 border-b border-gray-300 shrink-0" dir="rtl">
+                <span className="text-gray-500 text-[9px]">תיעוד שינויים:</span>
+                <button
+                    type="button"
+                    onClick={() => exportChangeLogAsJson()}
+                    className="px-2 py-1 rounded border border-gray-400 bg-white text-gray-700 hover:bg-gray-50 text-[9px]"
+                >
+                    הורד JSON
+                </button>
+                <button
+                    type="button"
+                    onClick={() => exportChangeLogAsText()}
+                    className="px-2 py-1 rounded border border-gray-400 bg-white text-gray-700 hover:bg-gray-50 text-[9px]"
+                >
+                    הורד טקסט
+                </button>
+                {getChangeLogEntries().length > 0 && (
+                    <span className="text-gray-400 text-[9px]">({getChangeLogEntries().length} רשומות)</span>
+                )}
+            </div>
             <EditorGuideBanner
                 translationId={nav.currentTranslationData?.translationId}
                 hasSelection={hasTranslationSelection}
@@ -136,6 +157,7 @@ export function TocTranslationsView() {
                 selectedGroupId={partEdit.selectedGroupId}
                 saving={partEdit.saving}
                 changedIds={partEdit.changedIds}
+                pendingDeletesCount={partEdit.pendingDeletes.length}
                 loading={partEdit.loading}
                 allItems={partEdit.allItems}
                 localValues={partEdit.localValues}
@@ -153,6 +175,8 @@ export function TocTranslationsView() {
                 enhancementChangedIds={partEdit.enhancementChangedIds}
                 onAddNewItemAt={partEdit.addNewItemAt}
                 onDeleteItem={partEdit.handleDeleteItem}
+                pendingDeletes={partEdit.pendingDeletes}
+                onRestoreItem={partEdit.handleRestoreItem}
                 allowAddPart={allowAddPart}
                 allowAddInstruction={allowAddInstruction}
                 onAddNewInstructionAt={partEdit.addNewInstructionAt}

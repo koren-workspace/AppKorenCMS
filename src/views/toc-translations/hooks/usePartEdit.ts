@@ -26,6 +26,7 @@ import {
     createTranslationItem,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
+import { appendChangeLog } from "../services/changeLogService";
 import { mitIdBetween } from "../utils/itemUtils";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 
@@ -121,6 +122,9 @@ export function usePartEdit(context: PartEditContext) {
     /** שינויי השמירה האחרונה בלבד – מתאפס בכל שמירה חדשה */
     const [lastSaveEntries, setLastSaveEntries] = useState<ChangeLogEntry[]>([]);
 
+    /** פריטים שסומנו למחיקה – נמחקים ב-Firestore רק בלחיצה על "שמור מקטע" */
+    const [pendingDeletes, setPendingDeletes] = useState<Array<{ entity: Entity<any>; itemId: string }>>([]);
+
     /** מודל הגדרת dateSetId לפני הוספת מקטע/הוראה או בעריכת מקטע קיים */
     const [dateSetIdModalOpen, setDateSetIdModalOpen] = useState(false);
     const [pendingAddKind, setPendingAddKind] = useState<"part" | "instruction" | "addTranslation" | "edit" | null>(null);
@@ -198,6 +202,7 @@ export function usePartEdit(context: PartEditContext) {
             specialSign: "",
             dateSetId: "",
         });
+        setPendingDeletes([]);
     }, [currentTocData, currentTranslationData, selectedPrayerId]);
 
     /** מחלץ את רשימת המקטעים לתפילה הנוכחית מתוך currentTocData לפי translationId */
@@ -316,14 +321,16 @@ export function usePartEdit(context: PartEditContext) {
         setEnhancementTranslationIds((prev) => ({ ...prev, [entityId]: translationId }));
     };
 
-    /** שומר את כל הפריטים שסומנו כ־changed ואת שינויי התרגומים המקושרים; אם יש פריטים חדשים – טוען מחדש */
+    /** שומר את כל הפריטים שסומנו כ־changed, שינויי התרגומים המקושרים, ומבצע מחיקות שסומנו; אם יש פריטים חדשים או מחיקות – טוען מחדש */
     const handleSaveGroup = async () => {
-        if (!currentTranslationData || (changedIds.size === 0 && enhancementChangedIds.size === 0)) return;
+        if (!currentTranslationData || (changedIds.size === 0 && enhancementChangedIds.size === 0 && pendingDeletes.length === 0)) return;
         setSaving(true);
         const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
-        const changedIdList = Array.from(changedIds);
+        const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
+        const changedIdList = Array.from(changedIds).filter((id) => !pendingDeleteIds.has(id));
         const hasNewItems = changedIdList.some((id) => id.startsWith("new_"));
         const hadEnhancementChanges = enhancementChangedIds.size > 0;
+        const pendingDeletesList = [...pendingDeletes];
         try {
             if (changedIds.size > 0) {
                 await savePartItems(dataSource, {
@@ -364,6 +371,61 @@ export function usePartEdit(context: PartEditContext) {
                 setEnhancementLocalValues({});
                 setEnhancementTranslationIds({});
             }
+            for (const { entity, itemId } of pendingDeletesList) {
+                const isBase = isBaseTranslation(currentTranslationData.translationId);
+                if (isBase) {
+                    await deletePartItemAndRelatedTranslations(dataSource, {
+                        itemEntity: entity,
+                        itemId,
+                        currentTranslationId: currentTranslationData.translationId,
+                        selectedPrayerId,
+                        translations: currentTocData.translations,
+                    });
+                    appendChangeLog({
+                        timestamp: Date.now(),
+                        action: "delete_part_item",
+                        context: {
+                            tocId: selectedTocId,
+                            translationId: currentTranslationData.translationId,
+                            prayerId: selectedPrayerId,
+                            partId: selectedGroupId,
+                        },
+                        details: {
+                            deletedItemId: itemId,
+                            deletedEntityId: entity.id,
+                            relatedTranslationIds: currentTocData.translations
+                                .filter((t: any) => t.translationId !== currentTranslationData.translationId)
+                                .map((t: any) => t.translationId),
+                        },
+                        savedToFirestore: true,
+                    });
+                } else {
+                    await dataSource.saveEntity({
+                        path: entity.path,
+                        entityId: entity.id,
+                        values: { ...entity.values, deleted: true, timestamp: Date.now() },
+                        status: "existing",
+                    });
+                    appendChangeLog({
+                        timestamp: Date.now(),
+                        action: "delete_part_item",
+                        context: {
+                            tocId: selectedTocId,
+                            translationId: currentTranslationData.translationId,
+                            prayerId: selectedPrayerId,
+                            partId: selectedGroupId,
+                        },
+                        details: {
+                            deletedItemId: itemId,
+                            deletedEntityId: entity.id,
+                            relatedTranslationIds: [],
+                        },
+                        savedToFirestore: true,
+                    });
+                }
+            }
+            setPendingDeletes([]);
+
             snackbar.open({
                 type: "success",
                 message: "המקטע נשמר בהצלחה (מקומי)",
@@ -433,6 +495,47 @@ export function usePartEdit(context: PartEditContext) {
             // מחליף (לא מצטבר) – רק השמירה הנוכחית
             setLastSaveEntries(newLogEntries);
 
+            // תיעוד ללוג שינויים מרכזי (למפתחים)
+            if (newLogEntries.length > 0) {
+                const byEntity = new Map<string, { itemId: string; mitId: string; isEnhancement: boolean; enhancementTranslationId?: string; changes: Array<{ field: string; oldValue: unknown; newValue: unknown }> }>();
+                for (const e of newLogEntries) {
+                    let row = byEntity.get(e.entityId);
+                    if (!row) {
+                        row = {
+                            itemId: e.itemId,
+                            mitId: e.mitId,
+                            isEnhancement: e.isEnhancement,
+                            enhancementTranslationId: e.enhancementTranslationId,
+                            changes: [],
+                        };
+                        byEntity.set(e.entityId, row);
+                    }
+                    row.changes.push({ field: e.field, oldValue: e.oldValue, newValue: e.newValue });
+                }
+                appendChangeLog({
+                    timestamp: now,
+                    action: "save_part_items",
+                    context: {
+                        tocId: selectedTocId,
+                        translationId: currentTranslationData.translationId,
+                        prayerId: selectedPrayerId,
+                        partId: selectedGroupId,
+                    },
+                    details: {
+                        fieldChanges: Array.from(byEntity.entries()).map(([entityId, row]) => ({
+                            entityId,
+                            itemId: row.itemId,
+                            mitId: row.mitId,
+                            isEnhancement: row.isEnhancement,
+                            enhancementTranslationId: row.enhancementTranslationId,
+                            changes: row.changes,
+                        })),
+                    },
+                    savedToFirestore: true,
+                    publishedToBagel: false,
+                });
+            }
+
             // עדכון snapshot אחרי שמירה (הערכים הנוכחיים הופכים ל"מקוריים")
             setOriginalValues((prev) => {
                 const next = { ...prev };
@@ -451,7 +554,7 @@ export function usePartEdit(context: PartEditContext) {
             // --- סוף יומן שינויים ---
 
             setChangedIds(new Set());
-            if ((hasNewItems || hadEnhancementChanges) && selectedGroupId) {
+            if ((hasNewItems || hadEnhancementChanges || pendingDeletesList.length > 0) && selectedGroupId) {
                 await fetchItemsWithEnhancements(selectedGroupId);
             }
         } catch (err) {
@@ -472,6 +575,14 @@ export function usePartEdit(context: PartEditContext) {
                 type: "success",
                 message: "השינויים פורסמו בהצלחה לאפליקציה!",
             });
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "publish_to_bagel",
+                context: { tocId: selectedTocId },
+                details: { selectedTocId },
+                savedToFirestore: true,
+                publishedToBagel: true,
+            });
             // סמן את כל הרשומות השמורות כ-"פורסמו ל-Bagel"
             setLastSaveEntries((prev) =>
                 prev.map((e) => ({ ...e, publishedToBagel: true }))
@@ -489,8 +600,8 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
-    /** מוחק פריט מקטע ואת כל התרגומים המקושרים אליו (linkedItem); מרענן את הרשימה */
-    const handleDeleteItem = async (item: Entity<any>, itemId: string) => {
+    /** מסמן פריט למחיקה מקומית; המחיקה ב-Firestore מתבצעת רק בלחיצה על "שמור מקטע". הפריט נשאר ברשימה ומסומן כ"ימוחק". */
+    const handleDeleteItem = (item: Entity<any>, itemId: string) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData?.translations)
             return;
         if (item.id.startsWith("new_")) {
@@ -507,42 +618,12 @@ export function usePartEdit(context: PartEditContext) {
             });
             return;
         }
-        setSaving(true);
-        try {
-            const isBase = isBaseTranslation(currentTranslationData.translationId);
-            if (isBase) {
-                await deletePartItemAndRelatedTranslations(dataSource, {
-                    itemEntity: item,
-                    itemId,
-                    currentTranslationId: currentTranslationData.translationId,
-                    selectedPrayerId,
-                    translations: currentTocData.translations,
-                });
-                snackbar.open({
-                    type: "success",
-                    message: "המקטע וכל התרגומים המקושרים נמחקו",
-                });
-            } else {
-                await dataSource.saveEntity({
-                    path: item.path,
-                    entityId: item.id,
-                    values: { ...item.values, deleted: true, timestamp: Date.now() },
-                    status: "existing",
-                });
-                snackbar.open({
-                    type: "success",
-                    message: "המקטע נמחק (תרגום זה בלבד)",
-                });
-            }
-            if (selectedGroupId) {
-                await fetchItemsWithEnhancements(selectedGroupId);
-            }
-        } catch (err) {
-            console.error(`${LOG_PREFIX} Delete part item failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה במחיקת מקטע" });
-        } finally {
-            setSaving(false);
-        }
+        setPendingDeletes((prev) => [...prev, { entity: item, itemId }]);
+    };
+
+    /** מסיר פריט מרשימת המחיקות המתינות – הפריט נשאר ונשמר כרגיל */
+    const handleRestoreItem = (entity: Entity<any>) => {
+        setPendingDeletes((prev) => prev.filter((p) => p.entity.id !== entity.id));
     };
 
     /** מחזיר את ה-mit_id האפקטיבי של פריט (מהעריכה המקומית או מהערכים המקוריים) */
@@ -847,7 +928,7 @@ export function usePartEdit(context: PartEditContext) {
         const form = addTranslationForm;
         setSaving(true);
         try {
-            await createTranslationItem(dataSource, {
+            const { newItemId, newMitId } = await createTranslationItem(dataSource, {
                 targetTranslationId: addTranslationTargetId,
                 selectedPrayerId,
                 partId: selectedGroupId,
@@ -870,6 +951,23 @@ export function usePartEdit(context: PartEditContext) {
                 specialSign: form.specialSign,
                 dateSetId: form.dateSetId,
             });
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "create_translation_item",
+                context: {
+                    tocId: selectedTocId,
+                    translationId: addTranslationTargetId,
+                    prayerId: selectedPrayerId,
+                    partId: selectedGroupId,
+                },
+                details: {
+                    newItemId,
+                    newMitId,
+                    baseItemId,
+                    targetTranslationId: addTranslationTargetId,
+                },
+                savedToFirestore: true,
+            });
             snackbar.open({ type: "success", message: "תרגום נוסף בהצלחה" });
             closeAddTranslation();
             if (selectedGroupId) await fetchItemsWithEnhancements(selectedGroupId);
@@ -887,6 +985,7 @@ export function usePartEdit(context: PartEditContext) {
         enhancements,
         localValues,
         changedIds,
+        pendingDeletes,
         loading,
         saving,
         fetchItemsWithEnhancements,
@@ -898,6 +997,7 @@ export function usePartEdit(context: PartEditContext) {
         addNewInstructionAt,
         lastAddedItemId,
         handleDeleteItem,
+        handleRestoreItem,
         enhancementLocalValues,
         enhancementChangedIds,
         enhancementTranslationIds,

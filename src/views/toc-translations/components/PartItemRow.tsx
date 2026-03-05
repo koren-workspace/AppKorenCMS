@@ -34,6 +34,10 @@ type PartItemRowProps = {
     onFieldChange?: (entityId: string, field: string, value: unknown) => void;
     /** מוחק את המקטע ואת כל התרגומים המקושרים */
     onDelete?: (item: Entity<any>, itemId: string) => void;
+    /** פריט סומן למחיקה (ימוחק בשמירה) – מציג עיצוב מודגש וכפתור "החזר" */
+    isPendingDelete?: boolean;
+    /** מחזיר פריט מרשימת המחיקות המתינות */
+    onRestore?: (item: Entity<any>, itemId: string) => void;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
     /** מוצג רק בתרגום: הוסף פריט הוראה אחרי שורה זו */
@@ -59,6 +63,8 @@ export function PartItemRow({
     onContentChange,
     onFieldChange,
     onDelete,
+    isPendingDelete = false,
+    onRestore,
     onAddAfter,
     onAddInstructionAfter,
     onAddTranslation,
@@ -84,8 +90,23 @@ export function PartItemRow({
     return (
         <React.Fragment>
             <div
-                className={`p-2 border rounded ${isChanged ? "border-orange-300" : "border-gray-200"}`}
+                className={`p-2 border rounded ${isPendingDelete ? "bg-red-50 border-red-300 border-2 opacity-95" : isChanged ? "border-orange-300" : "border-gray-200"}`}
             >
+                {isPendingDelete && (
+                    <div className="flex items-center gap-2 mb-2 py-1 px-2 bg-red-100 border border-red-300 rounded text-[10px] font-bold text-red-800">
+                        <span>ימוחק בשמירה</span>
+                        {onRestore && (
+                            <button
+                                type="button"
+                                onClick={() => onRestore(item, curId ?? item.id)}
+                                className="px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-[9px] font-bold"
+                                title="החזר – לא יימחק בשמירה"
+                            >
+                                החזר
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className="flex justify-between items-center text-[7px] text-gray-400 mb-1 uppercase tracking-tighter">
                     <span>itemId: {curId} | MIT: {localVal.mit_id}</span>
                     <div className="flex items-center gap-2">
@@ -98,7 +119,7 @@ export function PartItemRow({
                                 {showProps ? "הסתר מאפיינים" : "מאפיינים"}
                             </button>
                         )}
-                        {onDelete && (
+                        {onDelete && !isPendingDelete && (
                             <button
                                 type="button"
                                 onClick={() => {

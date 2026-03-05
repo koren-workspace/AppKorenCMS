@@ -182,6 +182,7 @@ export function TocTranslationsView() {
                 onAddNewInstructionAt={partEdit.addNewInstructionAt}
                 onAddTranslation={partEdit.openAddTranslation}
                 restrictTypeToInstructions={!isBase}
+                isBaseTranslation={isBase}
                 lastAddedItemId={partEdit.lastAddedItemId}
                 onOpenDateSetIdForItem={partEdit.openDateSetIdModalForEdit}
                 lastSaveEntries={partEdit.lastSaveEntries}

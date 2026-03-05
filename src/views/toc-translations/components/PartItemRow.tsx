@@ -38,6 +38,8 @@ type PartItemRowProps = {
     isPendingDelete?: boolean;
     /** מחזיר פריט מרשימת המחיקות המתינות */
     onRestore?: (item: Entity<any>, itemId: string) => void;
+    /** עריכת פריט בסיס – במחיקה יימחקו גם כל הפריטים המקושרים בכל התרגומים */
+    isBaseTranslation?: boolean;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
     /** מוצג רק בתרגום: הוסף פריט הוראה אחרי שורה זו */
@@ -65,6 +67,7 @@ export function PartItemRow({
     onDelete,
     isPendingDelete = false,
     onRestore,
+    isBaseTranslation = false,
     onAddAfter,
     onAddInstructionAfter,
     onAddTranslation,
@@ -94,7 +97,14 @@ export function PartItemRow({
             >
                 {isPendingDelete && (
                     <div className="flex items-center gap-2 mb-2 py-1 px-2 bg-red-100 border border-red-300 rounded text-[10px] font-bold text-red-800">
-                        <span>ימוחק בשמירה</span>
+                        <span>
+                            ימוחק בשמירה
+                            {related.length > 0 && (
+                                <span className="font-normal text-red-700 mr-1">
+                                    {" "}(כולל {related.length} פריט{related.length !== 1 ? "ים" : ""} בתרגומים אחרים)
+                                </span>
+                            )}
+                        </span>
                         {onRestore && (
                             <button
                                 type="button"
@@ -123,11 +133,16 @@ export function PartItemRow({
                             <button
                                 type="button"
                                 onClick={() => {
-                                    if (window.confirm("למחוק את המקטע ואת כל התרגומים המקושרים אליו?"))
+                                    const msg = isBaseTranslation && related.length > 0
+                                        ? `למחוק את המקטע ואת כל ${related.length} התרגומים המקושרים אליו?\n(יסומנו כ-deleted בכל הנוסחים)`
+                                        : isBaseTranslation
+                                            ? "למחוק את המקטע?"
+                                            : "למחוק את המקטע? (תרגום זה בלבד)";
+                                    if (window.confirm(msg))
                                         onDelete(item, curId ?? item.id);
                                 }}
                                 className="px-1.5 py-0.5 text-red-500 hover:bg-red-50 border border-red-200 rounded text-[8px] font-bold"
-                                title="מחק מקטע וכל התרגומים המקושרים"
+                                title={isBaseTranslation && related.length > 0 ? "מחק מקטע וכל התרגומים המקושרים בכל הנוסחים" : "מחק מקטע"}
                             >
                                 מחק מקטע
                             </button>
@@ -323,20 +338,31 @@ export function PartItemRow({
                 />
             </div>
 
-            {/* תרגומים מקושרים – ניתן לעריכה כולל מאפיינים */}
+            {/* תרגומים מקושרים – ניתן לעריכה כולל מאפיינים; כשהבסיס סומן למחיקה – גם הם מסומנים */}
             {related.length > 0 && (
-                <div className="mr-8 border-r-4 border-blue-400 pr-3 space-y-1">
+                <div className={`mr-8 pr-3 space-y-1 border-r-4 ${isPendingDelete && isBaseTranslation ? "border-red-400 bg-red-50/50 rounded-r p-2" : "border-blue-400"}`}>
+                    {isPendingDelete && isBaseTranslation && (
+                        <div className="text-[10px] font-bold text-red-700 mb-2 px-2 py-1 bg-red-100 border border-red-300 rounded">
+                            כל הפריטים למטה יימחקו בשמירה (יחד עם פריט הבסיס)
+                        </div>
+                    )}
                     {related.map((enh) => {
                         const displayVal = { ...enh.values, ...enhancementLocalValues[enh.id] };
                         const enhChanged = isEnhancementChanged?.(enh.id) ?? false;
                         const enhShowProps = showEnhancementProps[enh.id] ?? false;
+                        const relatedWillBeDeleted = isPendingDelete && isBaseTranslation;
                         return (
                             <div
                                 key={enh.id}
-                                className={`p-2 rounded text-[10px] ${enhChanged ? "bg-amber-50 border border-amber-200" : "bg-blue-50 border border-blue-100"}`}
+                                className={`p-2 rounded text-[10px] ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : "bg-blue-50 border border-blue-100"}`}
                             >
                                 <div className="flex items-center justify-between mb-1">
-                                    <div className="font-bold text-blue-600 text-[9px]">{enh.tId}</div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`font-bold text-[9px] ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
+                                        {relatedWillBeDeleted && (
+                                            <span className="text-[8px] font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
+                                        )}
+                                    </div>
                                     {onEnhancementFieldChange && (
                                         <button
                                             type="button"

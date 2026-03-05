@@ -131,8 +131,12 @@ export type SavePartParams = {
     localValues: Record<string, any>;
 };
 
+/** גודל מנה לשמירה – מונע מאות כתיבות סימולטניות ל-Firestore (rate limits / timeouts) */
+const SAVE_CHUNK_SIZE = 50;
+
 /**
  * שומר כל פריט ב-changedIds: ID שמתחיל ב-new_ נשמר כ-entity חדש, אחרת עדכון.
+ * שמירה במנות (chunks) כדי לעמוד בעשרות/מאות תיקונים בלי להעמיס על Firestore.
  */
 export async function savePartItems(
     dataSource: DataSource,
@@ -141,21 +145,24 @@ export async function savePartItems(
     const { path, changedIds, localValues } = params;
     const now = Date.now();
 
-    const savePromises = changedIds.map((id) => {
-        const isNew = id.startsWith("new_");
-        const values = localValues[id];
-        // לפריט חדש: document ID = itemId (כמו createTranslationItem) כדי שהמסמך יישמר בשם הנכון.
-        // אם itemId חסר מסיבה כלשהי – Firestore מפיק ID אוטומטי.
-        const entityId = isNew ? (values?.itemId || undefined) : id;
-        return dataSource.saveEntity({
-            path,
-            entityId,
-            values: { ...values, timestamp: now },
-            status: isNew ? "new" : "existing",
-            collection: itemsCollection,
+    const chunks = chunkArray(changedIds, SAVE_CHUNK_SIZE);
+    for (const chunkIds of chunks) {
+        const savePromises = chunkIds.map((id) => {
+            const isNew = id.startsWith("new_");
+            const values = localValues[id];
+            // לפריט חדש: document ID = itemId (כמו createTranslationItem) כדי שהמסמך יישמר בשם הנכון.
+            // אם itemId חסר מסיבה כלשהי – Firestore מפיק ID אוטומטי.
+            const entityId = isNew ? (values?.itemId || undefined) : id;
+            return dataSource.saveEntity({
+                path,
+                entityId,
+                values: { ...values, timestamp: now },
+                status: isNew ? "new" : "existing",
+                collection: itemsCollection,
+            });
         });
-    });
-    await Promise.all(savePromises);
+        await Promise.all(savePromises);
+    }
 }
 
 /**

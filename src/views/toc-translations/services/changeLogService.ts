@@ -1,14 +1,16 @@
 /**
- * changeLogService – תיעוד מדויק של כל השינויים במערכת
+ * changeLogService – תיעוד שינויים לפיתוח (לא קשור לממשק)
  *
- * כל פעולה שמשנה נתונים (שמירת מקטע, מחיקה, הוספת תרגום, פרסום ל-Bagel, הוספת/מחיקת TOC/תרגום/קטגוריה/תפילה/מקטע)
- * נרשמת כאן בפורמט מובנה, כדי שמפתחים יידעו בדיוק מה השתנה.
+ * מתעד אוטומטית את כל השינויים במערכת (שמירת מקטע, מחיקה, הוספת תרגום, פרסום ל-Bagel,
+ * הוספת/מחיקת TOC/תרגום/קטגוריה/תפילה/מקטע) בפורמט מובנה.
  *
- * - append(): מוסיף רשומה/רשומות ללוג
- * - getEntries(): מחזיר את כל הרשומות
- * - clear(): מנקה את הלוג
- * - exportAsJson() / exportAsText(): מייצא ללוג ומוריד קובץ
+ * במצב פיתוח (npm run dev): הלוג נשמר גם בקובץ docs/cms-changelog.json – ניתן לפתוח אותו ישירות.
+ * בנוסף נשמר ב-localStorage. בקונסולה: __CMS_CHANGELOG_EXPORT__('json') או __CMS_CHANGELOG_EXPORT__('text')
  */
+
+const STORAGE_KEY = "cms_changelog_entries";
+/** מקסימום רשומות לשמירה (מגביל גודל localStorage) */
+const MAX_ENTRIES = 2500;
 
 export type ChangeLogAction =
     | "save_part_items"      // שמירת פריטי מקטע (עדכון שדות)
@@ -100,6 +102,7 @@ export type ChangeLogEntry = {
 };
 
 const entries: ChangeLogEntry[] = [];
+let loadedFromStorage = false;
 
 function makeId(): string {
     return `chg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -109,16 +112,59 @@ function toIso(ts: number): string {
     return new Date(ts).toISOString();
 }
 
+function loadFromStorage(): void {
+    if (loadedFromStorage || typeof localStorage === "undefined") return;
+    loadedFromStorage = true;
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as ChangeLogEntry[];
+        if (Array.isArray(parsed)) {
+            entries.length = 0;
+            entries.push(...parsed);
+        }
+    } catch {
+        // נתונים פגומים – מתחילים רשימה ריקה
+    }
+}
+
+const CHANGELOG_DEV_ENDPOINT = "/__cms_changelog__";
+
+function saveToStorage(): void {
+    if (typeof localStorage === "undefined") return;
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    } catch {
+        // localStorage מלא או לא זמין
+    }
+    if (typeof window !== "undefined" && (import.meta as any).env?.DEV) {
+        const payload = JSON.stringify(entries, null, 2);
+        fetch(CHANGELOG_DEV_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: payload,
+        }).catch(() => {});
+    }
+}
+
+function trimIfNeeded(): void {
+    if (entries.length <= MAX_ENTRIES) return;
+    entries.splice(0, entries.length - MAX_ENTRIES);
+}
+
 /**
- * מוסיף רשומת לוג אחת
+ * מוסיף רשומת לוג אחת ושומר ב-localStorage
  */
 export function appendChangeLog(entry: Omit<ChangeLogEntry, "id" | "timestampIso">): ChangeLogEntry {
+    loadFromStorage();
     const full: ChangeLogEntry = {
         ...entry,
         id: makeId(),
         timestampIso: toIso(entry.timestamp),
     };
     entries.push(full);
+    trimIfNeeded();
+    saveToStorage();
     return full;
 }
 
@@ -132,23 +178,27 @@ export function appendChangeLogBatch(entryList: Omit<ChangeLogEntry, "id" | "tim
 }
 
 /**
- * מחזיר עותק של כל רשומות הלוג (לפי סדר כרונולוגי)
+ * מחזיר עותק של כל רשומות הלוג (לפי סדר כרונולוגי). טוען מ-localStorage בפעם הראשונה.
  */
 export function getChangeLogEntries(): ChangeLogEntry[] {
+    loadFromStorage();
     return [...entries];
 }
 
 /**
- * מנקה את כל רשומות הלוג
+ * מנקה את כל רשומות הלוג ואת השמירה ב-localStorage
  */
 export function clearChangeLog(): void {
+    loadFromStorage();
     entries.length = 0;
+    saveToStorage();
 }
 
 /**
  * מייצא את הלוג כ-JSON ומוריד קובץ
  */
 export function exportChangeLogAsJson(filename?: string): void {
+    loadFromStorage();
     const name = filename ?? `cms-changelog-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
     const blob = new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -163,6 +213,7 @@ export function exportChangeLogAsJson(filename?: string): void {
  * מייצא את הלוג כטקסט קריא (שורה לכל רשומה, עם פירוט)
  */
 export function exportChangeLogAsText(filename?: string): void {
+    loadFromStorage();
     const lines: string[] = [
         "=== CMS Change Log ===",
         `Export: ${new Date().toISOString()}`,
@@ -202,3 +253,14 @@ export function exportChangeLogAsText(filename?: string): void {
     a.click();
     URL.revokeObjectURL(url);
 }
+
+/** מחשוף לפיתוח: ייצוא הלוג לקובץ מהקונסולה (json / text) */
+function exposeExportForDev(): void {
+    if (typeof window === "undefined") return;
+    (window as unknown as { __CMS_CHANGELOG_EXPORT__?: (format: "json" | "text") => void }).__CMS_CHANGELOG_EXPORT__ =
+        (format: "json" | "text") => {
+            if (format === "json") exportChangeLogAsJson();
+            else exportChangeLogAsText();
+        };
+}
+exposeExportForDev();

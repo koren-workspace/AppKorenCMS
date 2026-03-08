@@ -6,7 +6,7 @@
  *
  * - fetchPartWithEnhancements: טוען פריטי מקטע, ממיין לפי mit_id, טוען תרגומים מקושרים במנות
  * - savePartItems: שומר רשימת פריטים (חדשים + קיימים) לפי path
- * - publishToBagel: מעדכן db-update-time + קריאה ל-API של Bagel
+ * - updateFirestoreTimestamp: מעדכן db-update-time ב-Firestore (Bagel SDK ב-bagelUpdateTimeService)
  */
 
 import { Entity } from "@firecms/cloud";
@@ -377,61 +377,20 @@ export async function createTranslationItem(
     });
     return { newItemId, newMitId };
 }
-export async function publishToBagel(
+/**
+ * מעדכן את זמן העדכון ב-Firestore (db-update-time) לנוסח הנבחר.
+ * החיבור ל-Bagel עצמו מתבצע דרך bagelUpdateTimeService (SDK).
+ */
+export async function updateFirestoreTimestamp(
     dataSource: DataSource,
-    selectedTocId: string
+    selectedTocId: string,
+    timestamp: number
 ): Promise<void> {
-    const newTimestamp = Date.now();
-
-    // שלב א': עדכון Firestore (עובד תקין)
     await dataSource.saveEntity({
         path: "db-update-time",
         entityId: selectedTocId,
-        values: { maxTimestamp: newTimestamp },
+        values: { maxTimestamp: timestamp },
         status: "existing",
         collection: dbUpdateTimeCollection,
     });
-
-    const BAGEL_TOKEN = (import.meta as any).env.VITE_BAGEL_TOKEN;
-    if (!BAGEL_TOKEN?.trim()) {
-        throw new Error("חסר טוקן Bagel (VITE_BAGEL_TOKEN) – בדוק את קובץ .env");
-    }
-
-    let response: Response;
-    try {
-        // שינוי הכתובת ל-api.bageldb.com במקום bagelstudio.co
-        const url = `https://api.bageldb.com/api/public/collection/updateTime/items/${selectedTocId}`;
-        
-        response = await fetch(url, {
-                method: "PUT",
-                headers: {
-                    Authorization: `Bearer ${BAGEL_TOKEN}`,
-                    "Content-Type": "application/json",
-                    "Accept": "application/json" // הוספת Accept לעיתים עוזרת לשרת להבין מה להחזיר
-                },
-                body: JSON.stringify({ timestamp: newTimestamp }),
-            }
-        );
-    } catch (networkErr: any) {
-        const msg =
-            networkErr?.message?.includes("fetch") || networkErr?.name === "TypeError"
-                ? "לא ניתן להתחבר ל-Bagel (בעיית רשת או שרת לא זמין). בדוק חיבור אינטרנט וכתובת API."
-                : `שגיאת רשת: ${networkErr?.message ?? String(networkErr)}`;
-        throw new Error(msg);
-    }
-
-    if (!response.ok) {
-        const status = response.status;
-        let body = "";
-        try { body = await response.text(); } catch { /* ignore */ }
-        
-        let userMsg: string;
-        if (status === 401) userMsg = `טוקן Bagel לא תקין (401).`;
-        else if (status === 403) userMsg = `אין הרשאת כתיבה ל-Bagel (403).`;
-        else if (status === 404) userMsg = `הפריט '${selectedTocId}' לא נמצא בקולקציה ב-Bagel.`;
-        else if (status >= 500) userMsg = `שרת Bagel חווה תקלה (503/500). ודא שהכתובת api.bageldb.com תקינה.`;
-        else userMsg = `שגיאה ב-Bagel (${status}): ${body}`;
-        
-        throw new Error(userMsg);
-    }
 }

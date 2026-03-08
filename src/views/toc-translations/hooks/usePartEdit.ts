@@ -5,7 +5,7 @@
  *   - טוען פריטי המקטע הנבחר + "תרגומים מקושרים" (enhancements) משאר התרגומים (דרך partEditService)
  *   - שומר עריכות מקומית (localValues, changedIds) עד ללחיצה על "שמור מקטע"
  *   - שמירה: שומר רק פריטים ששונו ל-Firestore (savePartItems)
- *   - פרסום: מעדכן db-update-time וקורא ל-Bagel (publishToBagel)
+ *   - פרסום: מעדכן db-update-time (Firestore) + timestamp ב-Bagel (SDK)
  *
  * מקבל מ-useTocNavigation: currentTocData, currentTranslationData, selectedPrayerId, selectedTocId
  * (הקשר הניווט הנוכחי – נדרש לבניית paths ולטעינה).
@@ -21,12 +21,13 @@ import {
     fetchPartWithEnhancements,
     fetchPartItems,
     savePartItems,
-    publishToBagel,
+    updateFirestoreTimestamp,
     deletePartItemAndRelatedTranslations,
     createTranslationItem,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
+import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
 import { mitIdBetween } from "../utils/itemUtils";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 
@@ -565,12 +566,14 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
-    /** מעדכן זמן עדכון ב-DB וקורא ל-Bagel – מפעיל סנכרון באפליקציה */
+    /** מעדכן זמן עדכון ב-Firestore + Bagel (SDK) – מפעיל סנכרון באפליקציה */
     const handleFinalPublish = async () => {
         if (!selectedTocId) return;
         setSaving(true);
         try {
-            await publishToBagel(dataSource, selectedTocId);
+            const publishTimestamp = Date.now();
+            await updateFirestoreTimestamp(dataSource, selectedTocId, publishTimestamp);
+            await updateBagelTimestamp(selectedTocId, publishTimestamp);
             snackbar.open({
                 type: "success",
                 message: "השינויים פורסמו בהצלחה לאפליקציה!",
@@ -583,7 +586,6 @@ export function usePartEdit(context: PartEditContext) {
                 savedToFirestore: true,
                 publishedToBagel: true,
             });
-            // סמן את כל הרשומות השמורות כ-"פורסמו ל-Bagel"
             setLastSaveEntries((prev) =>
                 prev.map((e) => ({ ...e, publishedToBagel: true }))
             );

@@ -1014,6 +1014,8 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationTargetId,
         setAddTranslationInsertAfterId,
         setAddTranslationContent,
+        addTranslationForm,
+        setAddTranslationFormField,
         loadTargetPartItemsForAddTranslation,
         submitAddTranslation,
         dateSetIdModalOpen,

@@ -6,5 +6,16 @@ dist/
 
 # STAGE test scripts – backup and local config (contains paths)
 scripts/.stage-test-backup.json
+scripts/.content-test-backup.json
 scripts/stage-test-config.json
+scripts/test_items.json
+scripts/content_test_log_*.txt
+scripts/.playwright-session/
+scripts/.chrome-session/
+scripts/koren-stage-sa.json
 scripts/koren-stage-firebase-adminsdk-9ur1w-3dd776e48a.json
+
+# Generate changes script – local config and output files
+scripts/changes_config.json
+scripts/changes_*.json
+scripts/apply_log_*.txt

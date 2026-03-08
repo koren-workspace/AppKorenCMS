@@ -379,7 +379,7 @@ export function usePartEdit(context: PartEditContext) {
                         itemEntity: entity,
                         itemId,
                         currentTranslationId: currentTranslationData.translationId,
-                        selectedPrayerId,
+                        selectedPrayerId: selectedPrayerId!,
                         translations: currentTocData.translations,
                     });
                     appendChangeLog({

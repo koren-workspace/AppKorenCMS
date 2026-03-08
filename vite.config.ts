@@ -1,9 +1,15 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import federation from "@originjs/vite-plugin-federation"
 
 // https://vitejs.dev/config/
 export default defineConfig({
+    test: {
+        environment: "node",
+        include: ["src/**/*.test.ts", "src/**/*.spec.ts"],
+        globals: true,
+    },
     server: {
         proxy: {
             "/api": {

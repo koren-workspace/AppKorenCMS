@@ -2,6 +2,38 @@
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import federation from "@originjs/vite-plugin-federation"
+import path from "path"
+import fs from "fs"
+
+const CHANGELOG_ENDPOINT = "/__cms_changelog__"
+const DOCS_CHANGELOG_PATH = path.resolve(process.cwd(), "docs", "cms-changelog.json")
+
+/** במצב dev: POST ל-/__cms_changelog__ שומר את גוף הבקשה ב-docs/cms-changelog.json */
+function cmsChangelogPlugin() {
+    return {
+        name: "cms-changelog-to-docs",
+        configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
+            server.middlewares.use((req: any, res: any, next: () => void) => {
+                if (req.method !== "POST" || req.url !== CHANGELOG_ENDPOINT) return next()
+                const chunks: Buffer[] = []
+                req.on("data", (chunk: Buffer) => chunks.push(chunk))
+                req.on("end", () => {
+                    try {
+                        const body = Buffer.concat(chunks).toString("utf8")
+                        const dir = path.dirname(DOCS_CHANGELOG_PATH)
+                        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+                        fs.writeFileSync(DOCS_CHANGELOG_PATH, body, "utf8")
+                        res.statusCode = 204
+                        res.end()
+                    } catch {
+                        res.statusCode = 500
+                        res.end()
+                    }
+                })
+            })
+        },
+    }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -26,6 +58,7 @@ export default defineConfig({
         include: ["firebase/app", "firebase/auth", "@firebase/auth"]
     },
     plugins: [
+        cmsChangelogPlugin(),
         react(),
         federation({
             name: "remote_app",

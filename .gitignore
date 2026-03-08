@@ -3,3 +3,8 @@ node_modules
 .env.local
 .env.*.local
 dist/
+
+# STAGE test scripts – backup and local config (contains paths)
+scripts/.stage-test-backup.json
+scripts/stage-test-config.json
+scripts/koren-stage-firebase-adminsdk-9ur1w-3dd776e48a.json

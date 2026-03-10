@@ -17,7 +17,7 @@ import {
     getPrayersForCategory,
     getPartsForPrayer,
 } from "../services/navigationService";
-import { baseColl } from "../collections";
+import { baseColl, dbUpdateTimeCollection } from "../collections";
 import { appendChangeLog } from "../services/changeLogService";
 
 const LOG_PREFIX = "[TocTranslations]";
@@ -853,6 +853,86 @@ export function useTocNavigation() {
         }
     };
 
+    /**
+     * משנה את סדר המקטעים בתפילה הנבחרת לפי orderedPartIds.
+     * מעדכן את כל התרגומים ב-TOC (סדר אחיד בכולם).
+     */
+    const reorderParts = async (orderedPartIds: string[]) => {
+        if (
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !selectedPrayerId ||
+            !currentTocData?.translations?.length
+        )
+            return;
+
+        const rearrange = (parts: any[]): any[] =>
+            orderedPartIds
+                .map((id) => parts.find((p: any) => p.id === id))
+                .filter(Boolean) as any[];
+
+        const updatedTranslations = currentTocData.translations.map((t: any) => ({
+            ...t,
+            categories: (t.categories ?? []).map((cat: any) => ({
+                ...cat,
+                prayers: (cat.prayers ?? []).map((p: any) =>
+                    p.id === selectedPrayerId
+                        ? { ...p, parts: rearrange(p.parts ?? []) }
+                        : p
+                ),
+            })),
+        }));
+
+        setIsSaving(true);
+        setSavingMessage("מסדר מקטעים...");
+        try {
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        : t
+                )
+            );
+
+            // עדכון timestamp ב-Firestore בלבד – האפליקציה תסנכרן את הסדר החדש בלחיצה על "פרסם"
+            const publishTimestamp = Date.now();
+            await dataSource.saveEntity({
+                path: "db-update-time",
+                entityId: selectedTocId,
+                values: { maxTimestamp: publishTimestamp },
+                status: "existing",
+                collection: dbUpdateTimeCollection,
+            });
+
+            appendChangeLog({
+                timestamp: publishTimestamp,
+                action: "reorder_parts",
+                context: {
+                    tocId: selectedTocId,
+                    translationId: currentTocData.translations[selectedTranslationIndex]?.translationId,
+                    prayerId: selectedPrayerId,
+                },
+                details: { orderedPartIds },
+                savedToFirestore: true,
+            });
+            snackbar.open({ type: "success", message: "סדר המקטעים עודכן" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Reorder parts failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בסידור מחדש של מקטעים" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
     /** מוחק מקטע: רק בנוסח הבסיסי (0-*). מוציא את המקטע מכל התרגומים ב-TOC ומסמן פריטים כמחוקים. */
     const deletePart = async (partId: string) => {
         if (
@@ -963,5 +1043,6 @@ export function useTocNavigation() {
         deletePrayer,
         addPart,
         deletePart,
+        reorderParts,
     };
 }

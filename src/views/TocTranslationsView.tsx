@@ -127,6 +127,7 @@ export function TocTranslationsView() {
                 onSelectPart={withUnsavedCheck(partEdit.fetchItemsWithEnhancements)}
                 onAddPart={nav.addPart}
                 onDeletePart={allowAddPart ? nav.deletePart : undefined}
+                onReorderParts={allowAddPart ? nav.reorderParts : undefined}
                 showAddPart={
                     !!nav.selectedTocId &&
                     nav.selectedTranslationIndex != null &&

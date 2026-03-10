@@ -18,6 +18,8 @@ import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNav
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
 import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
 import { DateSetIdConfigModal } from "./toc-translations/components/DateSetIdConfigModal";
+import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
+import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
 import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBanner";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
@@ -35,6 +37,8 @@ export function TocTranslationsView() {
         currentTranslationData: nav.currentTranslationData,
         selectedPrayerId: nav.selectedPrayerId,
         selectedTocId: nav.selectedTocId,
+        currentParts: nav.currentParts,
+        addPart: nav.addPart,
     });
 
     const hasUnsaved = partEdit.changedIds.size > 0 || partEdit.enhancementChangedIds.size > 0 || partEdit.pendingDeletes.length > 0;
@@ -166,6 +170,9 @@ export function TocTranslationsView() {
                 onOpenDateSetIdForItem={partEdit.openDateSetIdModalForEdit}
                 lastSaveEntries={partEdit.lastSaveEntries}
                 onClearLastSave={partEdit.clearLastSave}
+                allowSplitAndMove={allowAddPart}
+                onSplitPart={partEdit.openSplitPartModal}
+                onMoveItemsToPart={partEdit.openMoveToPartModal}
             />
             <DateSetIdConfigModal
                 open={partEdit.dateSetIdModalOpen}
@@ -204,6 +211,33 @@ export function TocTranslationsView() {
                 onSubmit={partEdit.submitAddTranslation}
                 saving={partEdit.saving}
                 onOpenDateSetIdConfig={partEdit.openDateSetIdModalForAddTranslation}
+            />
+            {/* מודל פיצול מקטע */}
+            <SplitPartModal
+                open={partEdit.splitPartModalOpen}
+                onClose={partEdit.closeSplitPartModal}
+                items={partEdit.allItems}
+                localValues={partEdit.localValues}
+                currentPart={
+                    partEdit.selectedGroupId
+                        ? (nav.currentParts.find((p: any) => p.id === partEdit.selectedGroupId) ?? null)
+                        : null
+                }
+                onSubmit={partEdit.handleSplitPart}
+                saving={partEdit.saving}
+            />
+            {/* מודל העברת פריטים למקטע אחר */}
+            <MoveToPartModal
+                open={partEdit.moveToPartModalOpen}
+                onClose={partEdit.closeMoveToPartModal}
+                items={partEdit.allItems}
+                localValues={partEdit.localValues}
+                currentParts={nav.currentParts}
+                currentPartId={partEdit.selectedGroupId}
+                targetPartItems={partEdit.moveTargetPartItems}
+                onLoadTargetPartItems={partEdit.loadMoveTargetPartItems}
+                onSubmit={partEdit.handleMoveItemsToPart}
+                saving={partEdit.saving}
             />
             </div>
         </div>

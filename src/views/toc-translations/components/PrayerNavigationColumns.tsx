@@ -58,6 +58,7 @@ export function PrayerNavigationColumns({
     isSaving = false,
 }: PrayerNavigationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
+
     const handleAddCategoryAfter = (afterCategoryId: string | null) => {
         const name = window.prompt("שם הקטגוריה החדשה:");
         if (name?.trim()) onAddCategory?.(name.trim(), afterCategoryId);
@@ -200,7 +201,7 @@ export function PrayerNavigationColumns({
                         {isSaving ? "שומר…" : "+ הוסף מקטע"}
                     </button>
                 )}
-                {currentParts.map((part: any) => (
+                        {currentParts.map((part: any) => (
                     <React.Fragment key={part.id}>
                         <div className="flex items-center gap-0.5">
                             <button

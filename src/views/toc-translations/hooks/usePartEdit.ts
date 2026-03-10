@@ -24,6 +24,8 @@ import {
     updateFirestoreTimestamp,
     deletePartItemAndRelatedTranslations,
     createTranslationItem,
+    splitPartItems,
+    moveItemsToPart,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
@@ -37,6 +39,20 @@ export type PartEditContext = {
     currentTranslationData: any;
     selectedPrayerId: string | null;
     selectedTocId: string | null;
+    /** מקטעים בתפילה הנוכחית (לחישוב afterPartId בפיצול ולמודל ההעברה) */
+    currentParts: any[];
+    /** מוסיף מקטע ב-TOC (מ-useTocNavigation) – מחזיר newPartId */
+    addPart: (
+        name: string,
+        afterPartId: string | null,
+        options?: {
+            nameEn?: string;
+            tocId?: string;
+            dateSetIds?: string[];
+            hazan?: boolean | null;
+            minyan?: boolean | null;
+        }
+    ) => Promise<string | null>;
 };
 
 const LOG_PREFIX = "[TocTranslations]";
@@ -87,6 +103,8 @@ export function usePartEdit(context: PartEditContext) {
         currentTranslationData,
         selectedPrayerId,
         selectedTocId,
+        currentParts,
+        addPart,
     } = context;
 
     const dataSource = useDataSource();
@@ -138,6 +156,13 @@ export function usePartEdit(context: PartEditContext) {
     const [enhancementLocalValues, setEnhancementLocalValues] = useState<Record<string, any>>({});
     const [enhancementChangedIds, setEnhancementChangedIds] = useState<Set<string>>(new Set());
     const [enhancementTranslationIds, setEnhancementTranslationIds] = useState<Record<string, string>>({});
+
+    // מודל פיצול מקטע
+    const [splitPartModalOpen, setSplitPartModalOpen] = useState(false);
+    // מודל העברת פריטים למקטע אחר
+    const [moveToPartModalOpen, setMoveToPartModalOpen] = useState(false);
+    /** פריטי מקטע היעד (נטענים בבחירת מקטע במודל ההעברה) */
+    const [moveTargetPartItems, setMoveTargetPartItems] = useState<Entity<any>[]>([]);
 
     // מודל "הוסף תרגום" – פריט בסיס, תרגום יעד, מיקום, תוכן
     const [addTranslationOpen, setAddTranslationOpen] = useState(false);
@@ -915,6 +940,172 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
+    // ─── Split Part ────────────────────────────────────────────────────────────
+
+    const openSplitPartModal = () => setSplitPartModalOpen(true);
+    const closeSplitPartModal = () => setSplitPartModalOpen(false);
+
+    /**
+     * מבצע פיצול מקטע:
+     * 1. מוסיף מקטע חדש ב-TOC (addPart עם שם עברית + אנגלית + dateSetIds)
+     * 2. מעדכן partId/partName/partIdAndName/timestamp על הפריטים שעברו
+     * 3. מרענן את הפריטים בתצוגה
+     */
+    const handleSplitPart = async (params: {
+        splitAtItemId: string;
+        newPartNameHe: string;
+        newPartNameEn: string;
+        newPartDateSetIds: string[];
+        newPartHazan: boolean | null;
+        newPartMinyan: boolean | null;
+        insertBefore: boolean;
+    }) => {
+        if (!selectedGroupId || !selectedPrayerId || !selectedTocId || !currentTranslationData?.translationId) return;
+
+        const { splitAtItemId, newPartNameHe, newPartNameEn, newPartDateSetIds, newPartHazan, newPartMinyan, insertBefore } = params;
+
+        // tocId נגזר ממזהה התרגום הנוכחי: "0-ashkenaz" → "ashkenaz"
+        const tocId = selectedTocId;
+
+        // afterPartId לפי מיקום המקטע החדש
+        let afterPartId: string | null;
+        if (insertBefore) {
+            const idx = (currentParts ?? []).findIndex((p: any) => p.id === selectedGroupId);
+            afterPartId = idx > 0 ? (currentParts[idx - 1].id as string) : null;
+        } else {
+            afterPartId = selectedGroupId;
+        }
+
+        setSaving(true);
+        try {
+            const newPartId = await addPart(newPartNameHe, afterPartId, {
+                nameEn: newPartNameEn,
+                tocId,
+                dateSetIds: newPartDateSetIds,
+                hazan: newPartHazan,
+                minyan: newPartMinyan,
+            });
+            if (!newPartId) return;
+
+            await splitPartItems(dataSource, {
+                currentTranslationId: currentTranslationData.translationId,
+                selectedPrayerId,
+                tocId,
+                currentPartId: selectedGroupId,
+                splitAtItemId,
+                insertBefore,
+                newPartId,
+                newPartNameHe,
+                newPartNameEn,
+                translations: currentTocData?.translations ?? [],
+            });
+
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "move_items_to_part",
+                context: {
+                    tocId: selectedTocId,
+                    translationId: currentTranslationData.translationId,
+                    prayerId: selectedPrayerId,
+                    partId: selectedGroupId,
+                },
+                details: {
+                    fromPartId: selectedGroupId,
+                    toPartId: newPartId,
+                },
+                savedToFirestore: true,
+            });
+
+            snackbar.open({ type: "success", message: "המקטע פוצל בהצלחה" });
+            closeSplitPartModal();
+            await fetchItemsWithEnhancements(selectedGroupId);
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Split part failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בפיצול המקטע" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ─── Move Items to Part ────────────────────────────────────────────────────
+
+    const openMoveToPartModal = () => {
+        setMoveTargetPartItems([]);
+        setMoveToPartModalOpen(true);
+    };
+    const closeMoveToPartModal = () => setMoveToPartModalOpen(false);
+
+    /** טוען פריטי מקטע יעד להצגה בבחירת מיקום הכנסה */
+    const loadMoveTargetPartItems = async (targetPartId: string) => {
+        if (!selectedPrayerId || !currentTranslationData?.translationId) return;
+        try {
+            const items = await fetchPartItems(
+                dataSource,
+                currentTranslationData.translationId,
+                selectedPrayerId,
+                targetPartId
+            );
+            setMoveTargetPartItems(items);
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Load move target part items failed`, err);
+            setMoveTargetPartItems([]);
+        }
+    };
+
+    /**
+     * מעביר פריטים ממקטע נוכחי למקטע יעד קיים.
+     * מחשב mit_id חדשים לפי מיקום ההכנסה ומרענן את התצוגה.
+     */
+    const handleMoveItemsToPart = async (params: {
+        movedItemIds: string[];
+        targetPartId: string;
+        insertAfterItemId: string | null;
+    }) => {
+        if (!selectedGroupId || !selectedPrayerId || !selectedTocId || !currentTranslationData?.translationId) return;
+
+        const { movedItemIds, targetPartId, insertAfterItemId } = params;
+        if (movedItemIds.length === 0) return;
+
+        setSaving(true);
+        try {
+            await moveItemsToPart(dataSource, {
+                currentTranslationId: currentTranslationData.translationId,
+                selectedPrayerId,
+                movedItemIds,
+                sourcePartId: selectedGroupId,
+                targetPartId,
+                insertAfterItemId,
+                translations: currentTocData?.translations ?? [],
+            });
+
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "move_items_to_part",
+                context: {
+                    tocId: selectedTocId,
+                    translationId: currentTranslationData.translationId,
+                    prayerId: selectedPrayerId,
+                    partId: selectedGroupId,
+                },
+                details: {
+                    fromPartId: selectedGroupId,
+                    toPartId: targetPartId,
+                    movedItemIds,
+                },
+                savedToFirestore: true,
+            });
+
+            snackbar.open({ type: "success", message: "הפריטים הועברו בהצלחה" });
+            closeMoveToPartModal();
+            await fetchItemsWithEnhancements(selectedGroupId);
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Move items to part failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בהעברת הפריטים" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
     /** שומר את פריט התרגום החדש וסוגר את המודל */
     const submitAddTranslation = async () => {
         if (
@@ -1003,6 +1194,18 @@ export function usePartEdit(context: PartEditContext) {
         enhancementLocalValues,
         enhancementChangedIds,
         enhancementTranslationIds,
+        // פיצול מקטע
+        splitPartModalOpen,
+        openSplitPartModal,
+        closeSplitPartModal,
+        handleSplitPart,
+        // העברת פריטים למקטע
+        moveToPartModalOpen,
+        openMoveToPartModal,
+        closeMoveToPartModal,
+        handleMoveItemsToPart,
+        moveTargetPartItems,
+        loadMoveTargetPartItems,
         addTranslationOpen,
         addTranslationBaseItem,
         addTranslationTargetId,

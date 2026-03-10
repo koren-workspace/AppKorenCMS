@@ -28,6 +28,14 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    _OPENPYXL_AVAILABLE = True
+except ImportError:
+    _OPENPYXL_AVAILABLE = False
+
 from playwright.sync_api import sync_playwright, Page, Locator, TimeoutError as PWTimeout
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -481,9 +489,58 @@ def find_textarea_for_item(page: Page, item_id: str) -> Locator:
     מציאת textarea של פריט לפי itemId.
     ב-PartItemRow מוצג: <span>itemId: {curId} | MIT: ...</span>
     ה-textarea נמצא באותו div-כרטיס.
+
+    הגישה: מוצאים את ה-span עם ה-itemId הספציפי, ואז עולים ב-DOM
+    לאב הקרוב ביותר שמכיל textarea (XPath ancestor::).
+    כך נמנעים מלהחזיר div-עטיפה חיצוני שמכיל את כל הפריטים.
     """
-    row_div = page.locator(f'div:has(span:text("itemId: {item_id} |"))').first
+    span = page.locator(f'span:text("itemId: {item_id} |")').first
+    row_div = span.locator('xpath=ancestor::div[.//textarea][1]')
     return row_div.locator("textarea").first
+
+
+def _item_rows_locator(page: Page) -> Locator:
+    """
+    לוקייטור לכל שורות הפריטים במקטע.
+    מחפש כל span עם "itemId:" ועולה לdiv-האב הקרוב שמכיל textarea.
+    כך מקבלים בדיוק N divs (אחד לכל פריט) בסדר DOM, ללא div-עטיפות.
+    """
+    return page.locator('span:text("itemId:")').locator('xpath=ancestor::div[.//textarea][1]')
+
+
+def apply_item_change_by_index(
+    page: Page,
+    row_index: int,
+    item_id: str,
+    before_val: str,
+    after_val: str,
+    logger: Logger,
+) -> None:
+    """
+    מעדכן פריט לפי מיקום השורה במקטע (0, 1, 2, ...).
+    סדר השורות ב-DOM = סדר הפריטים ב-JSON – כך כל פריט מתעדכן בשורה הנכונה.
+    """
+    logger.log(f"    עורך פריט {row_index + 1} (itemId {item_id})")
+
+    rows = _item_rows_locator(page)
+    row = rows.nth(row_index)
+    try:
+        row.scroll_into_view_if_needed(timeout=NAV_TIMEOUT_MS)
+    except PWTimeout:
+        raise RuntimeError(
+            f"שורה {row_index + 1} (itemId={item_id}) לא בנוף – המקטע עשוי להכיל פחות פריטים."
+        )
+    time.sleep(0.15)
+    textarea = row.locator("textarea").first
+    textarea.wait_for(state="visible", timeout=NAV_TIMEOUT_MS)
+
+    current = textarea.input_value()
+    if current != before_val:
+        preview = (repr(current))[:60]
+        logger.log(f"    [אזהרה] ערך קיים שונה מהצפוי – ממשיך: {preview}...")
+
+    human_type(textarea, after_val, logger)
+    logger.log(f"    [OK] הקלדה הושלמה (פריט {row_index + 1})")
 
 
 def apply_item_change(
@@ -566,6 +623,108 @@ def save_part(page: Page, logger: Logger) -> None:
     time.sleep(0.5)
 
 
+def publish_part(page: Page, logger: Logger) -> None:
+    """לחיצה על כפתור '🚀 פרסום (Publish)' + המתנה לאישור פרסום."""
+    publish_btn = page.locator("button:has-text('פרסום (Publish)')").first
+
+    try:
+        publish_btn.wait_for(state="visible", timeout=5_000)
+    except PWTimeout:
+        raise RuntimeError("כפתור 'פרסום (Publish)' לא נמצא בדף.")
+
+    if publish_btn.is_disabled():
+        logger.log("  [אזהרה] כפתור פרסום מושבת – מדלג")
+        return
+
+    logger.log("  לוחץ '🚀 פרסום (Publish)'...")
+    publish_btn.click()
+
+    # המתנה קצרה לסיום הפרסום (קריאת API ל-Bagel)
+    try:
+        page.wait_for_function(
+            "() => { "
+            "  const btn = [...document.querySelectorAll('button')]"
+            "    .find(b => b.textContent.includes('פרסום (Publish)'));"
+            "  return btn && !btn.disabled;"
+            "}",
+            timeout=SAVE_TIMEOUT_MS,
+        )
+        logger.log("  [OK] פרסום הושלם")
+    except PWTimeout:
+        logger.log("  [אזהרה] לא התקבל אישור פרסום בזמן – ממשיך בכל זאת")
+
+    time.sleep(0.8)
+
+
+# ---------------------------------------------------------------------------
+# דוח Excel
+# ---------------------------------------------------------------------------
+
+def save_excel_report(report_rows: list[dict], output_path: Path, logger: "Logger") -> None:
+    """שומר דוח שינויים לקובץ Excel בפורמט זהה ל-apply_report_*.xlsx."""
+    if not _OPENPYXL_AVAILABLE:
+        logger.log("[אזהרה] openpyxl לא מותקן – דוח Excel לא נוצר. הרץ: pip install openpyxl")
+        return
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "שינויים"
+    ws.sheet_view.rightToLeft = True
+
+    headers = ["נוסח", "תרגום", "קטגוריה", "תפילה", "מקטע", "partId", "itemId", "mit_id", "שדה", "לפני", "אחרי", "סטטוס"]
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="2F4F8F", end_color="2F4F8F", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+
+    success_fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+    fail_fill = PatternFill(start_color="FFEBEE", end_color="FFEBEE", fill_type="solid")
+    skip_fill = PatternFill(start_color="FFF8E1", end_color="FFF8E1", fill_type="solid")
+    wrap_align = Alignment(wrap_text=True, vertical="top")
+
+    for row_data in report_rows:
+        status = row_data.get("status", "")
+        ws.append([
+            row_data.get("nusachId", ""),
+            row_data.get("translationId", ""),
+            row_data.get("categoryName", ""),
+            row_data.get("prayerName", ""),
+            row_data.get("partName", ""),
+            row_data.get("partId", ""),
+            row_data.get("itemId", ""),
+            row_data.get("mit_id", row_data.get("itemId", "")),
+            row_data.get("field", ""),
+            row_data.get("before", ""),
+            row_data.get("after", ""),
+            status,
+        ])
+        if "הצליח" in status:
+            row_fill = success_fill
+        elif "נכשל" in status:
+            row_fill = fail_fill
+        else:
+            row_fill = skip_fill
+        for cell in ws[ws.max_row]:
+            cell.fill = row_fill
+            cell.alignment = wrap_align
+
+    col_widths = [12, 15, 15, 15, 20, 12, 18, 18, 10, 40, 40, 14]
+    for i, width in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+
+    ws.freeze_panes = "A2"
+    ws.row_dimensions[1].height = 22
+
+    wb.save(output_path)
+    logger.log(f"  [OK] דוח Excel נשמר: {output_path}")
+
+
 # ---------------------------------------------------------------------------
 # לוגיקה ראשית
 # ---------------------------------------------------------------------------
@@ -592,15 +751,18 @@ def group_changes(changes: list[dict]) -> dict:
     return dict(groups)
 
 
-def apply_all_changes(page: Page, changes: list[dict], logger: Logger) -> dict:
+def apply_all_changes(page: Page, changes: list[dict], logger: Logger) -> tuple[dict, list[dict]]:
     """
     מבצע את כל השינויים ב-CMS.
-    מחזיר סיכום: {"success": int, "failed": int, "skipped": int}
+    מחזיר: (סיכום, שורות_דוח)
+      סיכום: {"success": int, "failed": int, "skipped": int}
+      שורות_דוח: רשימת dict לדוח Excel
     """
     groups = group_changes(changes)
     total_groups = len(groups)
     current_nav: dict = {}
     stats = {"success": 0, "failed": 0, "skipped": 0}
+    report_rows: list[dict] = []
 
     logger.section(f"מתחיל עיבוד {total_groups} קבוצות")
 
@@ -615,18 +777,43 @@ def apply_all_changes(page: Page, changes: list[dict], logger: Logger) -> dict:
             f"{nusach_id} / {translation_id} / קטגוריה={category_name or '-'} / תפילה={prayer_name or prayer_id} / מקטע={part_name or part_id}"
         )
 
+        nav_error: str | None = None
         try:
             navigate_to_part(
                 page, nusach_id, translation_id, category_name, prayer_name, part_name, logger, current_nav
             )
         except RuntimeError as e:
             logger.log(f"  [שגיאת ניווט] {e}")
+            nav_error = str(e)
             stats["failed"] += len(items)
             current_nav.clear()
+
+        if nav_error:
+            for change in items:
+                item_id = change["itemId"]
+                for field, vals in change.get("fields", {}).items():
+                    report_rows.append({
+                        "nusachId": nusach_id,
+                        "translationId": translation_id,
+                        "categoryName": category_name or "",
+                        "prayerName": prayer_name or prayer_id,
+                        "partName": part_name or part_id,
+                        "partId": part_id,
+                        "itemId": item_id,
+                        "mit_id": change.get("mit_id", item_id),
+                        "field": field,
+                        "before": vals.get("before") or "",
+                        "after": vals.get("after") or "",
+                        "status": f"✗ נכשל (ניווט): {nav_error}",
+                    })
             continue
 
+        # התחלה מראש רשימת הפריטים
+        page.evaluate("window.scrollTo(0, 0)")
+        time.sleep(0.3)
+
         group_ok = True
-        for change in items:
+        for idx, change in enumerate(items):
             item_id = change["itemId"]
             fields = change.get("fields", {})
 
@@ -637,11 +824,32 @@ def apply_all_changes(page: Page, changes: list[dict], logger: Logger) -> dict:
                     apply_item_change(
                         page, item_id, field, str(before_val), str(after_val), logger
                     )
-                    stats["success"] += 1
+                    if field == "content":
+                        stats["success"] += 1
+                        status = "✓ הצליח"
+                    else:
+                        stats["skipped"] += 1
+                        status = "⊘ דולג"
                 except Exception as e:
-                    logger.log(f"    [שגיאה] item {item_id}, שדה {field}: {e}")
+                    logger.log(f"    [שגיאה] פריט {idx + 1} (itemId {item_id}), שדה {field}: {e}")
                     stats["failed"] += 1
                     group_ok = False
+                    status = f"✗ נכשל: {e}"
+
+                report_rows.append({
+                    "nusachId": nusach_id,
+                    "translationId": translation_id,
+                    "categoryName": category_name or "",
+                    "prayerName": prayer_name or prayer_id,
+                    "partName": part_name or part_id,
+                    "partId": part_id,
+                    "itemId": item_id,
+                    "mit_id": change.get("mit_id", item_id),
+                    "field": field,
+                    "before": str(before_val),
+                    "after": str(after_val),
+                    "status": status,
+                })
 
         # שמירה (גם אם חלק נכשלו – נשמור מה שניתן)
         try:
@@ -654,7 +862,14 @@ def apply_all_changes(page: Page, changes: list[dict], logger: Logger) -> dict:
         if not group_ok:
             current_nav.clear()
 
-    return stats
+    # פרסום אחד בסוף – אחרי שכל המקטעים נשמרו
+    logger.section("פרסום כל השינויים")
+    try:
+        publish_part(page, logger)
+    except Exception as e:
+        logger.log(f"  [שגיאת פרסום] {e}")
+
+    return stats, report_rows
 
 
 # ---------------------------------------------------------------------------
@@ -701,6 +916,13 @@ def main() -> None:
             "למשל kpj5722@gmail.com"
         ),
     )
+    parser.add_argument(
+        "--output-stats",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="שמור סטטיסטיקת ריצה (JSON) לנתיב שצוין (לשימוש ע\"י run_load_test.py)",
+    )
     args = parser.parse_args()
 
     if not args.changes.exists():
@@ -716,6 +938,7 @@ def main() -> None:
 
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = SCRIPT_DIR / f"apply_log_{timestamp_str}.txt"
+    report_path = SCRIPT_DIR / f"apply_report_{timestamp_str}.xlsx"
     logger = Logger(log_path)
 
     logger.log(f"קובץ שינויים: {args.changes}")
@@ -806,12 +1029,12 @@ def main() -> None:
         logger.log(f"מנווט ל-{CMS_URL}")
         page.goto(CMS_URL, wait_until="domcontentloaded", timeout=30_000)
 
-        # המתנה לטעינת האפליקציה (React)
+        # המתנה לטעינת האפליקציה (React) – מחפש אלמנט מעמודה 1 או כפתור
         try:
-            page.wait_for_selector("body", timeout=10_000)
+            page.wait_for_selector("h4:text-is('1. נוסח'), button:has-text('Sign in')", timeout=15_000)
         except PWTimeout:
             pass
-        time.sleep(10)
+        time.sleep(2)
 
         # אם צריך כניסה (מופיע כפתור Sign in)
         sign_in_btn = page.locator("button:has-text('Sign in'), a:has-text('Sign in')").first
@@ -826,19 +1049,38 @@ def main() -> None:
             time.sleep(2)
             logger.log("כניסה הושלמה")
 
-        stats = apply_all_changes(page, changes, logger)
+        t_start = time.time()
+        stats, report_rows = apply_all_changes(page, changes, logger)
+        duration_sec = round(time.time() - t_start, 1)
+        stats["duration_sec"] = duration_sec
 
         logger.section(
             f"סיכום:\n"
-            f"  הצלחות: {stats['success']}\n"
-            f"  שגיאות: {stats['failed']}\n"
-            f"  דולגו:  {stats['skipped']}"
+            f"  הצלחות:  {stats['success']}\n"
+            f"  שגיאות:  {stats['failed']}\n"
+            f"  דולגו:   {stats['skipped']}\n"
+            f"  זמן כולל: {duration_sec} שניות"
         )
+
+        logger.log("שומר דוח Excel...")
+        save_excel_report(report_rows, report_path, logger)
+
+        if args.output_stats:
+            try:
+                args.output_stats.parent.mkdir(parents=True, exist_ok=True)
+                with open(args.output_stats, "w", encoding="utf-8") as f:
+                    json.dump(stats, f, ensure_ascii=False, indent=2)
+                logger.log(f"סטטיסטיקה נשמרה: {args.output_stats}")
+            except Exception as e:
+                logger.log(f"[אזהרה] שמירת סטטיסטיקה נכשלה: {e}")
 
         if browser:
             browser.close()
 
-    print(f"\nלוג נשמר: {log_path}")
+    print(f"\nלוג נשמר:       {log_path}")
+    print(f"דוח Excel נשמר: {report_path}")
+    if args.output_stats:
+        print(f"סטטיסטיקה:      {args.output_stats}")
 
 
 if __name__ == "__main__":

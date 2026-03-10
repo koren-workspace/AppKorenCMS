@@ -116,8 +116,12 @@ class FirestoreClient:
         self._session.headers["Authorization"] = f"Bearer {self._creds.token}"
 
     def _ensure_token(self) -> None:
+        expiry = self._creds.expiry
+        if expiry is not None and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
         if not self._creds.valid or (
-            self._creds.expiry and self._creds.expiry - datetime.utcnow() < timedelta(minutes=2)
+            expiry is not None and expiry - now < timedelta(minutes=2)
         ):
             self._refresh()
 
@@ -183,6 +187,16 @@ def doc_id(doc: dict) -> str:
 # Rules engine
 # ---------------------------------------------------------------------------
 
+def _rule_matches(item_context: dict, when: dict | None) -> bool:
+    """בודק אם הפריט עומד בתנאי when."""
+    if not when:
+        return True
+    for key, expected in when.items():
+        if item_context.get(key) != expected:
+            return False
+    return True
+
+
 def apply_rule(value: str | None, rule: dict) -> str | None:
     if value is None:
         return value
@@ -194,9 +208,26 @@ def apply_rule(value: str | None, rule: dict) -> str | None:
     raise ValueError(f"סוג rule לא מוכר: {t!r}")
 
 
-def apply_rules(item_dict: dict, rules: list[dict]) -> dict[str, dict]:
+def apply_rules(
+    item_dict: dict,
+    rules: list[dict],
+    item_context: dict | None = None,
+    rule_counts: list[int] | None = None,
+) -> dict[str, dict]:
+    """
+    מחיל rules על הפריט. אם rule כולל "when", הוא מוחל רק כשהפריט תואם.
+    limit: מקסימום שינויים לכלל (למשל 5 = רק 5 פריטים ראשונים).
+    """
+    ctx = item_context or {}
+    if rule_counts is None:
+        rule_counts = [0] * len(rules)
     changes = {}
-    for rule in rules:
+    for i, rule in enumerate(rules):
+        if not _rule_matches(ctx, rule.get("when")):
+            continue
+        limit = rule.get("limit")
+        if limit is not None and rule_counts[i] >= limit:
+            continue
         field = rule.get("field")
         if not field:
             continue
@@ -204,6 +235,8 @@ def apply_rules(item_dict: dict, rules: list[dict]) -> dict[str, dict]:
         after = apply_rule(before, rule)
         if before != after:
             changes[field] = {"before": before, "after": after}
+            if limit is not None:
+                rule_counts[i] += 1
     return changes
 
 
@@ -328,8 +361,20 @@ def generate_changes(config_path: Path, limit: int | None = None) -> None:
     print(f"\nסה\"כ פריטים שנשלפו: {len(raw_items)}")
 
     changes_list = []
+    rule_counts = [0] * len(rules)
     for translation_id, prayer_id, category_name, prayer_name, item_id, item_dict in raw_items:
-        field_changes = apply_rules(item_dict, rules)
+        item_context = {
+            "translationId": translation_id,
+            "prayerId": prayer_id,
+            "categoryName": category_name,
+            "prayerName": prayer_name,
+            "itemId": item_id,
+            "partId": item_dict.get("partId"),
+            "partName": item_dict.get("partName"),
+            "mit_id": item_dict.get("mit_id"),
+            "type": item_dict.get("type"),
+        }
+        field_changes = apply_rules(item_dict, rules, item_context, rule_counts)
         if not field_changes:
             continue
         changes_list.append({

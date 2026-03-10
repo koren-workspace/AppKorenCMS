@@ -26,7 +26,8 @@ export type ChangeLogAction =
     | "delete_translation"  // מחיקת תרגום
     | "delete_category"     // מחיקת קטגוריה
     | "delete_prayer"       // מחיקת תפילה
-    | "delete_part";        // מחיקת מקטע
+    | "delete_part"         // מחיקת מקטע
+    | "move_items_to_part"; // העברת פריטים בין מקטעים
 
 /** הקשר – איפה בוצעה הפעולה */
 export type ChangeLogContext = {
@@ -91,6 +92,10 @@ export type ChangeLogEntry = {
         newPartId?: string;
         partName?: string;
         afterPartId?: string | null;
+        /** move_items_to_part */
+        fromPartId?: string;
+        toPartId?: string;
+        movedItemIds?: string[];
         /** delete_* */
         deletedId?: string;
         deletedName?: string;
@@ -239,6 +244,7 @@ export function exportChangeLogAsText(filename?: string): void {
         if (e.details?.newCategoryId) lines.push(`  new category: id=${e.details.newCategoryId} name=${e.details.categoryName ?? "-"} after=${e.details.afterCategoryId ?? "-"}`);
         if (e.details?.newPrayerId) lines.push(`  new prayer: id=${e.details.newPrayerId} name=${e.details.prayerName ?? "-"} after=${e.details.afterPrayerId ?? "-"}`);
         if (e.details?.newPartId) lines.push(`  new part: id=${e.details.newPartId} name=${e.details.partName ?? "-"} after=${e.details.afterPartId ?? "-"}`);
+        if (e.details?.fromPartId) lines.push(`  move_items: from=${e.details.fromPartId} to=${e.details.toPartId ?? "-"} items=${(e.details.movedItemIds ?? []).join(", ") || "-"}`);
         if (e.details?.deletedId) lines.push(`  deleted: id=${e.details.deletedId} name=${e.details.deletedName ?? "-"}`);
         if (e.savedToFirestore != null) lines.push(`  savedToFirestore: ${e.savedToFirestore}`);
         if (e.publishedToBagel != null) lines.push(`  publishedToBagel: ${e.publishedToBagel}`);

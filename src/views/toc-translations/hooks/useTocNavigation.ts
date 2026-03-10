@@ -723,8 +723,22 @@ export function useTocNavigation() {
         }
     };
 
-    /** מוסיף מקטע אחרי מקטע קיים (או בסוף אם afterPartId null). רק בנוסח הבסיסי מעדכן את כל התרגומים. */
-    const addPart = async (partName: string, afterPartId: string | null) => {
+    /**
+     * מוסיף מקטע אחרי afterPartId (או בסוף אם null). רק בנוסח הבסיסי מעדכן את כל התרגומים.
+     * אפשרויות נוספות (לפיצול): nameEn לתרגום 1-{tocId}, dateSetIds/hazan/minyan.
+     * מחזיר את newPartId שנוצר, או null אם הפעולה נכשלה / הוחמצה.
+     */
+    const addPart = async (
+        partName: string,
+        afterPartId: string | null,
+        options?: {
+            nameEn?: string;
+            tocId?: string;
+            dateSetIds?: string[];
+            hazan?: boolean | null;
+            minyan?: boolean | null;
+        }
+    ): Promise<string | null> => {
         const name = partName?.trim();
         if (
             !name ||
@@ -734,10 +748,10 @@ export function useTocNavigation() {
             !selectedPrayerId ||
             !currentTocData?.translations?.length
         )
-            return;
+            return null;
         const idx = selectedTranslationIndex;
         const trans = currentTocData.translations[idx];
-        if (!trans) return;
+        if (!trans) return null;
         const isBase = String(trans.translationId ?? "").startsWith("0-");
 
         const getParts = (t: any): any[] => {
@@ -748,31 +762,54 @@ export function useTocNavigation() {
             return [];
         };
 
-        const allParts = getParts(trans);
+        // חישוב newPartId מהתרגום הבסיסי (0-*) – מקטע חדש = max + 10
+        const baseTrans = currentTocData.translations.find((t: any) =>
+            String(t.translationId ?? "").startsWith("0-")
+        ) ?? trans;
+        const allParts = getParts(baseTrans);
         const maxId = allParts.length
             ? Math.max(0, ...allParts.map((p: any) => Number(p.id) || 0))
             : 0;
         const newPartId = String(maxId + 10);
-        const newPart = { id: newPartId, name };
 
-        const insertAt = (parts: any[]) => {
-            if (afterPartId == null) return [...parts, newPart];
-            const i = parts.findIndex((p: any) => p.id === afterPartId);
-            const pos = i >= 0 ? i + 1 : parts.length;
-            return [...parts.slice(0, pos), newPart, ...parts.slice(pos)];
+        // בסיס המקטע החדש עם שדות תצוגה
+        const basePart = {
+            id: newPartId,
+            dateSetIds: options?.dateSetIds ?? ["100"],
+            hazan: options?.hazan ?? null,
+            minyan: options?.minyan ?? null,
         };
 
-        const updateTranslation = (t: any) => ({
-            ...t,
-            categories: (t.categories ?? []).map((cat: any) => ({
-                ...cat,
-                prayers: (cat.prayers ?? []).map((p: any) =>
-                    p.id === selectedPrayerId
-                        ? { ...p, parts: insertAt(p.parts ?? []) }
-                        : p
-                ),
-            })),
+        // שם לפי תרגום: 1-{tocId} → אנגלית; כולם → עברית
+        const getPartForTranslation = (translationId: string) => ({
+            ...basePart,
+            name:
+                options?.nameEn && options?.tocId && translationId === `1-${options.tocId}`
+                    ? options.nameEn
+                    : name,
         });
+
+        const insertAt = (parts: any[], partObj: any) => {
+            if (afterPartId == null) return [...parts, partObj];
+            const i = parts.findIndex((p: any) => p.id === afterPartId);
+            const pos = i >= 0 ? i + 1 : parts.length;
+            return [...parts.slice(0, pos), partObj, ...parts.slice(pos)];
+        };
+
+        const updateTranslation = (t: any) => {
+            const partObj = getPartForTranslation(t.translationId ?? "");
+            return {
+                ...t,
+                categories: (t.categories ?? []).map((cat: any) => ({
+                    ...cat,
+                    prayers: (cat.prayers ?? []).map((p: any) =>
+                        p.id === selectedPrayerId
+                            ? { ...p, parts: insertAt(p.parts ?? [], partObj) }
+                            : p
+                    ),
+                })),
+            };
+        };
 
         const updatedTranslations = isBase
             ? currentTocData.translations.map(updateTranslation)
@@ -805,9 +842,11 @@ export function useTocNavigation() {
                 savedToFirestore: true,
             });
             snackbar.open({ type: "success", message: "מקטע נוסף" });
+            return newPartId;
         } catch (err) {
             console.error(`${LOG_PREFIX} Add part failed`, err);
             snackbar.open({ type: "error", message: "שגיאה בהוספת מקטע" });
+            return null;
         } finally {
             setIsSaving(false);
             setSavingMessage(null);

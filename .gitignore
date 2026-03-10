@@ -19,3 +19,11 @@ scripts/koren-stage-firebase-adminsdk-9ur1w-3dd776e48a.json
 scripts/changes_config.json
 scripts/changes_*.json
 scripts/apply_log_*.txt
+scripts/apply_report_*.xlsx
+
+# Load test – generated outputs and session clones
+scripts/load_test_report.xlsx
+scripts/load_test_stats.json
+scripts/load_test_stats_*.json
+scripts/load_test_chunk_*.json
+scripts/.chrome-session-*/

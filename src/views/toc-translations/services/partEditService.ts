@@ -377,6 +377,262 @@ export async function createTranslationItem(
     });
     return { newItemId, newMitId };
 }
+
+// ─── Split Part ──────────────────────────────────────────────────────────────
+
+/**
+ * פרמטרים לפיצול מקטע: מזהה פריט החתך קובע אילו פריטים עוברים למקטע החדש.
+ * insertBefore=false → פריט החתך ועד הסוף עוברים.
+ * insertBefore=true  → מתחילת המקטע עד פריט החתך (כולל) עוברים.
+ */
+export type SplitPartItemsParams = {
+    currentTranslationId: string;
+    selectedPrayerId: string;
+    /** tocId (e.g. "ashkenaz") – לזיהוי תרגום האנגלית "1-{tocId}" */
+    tocId: string;
+    currentPartId: string;
+    splitAtItemId: string;
+    insertBefore: boolean;
+    newPartId: string;
+    newPartNameHe: string;
+    newPartNameEn: string;
+    translations: any[];
+};
+
+/**
+ * מעדכן partId / partName / partIdAndName / timestamp על פריטי המקטע המועברים,
+ * כולל פריטים מקושרים בכל שאר התרגומים.
+ * partName = שם עברי לכולם חוץ מתרגום "1-{tocId}", שם שמקבל שם אנגלי.
+ */
+export async function splitPartItems(
+    dataSource: DataSource,
+    params: SplitPartItemsParams
+): Promise<void> {
+    const {
+        currentTranslationId,
+        selectedPrayerId,
+        tocId,
+        currentPartId,
+        splitAtItemId,
+        insertBefore,
+        newPartId,
+        newPartNameHe,
+        newPartNameEn,
+        translations,
+    } = params;
+
+    const baseItems = await fetchPartItems(
+        dataSource,
+        currentTranslationId,
+        selectedPrayerId,
+        currentPartId
+    );
+
+    const splitIdx = baseItems.findIndex((e: any) => e.values?.itemId === splitAtItemId);
+    if (splitIdx < 0) return;
+
+    const movedItems = insertBefore
+        ? baseItems.slice(0, splitIdx + 1)
+        : baseItems.slice(splitIdx);
+
+    if (movedItems.length === 0) return;
+
+    const movedItemIds = new Set(
+        movedItems.map((e: any) => e.values?.itemId as string).filter(Boolean)
+    );
+    const now = Date.now();
+
+    const getPartName = (translationId: string): string =>
+        translationId === `1-${tocId}` ? newPartNameEn : newPartNameHe;
+
+    for (const trans of translations) {
+        const tid = trans?.translationId as string | undefined;
+        if (!tid) continue;
+
+        const partName = getPartName(tid);
+        const partIdAndName = `${newPartId} ${partName}`;
+        const path = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+
+        if (tid === currentTranslationId) {
+            for (const item of movedItems) {
+                await dataSource.saveEntity({
+                    path,
+                    entityId: item.id,
+                    values: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
+                    status: "existing",
+                    collection: itemsCollection,
+                });
+            }
+        } else {
+            const chunks = chunkArray([...movedItemIds], 30);
+            for (const chunk of chunks) {
+                const related = (
+                    await dataSource.fetchCollection({
+                        path,
+                        collection: itemsCollection,
+                        filter: { linkedItem: ["array-contains-any", chunk] },
+                    })
+                ).filter((e: any) => e.values?.deleted !== true);
+                for (const item of related) {
+                    await dataSource.saveEntity({
+                        path,
+                        entityId: item.id,
+                        values: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
+                        status: "existing",
+                        collection: itemsCollection,
+                    });
+                }
+            }
+        }
+    }
+}
+
+// ─── Move Items to Part ───────────────────────────────────────────────────────
+
+export type MoveItemsToPartParams = {
+    currentTranslationId: string;
+    selectedPrayerId: string;
+    /** tocId – לא בשימוש כאן כי שם המקטע נלקח מה-TOC לכל תרגום */
+    movedItemIds: string[];
+    sourcePartId: string;
+    targetPartId: string;
+    /** itemId של הפריט שאחריו להכניס; null = תחילת המקטע היעד */
+    insertAfterItemId: string | null;
+    /** translations array from TOC (כולל categories/prayers/parts לכל תרגום) */
+    translations: any[];
+};
+
+/**
+ * מעביר פריטים (רצף רציף) ממקטע מקור למקטע יעד באותה תפילה.
+ * מחשב mit_id חדשים לפי מיקום ההכנסה במקטע היעד.
+ * partName לכל תרגום נלקח מעץ ה-TOC של אותו תרגום.
+ */
+export async function moveItemsToPart(
+    dataSource: DataSource,
+    params: MoveItemsToPartParams
+): Promise<void> {
+    const {
+        currentTranslationId,
+        selectedPrayerId,
+        movedItemIds,
+        sourcePartId,
+        targetPartId,
+        insertAfterItemId,
+        translations,
+    } = params;
+
+    if (movedItemIds.length === 0) return;
+
+    const movedIdSet = new Set(movedItemIds);
+
+    // הפריטים המועברים ממוינים לפי mit_id הנוכחי (שמירת הסדר הפנימי)
+    const sourceItems = await fetchPartItems(
+        dataSource,
+        currentTranslationId,
+        selectedPrayerId,
+        sourcePartId
+    );
+    const movedEntities = sourceItems
+        .filter((e: any) => movedIdSet.has(e.values?.itemId))
+        .sort((a: any, b: any) =>
+            (a.values?.mit_id ?? "").localeCompare(b.values?.mit_id ?? "", undefined, { numeric: true })
+        );
+
+    if (movedEntities.length === 0) return;
+
+    // מיקום הכנסה במקטע היעד
+    const targetItems = await fetchPartItems(
+        dataSource,
+        currentTranslationId,
+        selectedPrayerId,
+        targetPartId
+    );
+
+    const insertAfterIdx =
+        insertAfterItemId === null
+            ? -1
+            : targetItems.findIndex((e: any) => e.values?.itemId === insertAfterItemId);
+
+    const idBefore =
+        insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.mit_id ?? null) : null;
+    const idAfter =
+        insertAfterIdx + 1 < targetItems.length
+            ? (targetItems[insertAfterIdx + 1].values?.mit_id ?? null)
+            : null;
+
+    // חישוב mit_id חדש לכל פריט מועבר ברצף (בין idBefore ל-idAfter)
+    const itemIdToNewMitId: Record<string, string> = {};
+    let prevMitId: string | null = idBefore;
+    for (const item of movedEntities) {
+        const m = mitIdBetween(prevMitId ?? undefined, idAfter ?? undefined);
+        itemIdToNewMitId[item.values?.itemId] = m;
+        prevMitId = m;
+    }
+
+    const now = Date.now();
+
+    // עוזר: שם המקטע היעד לפי עץ TOC של תרגום מסוים
+    const getTargetPartName = (trans: any): string => {
+        for (const cat of trans.categories ?? []) {
+            const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
+            if (prayer) {
+                const part = (prayer.parts ?? []).find((pt: any) => pt.id === targetPartId);
+                if (part) return part.name ?? "";
+            }
+        }
+        return "";
+    };
+
+    for (const trans of translations) {
+        const tid = trans?.translationId as string | undefined;
+        if (!tid) continue;
+
+        const partName = getTargetPartName(trans);
+        const partIdAndName = `${targetPartId} ${partName}`;
+        const path = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+
+        if (tid === currentTranslationId) {
+            for (const item of movedEntities) {
+                const itemId = item.values?.itemId;
+                const newMitId = itemIdToNewMitId[itemId] ?? item.values?.mit_id;
+                await dataSource.saveEntity({
+                    path,
+                    entityId: item.id,
+                    values: { ...item.values, partId: targetPartId, partName, partIdAndName, mit_id: newMitId, timestamp: now },
+                    status: "existing",
+                    collection: itemsCollection,
+                });
+            }
+        } else {
+            const chunks = chunkArray([...movedIdSet], 30);
+            for (const chunk of chunks) {
+                const related = (
+                    await dataSource.fetchCollection({
+                        path,
+                        collection: itemsCollection,
+                        filter: { linkedItem: ["array-contains-any", chunk] },
+                    })
+                ).filter((e: any) => e.values?.deleted !== true);
+                for (const item of related) {
+                    const link = item.values?.linkedItem;
+                    const linkedBaseIds: string[] = Array.isArray(link) ? link : [link].filter(Boolean);
+                    const matchedBaseId = linkedBaseIds.find((id) => movedIdSet.has(id));
+                    const newMitId = matchedBaseId
+                        ? (itemIdToNewMitId[matchedBaseId] ?? item.values?.mit_id)
+                        : item.values?.mit_id;
+                    await dataSource.saveEntity({
+                        path,
+                        entityId: item.id,
+                        values: { ...item.values, partId: targetPartId, partName, partIdAndName, mit_id: newMitId, timestamp: now },
+                        status: "existing",
+                        collection: itemsCollection,
+                    });
+                }
+            }
+        }
+    }
+}
+
 /**
  * מעדכן את זמן העדכון ב-Firestore (db-update-time) לנוסח הנבחר.
  * החיבור ל-Bagel עצמו מתבצע דרך bagelUpdateTimeService (SDK).

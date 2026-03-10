@@ -62,6 +62,10 @@ export type PartEditPanelProps = {
     /** שינויי השמירה האחרונה – לסיכום קטן בטולבר */
     lastSaveEntries?: ChangeLogEntry[];
     onClearLastSave?: () => void;
+    /** כפתורי פיצול והעברה – רק בנוסח הבסיסי */
+    allowSplitAndMove?: boolean;
+    onSplitPart?: () => void;
+    onMoveItemsToPart?: () => void;
 };
 
 export function PartEditPanel({
@@ -94,6 +98,9 @@ export function PartEditPanel({
     onOpenDateSetIdForItem,
     lastSaveEntries = [],
     onClearLastSave,
+    allowSplitAndMove = false,
+    onSplitPart,
+    onMoveItemsToPart,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0 || pendingDeletesCount > 0;
@@ -107,6 +114,9 @@ export function PartEditPanel({
                 onFinalPublish={onFinalPublish}
                 lastSaveEntries={lastSaveEntries}
                 onClearLastSave={onClearLastSave}
+                allowSplitAndMove={allowSplitAndMove}
+                onSplitPart={onSplitPart}
+                onMoveItemsToPart={onMoveItemsToPart}
             />
             {loading ? (
                 <div className="m-auto font-bold text-blue-500 animate-pulse text-lg">

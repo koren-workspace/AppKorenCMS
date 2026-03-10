@@ -1,0 +1,4 @@
+# לבדיקות עומס (run_load_test.py) – תיעוד ב-Excel
+openpyxl>=3.0.0
+
+# שאר הסקריפטים משתמשים ב-playwright, google-auth (מ-pip או סביבה קיימת)

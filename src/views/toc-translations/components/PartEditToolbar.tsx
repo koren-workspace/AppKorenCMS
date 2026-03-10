@@ -20,6 +20,10 @@ export type PartEditToolbarProps = {
     onFinalPublish: () => void;
     lastSaveEntries?: ChangeLogEntry[];
     onClearLastSave?: () => void;
+    /** מציג כפתורי פיצול והעברה – רק בנוסח הבסיסי */
+    allowSplitAndMove?: boolean;
+    onSplitPart?: () => void;
+    onMoveItemsToPart?: () => void;
 };
 
 function fmtVal(v: unknown): string {
@@ -37,6 +41,9 @@ export function PartEditToolbar({
     onFinalPublish,
     lastSaveEntries = [],
     onClearLastSave,
+    allowSplitAndMove,
+    onSplitPart,
+    onMoveItemsToPart,
 }: PartEditToolbarProps) {
     if (!selectedGroupId) return null;
 
@@ -44,9 +51,31 @@ export function PartEditToolbar({
 
     return (
         <div className="mb-3 pb-2 border-b shrink-0">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-1">
                 <h3 className="font-bold text-base">{selectedGroupId}</h3>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
+                    {allowSplitAndMove && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={onSplitPart}
+                                disabled={saving}
+                                className="px-3 py-1.5 bg-purple-600 text-white rounded font-bold text-[10px] disabled:opacity-30 hover:bg-purple-700"
+                                title="פצל מקטע – יצירת מקטע חדש מחלק מהפריטים"
+                            >
+                                ✂ פצל מקטע
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onMoveItemsToPart}
+                                disabled={saving}
+                                className="px-3 py-1.5 bg-orange-500 text-white rounded font-bold text-[10px] disabled:opacity-30 hover:bg-orange-600"
+                                title="העבר פריטים למקטע אחר"
+                            >
+                                ↔ העבר למקטע
+                            </button>
+                        </>
+                    )}
                     <button
                         type="button"
                         onClick={onSaveGroup}

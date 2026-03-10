@@ -1,1 +1,297 @@
-[]
+[
+  {
+    "timestamp": 1772974469826,
+    "action": "split_part",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011060"
+    },
+    "details": {
+      "newPartId": "1011066",
+      "partName": "פרשת העקדה",
+      "splitAfterItemId": "101050611060",
+      "itemsMovedCount": 92
+    },
+    "savedToFirestore": true,
+    "id": "chg_1772974469826_g7nuvvc",
+    "timestampIso": "2026-03-08T12:54:29.826Z"
+  },
+  {
+    "timestamp": 1772976685157,
+    "action": "split_part",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015020",
+      "partId": "1011290"
+    },
+    "details": {
+      "newPartId": "1011240.5",
+      "partName": "פרשת הקטורת",
+      "splitAfterItemId": "103290511290",
+      "itemsMovedCount": 81
+    },
+    "savedToFirestore": true,
+    "id": "chg_1772976685158_5ria0q6",
+    "timestampIso": "2026-03-08T13:31:25.157Z"
+  },
+  {
+    "timestamp": 1773049426383,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "101001411030",
+          "itemId": "101001411030",
+          "mitId": "101001411030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "type",
+              "oldValue": "title",
+              "newValue": "body"
+            }
+          ]
+        },
+        {
+          "entityId": "101001611030",
+          "itemId": "101001611030",
+          "mitId": "101001611030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "role",
+              "newValue": "טסט"
+            }
+          ]
+        },
+        {
+          "entityId": "101002311030",
+          "itemId": "101002311030",
+          "mitId": "101002311030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "type",
+              "oldValue": "body",
+              "newValue": "title"
+            },
+            {
+              "field": "titleType",
+              "newValue": "H2"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773049426384_7oexijk",
+    "timestampIso": "2026-03-09T09:43:46.383Z"
+  },
+  {
+    "timestamp": 1773049431063,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773049431063_9gdkbpz",
+    "timestampIso": "2026-03-09T09:43:51.063Z"
+  },
+  {
+    "timestamp": 1773051872734,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "101002511030",
+          "itemId": "101002511030",
+          "mitId": "101002511030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "role",
+              "newValue": "טסט"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773051872735_wdh6dxg",
+    "timestampIso": "2026-03-09T10:24:32.734Z"
+  },
+  {
+    "timestamp": 1773051877040,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773051877040_k75yvmu",
+    "timestampIso": "2026-03-09T10:24:37.040Z"
+  },
+  {
+    "timestamp": 1773052101084,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "101001611030",
+          "itemId": "101001611030",
+          "mitId": "101001611030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "role",
+              "oldValue": "טסט",
+              "newValue": ""
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773052101085_srs5h1z",
+    "timestampIso": "2026-03-09T10:28:21.084Z"
+  },
+  {
+    "timestamp": 1773052102620,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773052102620_kf4qjcl",
+    "timestampIso": "2026-03-09T10:28:22.620Z"
+  },
+  {
+    "timestamp": 1773054592795,
+    "action": "delete_part_item",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "deletedItemId": "101001611030",
+      "deletedEntityId": "101001611030",
+      "relatedTranslationIds": [
+        "1-ashkenaz",
+        "11-ashkenaz",
+        "10-ashkenaz"
+      ]
+    },
+    "savedToFirestore": true,
+    "id": "chg_1773054592795_055rgpg",
+    "timestampIso": "2026-03-09T11:09:52.795Z"
+  },
+  {
+    "timestamp": 1773054592799,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "101001411030",
+          "itemId": "101001411030",
+          "mitId": "101001411030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "content",
+              "oldValue": "שחרית_",
+              "newValue": "_שחרית_"
+            }
+          ]
+        },
+        {
+          "entityId": "101002311030",
+          "itemId": "101002311030",
+          "mitId": "101002311030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "type",
+              "oldValue": "title",
+              "newValue": "body"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773054592799_sxij3ge",
+    "timestampIso": "2026-03-09T11:09:52.799Z"
+  },
+  {
+    "timestamp": 1773054618288,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773054618288_melz4ez",
+    "timestampIso": "2026-03-09T11:10:18.288Z"
+  },
+  {
+    "timestamp": 1773066253521,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773066253521_pirfe0o",
+    "timestampIso": "2026-03-09T14:24:13.521Z"
+  }
+]

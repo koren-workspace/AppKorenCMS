@@ -189,14 +189,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -279,14 +279,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -358,14 +358,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -509,14 +509,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -587,14 +587,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -823,14 +823,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -890,14 +890,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -986,14 +986,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updatedTranslations },
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updatedTranslations } }
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
                         : t
                 )
             );

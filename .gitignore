@@ -23,7 +23,9 @@ scripts/apply_report_*.xlsx
 
 # Load test – generated outputs and session clones
 scripts/load_test_report.xlsx
+scripts/
 scripts/load_test_stats.json
 scripts/load_test_stats_*.json
 scripts/load_test_chunk_*.json
 scripts/.chrome-session-*/
+docs/

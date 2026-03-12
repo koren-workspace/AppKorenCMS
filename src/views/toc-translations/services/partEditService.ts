@@ -273,6 +273,10 @@ export type CreateTranslationItemParams = {
     reference?: string;
     specialSign?: string;
     dateSetId?: string;
+    /** mit_id של פריט הבסיס המקושר – לחישוב mit_id של התרגום (פסקה / תחילת פסקה / itemId) */
+    baseItemMitId?: string;
+    /** האם פריט התרגום הוא "תחילת פסקה" – רלוונטי רק כשפריט הבסיס אינו חלק מפסקה (itemId === mit_id) */
+    isStartOfParagraph?: boolean;
     /** נקרא פעם אחת לפני ניסיון ערכים עשרוניים (כשאין מקום שלם) */
     onAboutToTryDecimals?: () => void;
 };
@@ -309,6 +313,8 @@ export async function createTranslationItem(
         reference,
         specialSign,
         dateSetId,
+        baseItemMitId: baseItemMitIdParam,
+        isStartOfParagraph,
         onAboutToTryDecimals,
     } = params;
 
@@ -324,28 +330,21 @@ export async function createTranslationItem(
         return Array.isArray(link) ? link.includes(baseItemId) : link === baseItemId;
     });
 
-    let idBefore: string | null = null;
-    let idAfter: string | null = null;
     let itemIdBefore: string | null = null;
     let itemIdAfter: string | null = null;
-
 
     if (afterItemId == null || afterItemId === "") {
         if (linkedToBase.length > 0) {
             itemIdAfter = linkedToBase[0].values?.itemId ?? null;
-            idAfter = linkedToBase[0].values?.mit_id ?? null;
         } else if (allItems.length > 0) {
             itemIdAfter = allItems[0].values?.itemId ?? null;
-            idAfter = allItems[0].values?.mit_id ?? null;
         }
     } else {
         const inAll = allItems.findIndex((e: any) => e.values?.itemId === afterItemId);
         if (inAll >= 0) {
             const afterItem = allItems[inAll];
             itemIdBefore = afterItem.values?.itemId ?? null;
-            idBefore = afterItem.values?.mit_id ?? null;
             if (inAll + 1 < allItems.length) {
-                idAfter = allItems[inAll + 1].values?.mit_id ?? null;
                 itemIdAfter = allItems[inAll + 1].values?.itemId ?? null;
             }
         }
@@ -364,7 +363,7 @@ export async function createTranslationItem(
         }
     }
 
-    const newMitId = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+    // חישוב newItemId קודם (לפי מיקום + ייחודיות)
     const existingIds = new Set(allItems.map((e: any) => e.values?.itemId).filter(Boolean));
     let newItemId = mitIdBetween(itemIdBefore ?? undefined, itemIdAfter ?? undefined);
 
@@ -408,6 +407,18 @@ export async function createTranslationItem(
             break;
         }
         newItemId = String(nextNum);
+    }
+
+    // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
+    const baseItemMitId = baseItemMitIdParam != null && String(baseItemMitIdParam).trim() !== "" ? String(baseItemMitIdParam).trim() : null;
+    const baseIsPartOfParagraph = baseItemMitId != null && baseItemId !== baseItemMitId;
+    let newMitId: string;
+    if (baseIsPartOfParagraph) {
+        newMitId = baseItemMitId;
+    } else if (isStartOfParagraph && baseItemMitId != null) {
+        newMitId = baseItemMitId;
+    } else {
+        newMitId = newItemId;
     }
 
     const values: Record<string, any> = {

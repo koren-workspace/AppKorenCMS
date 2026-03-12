@@ -213,6 +213,12 @@ export function TocTranslationsView() {
                            partEdit.addTranslationBaseItem.values?.content) ?? ""
                         : ""
                 }
+                baseItemMitId={
+                    partEdit.addTranslationBaseItem
+                        ? (partEdit.localValues[partEdit.addTranslationBaseItem.id]?.mit_id ??
+                           partEdit.addTranslationBaseItem.values?.mit_id) ?? undefined
+                        : undefined
+                }
                 existingLinked={addTranslationExistingLinked}
                 translations={nav.currentTocData?.translations ?? []}
                 currentTranslationId={nav.currentTranslationData?.translationId ?? null}

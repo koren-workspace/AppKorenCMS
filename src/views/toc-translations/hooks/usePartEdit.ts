@@ -1271,6 +1271,8 @@ export function usePartEdit(context: PartEditContext) {
         reference: "",
         specialSign: "",
         dateSetId: "",
+        /** האם פריט התרגום הוא "תחילת פסקה" – מוצג רק כשפריט הבסיס אינו חלק מפסקה */
+        isStartOfParagraph: false,
     });
 
     /** פותח מודל הוספת תרגום לפריט בסיס */
@@ -1534,6 +1536,9 @@ export function usePartEdit(context: PartEditContext) {
             let newItemId: string;
             let newMitId: string;
             try {
+                const baseItemMitId = addTranslationBaseItem
+                    ? (localValues[addTranslationBaseItem.id]?.mit_id ?? addTranslationBaseItem.values?.mit_id ?? undefined)
+                    : undefined;
                 const result = await createTranslationItem(dataSource, {
                     targetTranslationId: addTranslationTargetId,
                     selectedPrayerId,
@@ -1556,6 +1561,8 @@ export function usePartEdit(context: PartEditContext) {
                     reference: form.reference,
                     specialSign: form.specialSign,
                     dateSetId: form.dateSetId,
+                    baseItemMitId: baseItemMitId != null && String(baseItemMitId).trim() !== "" ? String(baseItemMitId).trim() : undefined,
+                    isStartOfParagraph: !!form.isStartOfParagraph,
                     onAboutToTryDecimals: () => {
                         snackbar.open({
                             type: "info",

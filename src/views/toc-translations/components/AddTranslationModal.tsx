@@ -18,6 +18,8 @@ export type AddTranslationModalProps = {
     onClose: () => void;
     baseItemId: string;
     baseContentPreview: string;
+    /** mit_id של פריט הבסיס – להצגת "תחילת פסקה" רק כשהבסיס אינו חלק מפסקה (itemId === mit_id) */
+    baseItemMitId?: string;
     /** כל הפריטים שמקושרים לפריט הזה – מכל התרגומים (לא רק מאותו סוג) */
     existingLinked: ExistingLinkedEntry[];
     translations: TranslationOption[];
@@ -42,6 +44,7 @@ export function AddTranslationModal({
     onClose,
     baseItemId,
     baseContentPreview,
+    baseItemMitId,
     existingLinked,
     translations,
     currentTranslationId,
@@ -70,6 +73,8 @@ export function AddTranslationModal({
 
     const content = (form.content ?? "").toString().trim();
     const canSubmit = targetTranslationId && content.length > 0;
+    /** פריט הבסיס אינו חלק מפסקה (itemId === mit_id) – אז שואלים "תחילת פסקה?" */
+    const showStartOfParagraph = baseItemMitId != null && baseItemMitId !== "" && baseItemId === baseItemMitId;
 
     /** קיבוץ לפי תרגום – להצגת "כל התרגומים המקושרים" */
     const byTranslation: Record<string, ExistingLinkedEntry[]> = {};
@@ -165,6 +170,20 @@ export function AddTranslationModal({
                                     );
                                 })}
                             </div>
+                        </div>
+                    )}
+
+                    {/* תחילת פסקה – רק כשפריט הבסיס אינו חלק מפסקה */}
+                    {showStartOfParagraph && (
+                        <div className="p-2 bg-amber-50 border border-amber-200 rounded">
+                            <label className="flex items-center gap-2 text-[11px] text-gray-700" title="אם סומן – פריט התרגום יקבל את אותו mit_id כמו פריט הבסיס (תחילת פסקה). אם לא – mit_id יהיה שווה ל-itemId של התרגום.">
+                                <input
+                                    type="checkbox"
+                                    checked={!!form.isStartOfParagraph}
+                                    onChange={(e) => onFormFieldChange("isStartOfParagraph", e.target.checked)}
+                                />
+                                <span>תחילת פסקה (פריט התרגום מתחיל פסקה כמו הבסיס)</span>
+                            </label>
                         </div>
                     )}
 

@@ -4,7 +4,7 @@
  * מציג את כל התרגומים המקושרים לפריט (מכל התרגומים), מיקום ויזואלי, וטופס מלא עם כל המאפיינים.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Entity } from "@firecms/cloud";
 import { ITEM_TYPE_OPTIONS, TITLE_TYPE_OPTIONS, ITEM_FIELD_HELP } from "../constants/itemFields";
 
@@ -58,11 +58,13 @@ export function AddTranslationModal({
     onOpenDateSetIdConfig,
 }: AddTranslationModalProps) {
     const [showProps, setShowProps] = useState(false);
+    const onLoadRef = useRef(onLoadTargetPartItems);
+    onLoadRef.current = onLoadTargetPartItems;
 
     useEffect(() => {
-        if (!open || !targetTranslationId || !onLoadTargetPartItems) return;
-        onLoadTargetPartItems(targetTranslationId);
-    }, [open, targetTranslationId, onLoadTargetPartItems]);
+        if (!open || !targetTranslationId) return;
+        onLoadRef.current?.(targetTranslationId);
+    }, [open, targetTranslationId]);
 
     if (!open) return null;
 

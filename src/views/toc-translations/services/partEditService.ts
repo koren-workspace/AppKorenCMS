@@ -13,6 +13,9 @@ import { Entity } from "@firecms/cloud";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import { chunkArray, mitIdBetween } from "../utils/itemUtils";
 
+/** נזרק כשאין מקום פנוי בין הפריטים (לא עוקפים) */
+export const NO_SPACE_BETWEEN_ITEMS = "NO_SPACE_BETWEEN_ITEMS";
+
 /** ממשק מינימלי ל-DataSource (fetchCollection, saveEntity, deleteEntity) – מאפשר טסטים עם mock */
 type DataSource = {
     fetchCollection: (opts: any) => Promise<Entity<any>[]>;
@@ -36,6 +39,9 @@ export type FetchPartResult = {
     initialValues: Record<string, any>;
     /** פריטי הבסיס (0-*) של אותו מקטע – רק כשעורכים תרגום לא-בסיס */
     baseItems?: Entity<any>[];
+    /** מזההים של פריטים שמסומנים deleted: true – לא מוצגים אבל נספרים בחישוב itemId/mit_id לפריטים חדשים */
+    deletedItemIds: string[];
+    deletedMitIds: string[];
 };
 
 /**
@@ -55,11 +61,15 @@ export async function fetchPartWithEnhancements(
     } = params;
 
     const itemsPath = `translations/${translationId}/prayers/${selectedPrayerId}/items`;
-    const sourceEntities = (await dataSource.fetchCollection({
+    const allSourceEntities = await dataSource.fetchCollection({
         path: itemsPath,
         collection: itemsCollection,
         filter: { partId: ["==", partId] },
-    })).filter((e) => e.values?.deleted !== true);
+    });
+    const sourceEntities = allSourceEntities.filter((e) => e.values?.deleted !== true);
+    const deletedEntities = allSourceEntities.filter((e) => e.values?.deleted === true);
+    const deletedItemIds = deletedEntities.map((e) => e.values?.itemId).filter((id): id is string => !!id);
+    const deletedMitIds = deletedEntities.map((e) => e.values?.mit_id).filter((id): id is string => !!id);
 
     const sorted = [...sourceEntities].sort(
         (a: any, b: any) =>
@@ -121,7 +131,7 @@ export async function fetchPartWithEnhancements(
         }
     }
 
-    return { sorted, enhancementsMap, initialValues, baseItems };
+    return { sorted, enhancementsMap, initialValues, baseItems, deletedItemIds, deletedMitIds };
 }
 
 /** path ל-items (translations/.../prayers/.../items), רשימת IDs ששונו, וערכים מקומיים */
@@ -263,6 +273,8 @@ export type CreateTranslationItemParams = {
     reference?: string;
     specialSign?: string;
     dateSetId?: string;
+    /** נקרא פעם אחת לפני ניסיון ערכים עשרוניים (כשאין מקום שלם) */
+    onAboutToTryDecimals?: () => void;
 };
 
 /** תוצאה מ-createTranslationItem – מזההים ללוג שינויים */
@@ -297,6 +309,7 @@ export async function createTranslationItem(
         reference,
         specialSign,
         dateSetId,
+        onAboutToTryDecimals,
     } = params;
 
     const path = `translations/${targetTranslationId}/prayers/${selectedPrayerId}/items`;
@@ -315,6 +328,7 @@ export async function createTranslationItem(
     let idAfter: string | null = null;
     let itemIdBefore: string | null = null;
     let itemIdAfter: string | null = null;
+
 
     if (afterItemId == null || afterItemId === "") {
         if (linkedToBase.length > 0) {
@@ -337,11 +351,63 @@ export async function createTranslationItem(
         }
     }
 
+    // תרגום לא יקבל itemId קטן מפריט הבסיס – כך המיקום יישאר לוגי ביחס לבסיס
+    const baseNum = Number(baseItemId);
+    if (!Number.isNaN(baseNum)) {
+        const beforeNum = itemIdBefore != null && itemIdBefore !== "" ? Number(itemIdBefore) : NaN;
+        const afterNum = itemIdAfter != null && itemIdAfter !== "" ? Number(itemIdAfter) : NaN;
+        if (Number.isNaN(beforeNum) || beforeNum < baseNum) {
+            itemIdBefore = baseItemId;
+        }
+        if (!Number.isNaN(afterNum) && afterNum <= baseNum) {
+            itemIdAfter = null;
+        }
+    }
+
     const newMitId = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
     const existingIds = new Set(allItems.map((e: any) => e.values?.itemId).filter(Boolean));
     let newItemId = mitIdBetween(itemIdBefore ?? undefined, itemIdAfter ?? undefined);
+
+    const itemIdBeforeNum = itemIdBefore != null && itemIdBefore !== "" ? Number(itemIdBefore) : NaN;
+    const itemIdAfterNum = itemIdAfter != null && itemIdAfter !== "" ? Number(itemIdAfter) : NaN;
+    const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
+
+    const tryDecimalSlot = (value: number): string | null => {
+        const s = value === Math.floor(value) ? `${value}` : String(value);
+        return !existingIds.has(s) ? s : null;
+    };
+
     while (existingIds.has(newItemId)) {
-        newItemId = String((Number(newItemId) || 0) + 1);
+        const nextNum = (Number(newItemId) || 0) + 1;
+        if (!Number.isNaN(itemIdAfterNum) && nextNum >= itemIdAfterNum) {
+            onAboutToTryDecimals?.();
+            let fallbackStr: string | null = null;
+            if (!Number.isNaN(itemIdBeforeNum) && itemIdBeforeNum < itemIdAfterNum) {
+                for (const o of offsets) {
+                    const v = itemIdBeforeNum + o;
+                    if (v < itemIdAfterNum) {
+                        fallbackStr = tryDecimalSlot(v);
+                        if (fallbackStr) break;
+                    }
+                }
+            }
+            if (!fallbackStr && !Number.isNaN(itemIdAfterNum)) {
+                for (const o of offsets) {
+                    const v = itemIdAfterNum - o;
+                    if (Number.isNaN(itemIdBeforeNum) || v > itemIdBeforeNum) {
+                        fallbackStr = tryDecimalSlot(v);
+                        if (fallbackStr) break;
+                    }
+                }
+            }
+            if (fallbackStr) {
+                newItemId = fallbackStr;
+            } else {
+                throw new Error(NO_SPACE_BETWEEN_ITEMS);
+            }
+            break;
+        }
+        newItemId = String(nextNum);
     }
 
     const values: Record<string, any> = {

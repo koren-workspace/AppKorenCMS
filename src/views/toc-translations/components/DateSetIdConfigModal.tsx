@@ -19,12 +19,16 @@ export type DateSetIdConfigModalProps = {
     onClose: () => void;
     /** מקור נתונים (dataSource) ל-Firestore */
     dataSource: { fetchCollection: (opts: any) => Promise<any[]>; saveEntity: (opts: any) => Promise<any> };
-    /** לאחר resolve: מחזיר את ה-dateSetId (למשל "100" לתמיד) */
-    onSelect: (dateSetId: string) => void;
+    /** לאחר resolve: מחזיר את ה-dateSetId ואת תשובת "המשך פסקה?" */
+    onSelect: (dateSetId: string, isContinuation: boolean) => void;
     /** כותרת מודל (למשל "הגדר סט תאריכים למקטע") */
     title?: string;
     /** כשמוגדר – טוען את רשומת הלוח עם ה-ID ומציג את המאפיינים לעריכה */
     initialDateSetId?: string;
+    /** האם להציג שאלת "המשך פסקה?" (רק כשמוסיפים פריט אחרי פריט קיים) */
+    showParagraphQuestion?: boolean;
+    /** תוכן הפריט שמעל – לתצוגה מקדימה ליד השאלה */
+    prevItemContent?: string;
 };
 
 const WEEKDAYS_HINT = "ימי שבוע 1–7 (מופרדים בפסיק), למשל 1,7 = ראשון ושבת";
@@ -36,14 +40,18 @@ export function DateSetIdConfigModal({
     onSelect,
     title = "הגדר סט תאריכים (dateSetId)",
     initialDateSetId,
+    showParagraphQuestion = false,
+    prevItemContent,
 }: DateSetIdConfigModalProps) {
     const [form, setForm] = useState<DateSetIdFormValues>(defaultDateSetIdFormValues);
     const [saving, setSaving] = useState(false);
     const [loadingInitial, setLoadingInitial] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isContinuation, setIsContinuation] = useState(false);
 
     useEffect(() => {
         if (!open) return;
+        setIsContinuation(false);
         if (initialDateSetId) {
             setLoadingInitial(true);
             setError(null);
@@ -68,7 +76,7 @@ export function DateSetIdConfigModal({
 
     /** תמיד – מקצה dateSetId 100 (מוצג תמיד) */
     const handleAlways = () => {
-        onSelect("100");
+        onSelect("100", isContinuation);
         onClose();
     };
 
@@ -77,7 +85,7 @@ export function DateSetIdConfigModal({
         setError(null);
         try {
             const { dateSetId } = await resolveDateSetId(dataSource, form);
-            onSelect(dateSetId);
+            onSelect(dateSetId, isContinuation);
             onClose();
         } catch (e) {
             setError(e instanceof Error ? e.message : "שגיאה בשמירת סט תאריכים");
@@ -89,10 +97,30 @@ export function DateSetIdConfigModal({
     if (!open) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" dir="rtl">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" dir="rtl">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
                 <div className="p-4 border-b font-bold text-gray-800">{title}</div>
                 <div className="p-4 overflow-auto space-y-3 flex-1 text-sm">
+                    {showParagraphQuestion && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            {prevItemContent && (
+                                <p className="text-xs text-gray-500 mb-2 line-clamp-1">
+                                    פריט קודם: <span className="italic text-gray-700">{prevItemContent}</span>
+                                </p>
+                            )}
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={isContinuation}
+                                    onChange={(e) => setIsContinuation(e.target.checked)}
+                                    className="w-4 h-4 accent-blue-600"
+                                />
+                                <span className="text-sm font-medium text-blue-800">
+                                    המשך פסקה של הפריט הקודם
+                                </span>
+                            </label>
+                        </div>
+                    )}
                     {loadingInitial ? (
                         <p className="text-gray-500">טוען נתוני סט תאריכים…</p>
                     ) : (

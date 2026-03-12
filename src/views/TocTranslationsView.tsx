@@ -18,6 +18,7 @@ import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNav
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
 import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
 import { DateSetIdConfigModal } from "./toc-translations/components/DateSetIdConfigModal";
+import { AddItemModal } from "./toc-translations/components/AddItemModal";
 import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
 import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
@@ -175,6 +176,18 @@ export function TocTranslationsView() {
                 onSplitPart={partEdit.openSplitPartModal}
                 onMoveItemsToPart={partEdit.openMoveToPartModal}
             />
+            <AddItemModal
+                open={partEdit.addItemModalOpen}
+                onClose={partEdit.closeAddItemModal}
+                isInstruction={partEdit.addItemIsInstruction}
+                form={partEdit.addItemForm}
+                onFormChange={partEdit.setAddItemFormField}
+                showParagraphQuestion={partEdit.addItemShowParagraphQuestion}
+                prevItemContent={partEdit.addItemPrevItemContent}
+                onConfirm={partEdit.confirmAddItemModal}
+                onOpenDateSetIdConfig={partEdit.openDateSetIdFromAddItemModal}
+                saving={partEdit.saving}
+            />
             <DateSetIdConfigModal
                 open={partEdit.dateSetIdModalOpen}
                 onClose={partEdit.closeDateSetIdModal}
@@ -182,6 +195,8 @@ export function TocTranslationsView() {
                 onSelect={partEdit.onDateSetIdSelected}
                 title={partEdit.dateSetIdModalTitle}
                 initialDateSetId={partEdit.dateSetIdInitialForEdit}
+                showParagraphQuestion={partEdit.showParagraphQuestionInModal}
+                prevItemContent={partEdit.paragraphModalPrevItemContent}
             />
             <AddTranslationModal
                 open={partEdit.addTranslationOpen}

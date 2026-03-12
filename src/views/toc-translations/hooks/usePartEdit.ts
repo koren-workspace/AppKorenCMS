@@ -26,12 +26,14 @@ import {
     createTranslationItem,
     splitPartItems,
     moveItemsToPart,
+    NO_SPACE_BETWEEN_ITEMS,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
 import { mitIdBetween } from "../utils/itemUtils";
 import { LOGGED_FIELDS } from "../constants/itemFields";
+import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
 
 /** הקשר הניווט – מועבר מ-useTocNavigation כדי לדעת איזה תרגום/תפילה נבחרו */
 export type PartEditContext = {
@@ -143,10 +145,21 @@ export function usePartEdit(context: PartEditContext) {
 
     /** פריטים שסומנו למחיקה – נמחקים ב-Firestore רק בלחיצה על "שמור מקטע" */
     const [pendingDeletes, setPendingDeletes] = useState<Array<{ entity: Entity<any>; itemId: string }>>([]);
+    /** מזההים של פריטים עם deleted: true בשרת – לא מוצגים אבל נספרים בחישוב itemId/mit_id לפריטים חדשים */
+    const [deletedIdsFromServer, setDeletedIdsFromServer] = useState<{ itemIds: string[]; mitIds: string[] }>({
+        itemIds: [],
+        mitIds: [],
+    });
+
+    /** מודל "הוסף פריט" – נפתח תחילה עם כל המאפיינים + המשך פסקה + dateSetId (ברירת מחדל 100) */
+    const [addItemModalOpen, setAddItemModalOpen] = useState(false);
+    const [addItemForm, setAddItemForm] = useState<AddItemFormValues>(defaultAddItemForm(false));
+    /** כשפותחים מודל dateSetId מתוך הוספת פריט – שומרים את סוג ההוספה (part/instruction) */
+    const [addItemDateSetIdSource, setAddItemDateSetIdSource] = useState<"part" | "instruction" | null>(null);
 
     /** מודל הגדרת dateSetId לפני הוספת מקטע/הוראה או בעריכת מקטע קיים */
     const [dateSetIdModalOpen, setDateSetIdModalOpen] = useState(false);
-    const [pendingAddKind, setPendingAddKind] = useState<"part" | "instruction" | "addTranslation" | "edit" | null>(null);
+    const [pendingAddKind, setPendingAddKind] = useState<"part" | "instruction" | "addTranslation" | "edit" | "addItemDateSetId" | null>(null);
     const [pendingAddIndex, setPendingAddIndex] = useState(0);
     /** בעריכת dateSetId של מקטע קיים: מזהה הפריט וה-dateSetId הנוכחי (לטעינה במודל) */
     const [pendingEditEntityId, setPendingEditEntityId] = useState<string | null>(null);
@@ -197,6 +210,7 @@ export function usePartEdit(context: PartEditContext) {
         setAllItems([]);
         setBaseItems([]);
         setNeighborBounds({});
+        setDeletedIdsFromServer({ itemIds: [], mitIds: [] });
         setLocalValues({});
         setEnhancements({});
         setChangedIds(new Set());
@@ -229,6 +243,9 @@ export function usePartEdit(context: PartEditContext) {
             dateSetId: "",
         });
         setPendingDeletes([]);
+        setAddItemModalOpen(false);
+        setPendingAddKind(null);
+        setAddItemDateSetIdSource(null);
     }, [currentTocData, currentTranslationData, selectedPrayerId]);
 
     /** מחלץ את רשימת המקטעים לתפילה הנוכחית מתוך currentTocData לפי translationId */
@@ -244,10 +261,24 @@ export function usePartEdit(context: PartEditContext) {
         return [];
     };
 
-    /** טוען פריטי מקטע + enhancements + גבולות מהמקטעים הסמוכים (במקביל) */
-    const fetchItemsWithEnhancements = async (partId: string) => {
+    /** טוען פריטי מקטע + enhancements + גבולות מהמקטעים הסמוכים (במקביל).
+     * options.preserveLocalEdits: כשמוסיפים תרגום – מרענן רק enhancements אבל שומר עריכות לא שמורות. */
+    const fetchItemsWithEnhancements = async (
+        partId: string,
+        options?: { preserveLocalEdits?: boolean }
+    ) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData)
             return;
+        const preserveEdits =
+            options?.preserveLocalEdits === true && partId === selectedGroupId;
+        const savedChangedIds = preserveEdits ? new Set(changedIds) : new Set<string>();
+        const savedLocalValues = preserveEdits ? { ...localValues } : {};
+        const savedAllItems = preserveEdits ? [...allItems] : [];
+        const savedEnhancementChangedIds = preserveEdits ? new Set(enhancementChangedIds) : new Set<string>();
+        const savedEnhancementLocalValues = preserveEdits ? { ...enhancementLocalValues } : {};
+        const savedEnhancementTranslationIds = preserveEdits ? { ...enhancementTranslationIds } : {};
+        const savedOriginalValues = preserveEdits ? { ...originalValues } : {};
+        const savedOriginalEnhancementValues = preserveEdits ? { ...originalEnhancementValues } : {};
         setLoading(true);
         try {
             const translationId = currentTranslationData.translationId;
@@ -291,24 +322,89 @@ export function usePartEdit(context: PartEditContext) {
                     first.values?.mit_id ?? first.values?.itemId ?? undefined;
             }
 
-            setAllItems(result.sorted);
+            const serverItemIds = new Set(
+                result.sorted.map((e: Entity<any>) => e.values?.itemId ?? e.id)
+            );
+            const mergedAllItems =
+                preserveEdits && savedAllItems.length > 0
+                    ? (() => {
+                          let list = [...result.sorted];
+                          for (let i = 0; i < savedAllItems.length; i++) {
+                              const entity = savedAllItems[i];
+                              if (!entity.id.startsWith("new_")) continue;
+                              const itemId =
+                                  savedLocalValues[entity.id]?.itemId ?? entity.values?.itemId;
+                              if (serverItemIds.has(itemId)) continue;
+                              const nextInSaved = savedAllItems[i + 1];
+                              const insertBeforeId = nextInSaved?.id;
+                              const pos = insertBeforeId
+                                  ? list.findIndex((e: Entity<any>) => e.id === insertBeforeId)
+                                  : -1;
+                              if (pos >= 0) list.splice(pos, 0, entity);
+                              else list.push(entity);
+                          }
+                          return list;
+                      })()
+                    : result.sorted;
+            setAllItems(mergedAllItems);
             setBaseItems(result.baseItems ?? []);
             setEnhancements(result.enhancementsMap);
-            setLocalValues(result.initialValues);
             setNeighborBounds(bounds);
             setSelectedGroupId(partId);
-            setChangedIds(new Set());
-            setEnhancementLocalValues({});
-            setEnhancementChangedIds(new Set());
-            setEnhancementTranslationIds({});
+            setDeletedIdsFromServer({
+                itemIds: result.deletedItemIds ?? [],
+                mitIds: result.deletedMitIds ?? [],
+            });
 
-            // שמירת snapshot של ערכי הפריטים לפני עריכה (לחישוב diff ביומן)
-            const origMap: Record<string, any> = {};
-            result.sorted.forEach((item) => { origMap[item.id] = { ...item.values }; });
-            setOriginalValues(origMap);
-            const origEnhMap: Record<string, any> = {};
-            Object.values(result.enhancementsMap).flat().forEach((e) => { origEnhMap[e.id] = { ...e.values }; });
-            setOriginalEnhancementValues(origEnhMap);
+            if (preserveEdits) {
+                // שומר עריכות לא שמורות: mergים את הנתונים מהשרת עם העריכה המקומית שנתפסה לפני הטעינה.
+                // פריטים ש"new_xxx" שנשמרו עכשיו מגיעים מהשרת עם id=itemId – מעבירים את העריכה המקומית למפתח החדש.
+                const mergedLocal = { ...result.initialValues };
+                const mergedChangedIds = new Set<string>(savedChangedIds);
+                savedChangedIds.forEach((id) => {
+                    const val = savedLocalValues[id];
+                    if (val == null) return;
+                    const isNewSaved = id.startsWith("new_") && val.itemId && serverItemIds.has(val.itemId);
+                    const key = isNewSaved ? val.itemId : id;
+                    mergedLocal[key] = val;
+                    if (isNewSaved) {
+                        mergedChangedIds.delete(id);
+                        // לא מוסיפים את key ל-changedIds – הפריט נשמר עכשיו בשרת
+                    }
+                });
+                setLocalValues(mergedLocal);
+                setChangedIds(mergedChangedIds);
+                const mergedEnhLocal: Record<string, any> = {};
+                Object.values(result.enhancementsMap).flat().forEach((e: any) => {
+                    if (savedEnhancementChangedIds.has(e.id) && savedEnhancementLocalValues[e.id] != null)
+                        mergedEnhLocal[e.id] = savedEnhancementLocalValues[e.id];
+                });
+                setEnhancementLocalValues(mergedEnhLocal);
+                setEnhancementChangedIds(savedEnhancementChangedIds);
+                setEnhancementTranslationIds(savedEnhancementTranslationIds);
+                const mergedOrig: Record<string, any> = { ...savedOriginalValues };
+                result.sorted.forEach((item) => {
+                    if (!savedChangedIds.has(item.id)) mergedOrig[item.id] = { ...item.values };
+                });
+                setOriginalValues(mergedOrig);
+                const mergedOrigEnh: Record<string, any> = { ...savedOriginalEnhancementValues };
+                Object.values(result.enhancementsMap).flat().forEach((e: any) => {
+                    if (!savedEnhancementChangedIds.has(e.id)) mergedOrigEnh[e.id] = { ...e.values };
+                });
+                setOriginalEnhancementValues(mergedOrigEnh);
+            } else {
+                setLocalValues(result.initialValues);
+                setChangedIds(new Set());
+                setEnhancementLocalValues({});
+                setEnhancementChangedIds(new Set());
+                setEnhancementTranslationIds({});
+                const origMap: Record<string, any> = {};
+                result.sorted.forEach((item) => { origMap[item.id] = { ...item.values }; });
+                setOriginalValues(origMap);
+                const origEnhMap: Record<string, any> = {};
+                Object.values(result.enhancementsMap).flat().forEach((e) => { origEnhMap[e.id] = { ...e.values }; });
+                setOriginalEnhancementValues(origEnhMap);
+            }
         } catch (err) {
             console.error(`${LOG_PREFIX} Part fetch failed`, err);
             snackbar.open({
@@ -672,6 +768,22 @@ export function usePartEdit(context: PartEditContext) {
     };
 
     /**
+     * מחזיר את ה-itemId של הפריט בהקשר של הרשימה הנוכחית (תרגום או בסיס).
+     * כשעורכים תרגום: מעדיפים (1) item.id אם נראה כמו itemId, (2) values.itemId אם שונה מבסיס, (3) בסיס.
+     */
+    const getItemIdInCurrentContext = (item: Entity<any>): string => {
+        if (baseItems.length > 0) {
+            const docId = item.id;
+            if (docId && /^\d+$/.test(String(docId))) return String(docId);
+            const effective = getEffectiveItemId(item);
+            const baseId = getItemIdForPosition(item);
+            if (effective && effective !== baseId) return effective;
+            if (effective) return effective;
+        }
+        return getEffectiveItemId(item) || getItemIdForPosition(item) || "";
+    };
+
+    /**
      * מחזיר mit_id רלוונטי למיקום – כשעורכים תרגום ויש baseItems: פריט מקושר לבסיס → mit_id של הפריט בבסיס;
      * אחרת (בסיס או הוראה) → mit_id של הפריט עצמו.
      */
@@ -747,46 +859,238 @@ export function usePartEdit(context: PartEditContext) {
             idAfter = neighborBounds.nextFirstMitId;
         }
 
-        return mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+        const takenMitIds = new Set<string>(
+            [
+                ...allItems.map((i) => getEffectiveMitId(i)),
+                ...deletedIdsFromServer.mitIds,
+                ...pendingDeletes.map((p) => getEffectiveMitId(p.entity)),
+            ].filter((m) => m != null && m !== "")
+        );
+        while (takenMitIds.has(result)) {
+            result = String((Number(result) || 0) + 0.5);
+        }
+        return result;
     };
 
     /**
-     * מחשב itemId לפריט חדש במיקום index – ערך "בין" שני שכנים + ייחודיות.
-     * בקצוות הרשימה (index=0 או index=allItems.length) נעזרים ב-neighborBounds
-     * כדי לא ליפול ל-"0" כשהמקטע ריק או כשמוסיפים לפני/אחרי כל הפריטים.
+     * מחזיר itemId רלוונטי למיקום – כשעורכים תרגום ויש baseItems: פריט מקושר לבסיס → itemId של הפריט בבסיס;
+     * אחרת (בסיס או הוראה) → itemId של הפריט עצמו.
      */
-    const computeItemIdForIndex = (index: number): string => {
-        const itemIdBefore =
-            index > 0
-                ? getEffectiveItemId(allItems[index - 1])
-                : (neighborBounds.prevLastItemId ?? null);
-        const itemIdAfter =
-            index < allItems.length
-                ? getEffectiveItemId(allItems[index])
-                : (neighborBounds.nextFirstItemId ?? null);
-        const existingIds = new Set(
-            allItems.map((i) => getEffectiveItemId(i)).filter((id) => id !== "")
-        );
-        let candidate = mitIdBetween(itemIdBefore || undefined, itemIdAfter || undefined);
-        while (existingIds.has(candidate)) {
-            candidate = String((Number(candidate) || 0) + 1);
+    const getItemIdForPosition = (item: Entity<any>): string => {
+        const effectiveItemId = getEffectiveItemId(item);
+        if (baseItems.length === 0) return effectiveItemId;
+        const link = localValues[item.id]?.linkedItem ?? item.values?.linkedItem;
+        const baseItemId = Array.isArray(link) ? link[0] : link;
+        if (baseItemId) {
+            const baseItem = baseItems.find(
+                (b) => (localValues[b.id]?.itemId ?? b.values?.itemId) === baseItemId
+            );
+            if (baseItem) return getEffectiveItemId(baseItem);
         }
-        return candidate;
+        return effectiveItemId;
     };
 
-    /** מוסיף פריט חדש (מזהה new_xxx מקומי) במקום index; עם dateSetId אופציונלי (אחרי בחירה במודל) */
-    const doAddNewItemAt = (index: number, dateSetId: string) => {
+    /** מחזיר את ה-itemId של פריט הבסיס הבא אחרי baseItemId (לפי סדר baseItems). אם אין – undefined. */
+    const getNextBaseItemIdAfter = (baseItemId: string): string | undefined => {
+        const num = Number(baseItemId);
+        if (Number.isNaN(num) || baseItems.length === 0) return undefined;
+        for (const b of baseItems) {
+            const id = getEffectiveItemId(b);
+            const bNum = Number(id);
+            if (!Number.isNaN(bNum) && bNum > num) return id;
+        }
+        return undefined;
+    };
+
+    /**
+     * מחשב itemId לפריט חדש במיקום index. לוקח בחשבון שכנים מהרשימה + פריטי תרגום מקושרים (enhancements).
+     * onAboutToTryDecimals – נקרא פעם אחת לפני ניסיון ערכים עשרוניים (כשאין מקום שלם).
+     */
+    const computeItemIdForIndex = (index: number, onAboutToTryDecimals?: () => void): string => {
+        let idBefore: string | null = null;
+        let idAfter: string | null | undefined = undefined;
+
+        if (index > 0) {
+            const sliceAbove = allItems.slice(0, index);
+            const idsAbove = sliceAbove
+                .map((i) => getItemIdInCurrentContext(i))
+                .filter((id) => id != null && id !== "");
+            const baseIdsAbove = new Set(sliceAbove.map((i) => getItemIdForPosition(i)).filter((id) => id != null && id !== ""));
+            const enhancementIdsAbove = (Object.values(enhancements).flat() as Entity<any>[])
+                .filter((e) => {
+                    const link = e.values?.linkedItem;
+                    const baseId = Array.isArray(link) ? link[0] : link;
+                    return baseId != null && baseIdsAbove.has(baseId);
+                })
+                .map((e) => (e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")))
+                .filter((id) => id != null && id !== "");
+            const allIdsAbove = [...idsAbove, ...enhancementIdsAbove];
+            idBefore = allIdsAbove.length > 0 ? allIdsAbove.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : (getItemIdForPosition(allItems[index - 1]) || null);
+        } else if (neighborBounds.prevLastItemId) {
+            idBefore = neighborBounds.prevLastItemId;
+        }
+
+        if (index < allItems.length) {
+            const sliceBelow = allItems.slice(index);
+            const idsBelow = sliceBelow
+                .map((i) => getItemIdInCurrentContext(i))
+                .filter((id) => id != null && id !== "");
+            const baseIdsBelow = new Set(sliceBelow.map((i) => getItemIdForPosition(i)).filter((id) => id != null && id !== ""));
+            const enhancementIdsBelow = (Object.values(enhancements).flat() as Entity<any>[])
+                .filter((e) => {
+                    const link = e.values?.linkedItem;
+                    const baseId = Array.isArray(link) ? link[0] : link;
+                    return baseId != null && baseIdsBelow.has(baseId);
+                })
+                .map((e) => (e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")))
+                .filter((id) => id != null && id !== "");
+            const allIdsBelow = [...idsBelow, ...enhancementIdsBelow];
+            idAfter = allIdsBelow.length > 0 ? allIdsBelow.reduce((a, b) => (Number(a) <= Number(b) ? a : b)) : (getItemIdForPosition(allItems[index]) || undefined);
+        } else if (baseItems.length > 0 && idBefore) {
+            idAfter = getNextBaseItemIdAfter(idBefore) ?? undefined;
+        }
+
+        if ((idAfter === undefined || idAfter === null) && neighborBounds.nextFirstItemId) {
+            idAfter = neighborBounds.nextFirstItemId;
+        }
+
+        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+
+        const fromAllItems = allItems.map((i) => getItemIdInCurrentContext(i)).filter((id) => id != null && id !== "");
+        const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
+        const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
+        const translationIdsInRange: string[] = [];
+        Object.values(enhancements).flat().forEach((e: Entity<any>) => {
+            const link = e.values?.linkedItem;
+            const baseItemId = Array.isArray(link) ? link[0] : link;
+            if (baseItemId == null || baseItemId === "") return;
+            const baseNum = Number(baseItemId);
+            if (Number.isNaN(baseNum)) return;
+            const inRange =
+                (Number.isNaN(idBeforeNum) || baseNum >= idBeforeNum) &&
+                (Number.isNaN(idAfterNum) || baseNum <= idAfterNum);
+            if (!inRange) return;
+            const transItemId = e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "");
+            if (transItemId) translationIdsInRange.push(transItemId);
+        });
+        const takenItemIds = new Set<string>(
+            [
+                ...fromAllItems,
+                ...translationIdsInRange,
+                ...deletedIdsFromServer.itemIds,
+                ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
+            ].filter((id) => id != null && id !== "")
+        );
+
+        const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
+
+        const tryDecimalSlot = (value: number): string | null => {
+            const s = value === Math.floor(value) ? `${value}` : String(value);
+            return !takenItemIds.has(s) ? s : null;
+        };
+
+        while (takenItemIds.has(result)) {
+            const nextNum = (Number(result) || 0) + 1;
+            if (!Number.isNaN(idAfterNum) && nextNum >= idAfterNum) {
+                onAboutToTryDecimals?.();
+                let fallbackStr: string | null = null;
+                if (!Number.isNaN(idBeforeNum) && idBeforeNum < idAfterNum) {
+                    for (const o of offsets) {
+                        const v = idBeforeNum + o;
+                        if (v < idAfterNum) {
+                            fallbackStr = tryDecimalSlot(v);
+                            if (fallbackStr) break;
+                        }
+                    }
+                }
+                if (!fallbackStr && !Number.isNaN(idAfterNum)) {
+                    for (const o of offsets) {
+                        const v = idAfterNum - o;
+                        if (Number.isNaN(idBeforeNum) || v > idBeforeNum) {
+                            fallbackStr = tryDecimalSlot(v);
+                            if (fallbackStr) break;
+                        }
+                    }
+                }
+                if (fallbackStr) {
+                    result = fallbackStr;
+                } else {
+                    throw new Error(NO_SPACE_BETWEEN_ITEMS);
+                }
+                break;
+            }
+            result = String(nextNum);
+        }
+
+        return result;
+    };
+
+    /**
+     * מחשב mit_id לפריט חדש לפי תשובת המשתמש:
+     *   המשך פסקה → mit_id = mit_id של הפריט הקודם (ראש הפסקה)
+     *   לא המשך   → mit_id = itemId של הפריט החדש עצמו
+     */
+    const resolveMitIdForNew = (index: number, computedItemId: string, isContinuation: boolean): string => {
+        if (isContinuation && index > 0 && allItems[index - 1]) {
+            const prevItem = allItems[index - 1];
+            const prevMitId = localValues[prevItem.id]?.mit_id ?? prevItem.values?.mit_id;
+            if (prevMitId != null && String(prevMitId).trim() !== "") return String(prevMitId);
+        }
+        return computedItemId;
+    };
+
+    /** מוסיף פריט חדש (מזהה new_xxx מקומי) במקום index. מחזיר false אם אין מקום (שגיאה), אחרת void. */
+    const doAddNewItemAt = (index: number, dateSetId: string, isContinuation: boolean, form?: AddItemFormValues): void | false => {
+        let computedItemId: string;
+        try {
+            computedItemId = computeItemIdForIndex(index, () => {
+                snackbar.open({
+                    type: "info",
+                    message: "אין מקום פנוי – מחפש מזהה עשרוני בין הפריטים…",
+                });
+            });
+        } catch (e) {
+            if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
+                snackbar.open({
+                    type: "error",
+                    message: "אין מקום פנוי בין הפריטים – לא ניתן להוסיף ללא עקיפת הסדר.",
+                });
+                return false;
+            }
+            throw e;
+        }
+        if (computedItemId.includes(".")) {
+            snackbar.open({
+                type: "info",
+                message: "הפריט נוסף עם מזהה עשרוני בשל צפיפות בין פריטים.",
+            });
+        }
         const newEntityId = `new_${Date.now()}`;
-        const computedItemId = computeItemIdForIndex(index);
         const newItemValues: Record<string, any> = {
-            content: "",
-            type: "body",
+            content: form?.content ?? "",
+            type: form?.type ?? "body",
             partId: selectedGroupId,
             itemId: computedItemId,
-            mit_id: computeMitIdForIndex(index),
+            mit_id: resolveMitIdForNew(index, computedItemId, isContinuation),
             timestamp: Date.now(),
         };
         if (dateSetId) newItemValues.dateSetId = dateSetId;
+        if (form) {
+            if (form.titleType !== undefined) newItemValues.titleType = form.titleType;
+            if (form.title !== undefined) newItemValues.title = form.title;
+            if (form.fontTanach !== undefined) newItemValues.fontTanach = form.fontTanach;
+            if (form.noSpace !== undefined) newItemValues.noSpace = form.noSpace;
+            if (form.block !== undefined) newItemValues.block = form.block;
+            if (form.firstInPage !== undefined) newItemValues.firstInPage = form.firstInPage;
+            if (form.specialDate !== undefined) newItemValues.specialDate = form.specialDate;
+            if (form.cohanim !== undefined) newItemValues.cohanim = form.cohanim;
+            if (form.hazan !== undefined) newItemValues.hazan = form.hazan;
+            if (form.minyan !== undefined) newItemValues.minyan = form.minyan;
+            if (form.role !== undefined) newItemValues.role = form.role;
+            if (form.reference !== undefined) newItemValues.reference = form.reference;
+            if (form.specialSign !== undefined) newItemValues.specialSign = form.specialSign;
+        }
         const updated = [...allItems];
         updated.splice(index, 0, {
             id: newEntityId,
@@ -799,19 +1103,57 @@ export function usePartEdit(context: PartEditContext) {
         setTimeout(() => setLastAddedItemId(null), 300);
     };
 
-    /** מוסיף פריט הוראה חדש; עם dateSetId אופציונלי */
-    const doAddNewInstructionAt = (index: number, dateSetId: string) => {
+    /** מוסיף פריט הוראה חדש. מחזיר false אם אין מקום (שגיאה), אחרת void. */
+    const doAddNewInstructionAt = (index: number, dateSetId: string, isContinuation: boolean, form?: AddItemFormValues): void | false => {
+        let computedItemId: string;
+        try {
+            computedItemId = computeItemIdForIndex(index, () => {
+                snackbar.open({
+                    type: "info",
+                    message: "אין מקום פנוי – מחפש מזהה עשרוני בין הפריטים…",
+                });
+            });
+        } catch (e) {
+            if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
+                snackbar.open({
+                    type: "error",
+                    message: "אין מקום פנוי בין הפריטים – לא ניתן להוסיף ללא עקיפת הסדר.",
+                });
+                return false;
+            }
+            throw e;
+        }
+        if (computedItemId.includes(".")) {
+            snackbar.open({
+                type: "info",
+                message: "הפריט נוסף עם מזהה עשרוני בשל צפיפות בין פריטים.",
+            });
+        }
         const newEntityId = `new_${Date.now()}`;
-        const computedItemId = computeItemIdForIndex(index);
         const newItemValues: Record<string, any> = {
-            content: "",
-            type: "instructions",
+            content: form?.content ?? "",
+            type: form?.type ?? "instructions",
             partId: selectedGroupId,
             itemId: computedItemId,
-            mit_id: computeMitIdForIndex(index),
+            mit_id: resolveMitIdForNew(index, computedItemId, isContinuation),
             timestamp: Date.now(),
         };
         if (dateSetId) newItemValues.dateSetId = dateSetId;
+        if (form) {
+            if (form.titleType !== undefined) newItemValues.titleType = form.titleType;
+            if (form.title !== undefined) newItemValues.title = form.title;
+            if (form.fontTanach !== undefined) newItemValues.fontTanach = form.fontTanach;
+            if (form.noSpace !== undefined) newItemValues.noSpace = form.noSpace;
+            if (form.block !== undefined) newItemValues.block = form.block;
+            if (form.firstInPage !== undefined) newItemValues.firstInPage = form.firstInPage;
+            if (form.specialDate !== undefined) newItemValues.specialDate = form.specialDate;
+            if (form.cohanim !== undefined) newItemValues.cohanim = form.cohanim;
+            if (form.hazan !== undefined) newItemValues.hazan = form.hazan;
+            if (form.minyan !== undefined) newItemValues.minyan = form.minyan;
+            if (form.role !== undefined) newItemValues.role = form.role;
+            if (form.reference !== undefined) newItemValues.reference = form.reference;
+            if (form.specialSign !== undefined) newItemValues.specialSign = form.specialSign;
+        }
         const updated = [...allItems];
         updated.splice(index, 0, {
             id: newEntityId,
@@ -824,32 +1166,71 @@ export function usePartEdit(context: PartEditContext) {
         setTimeout(() => setLastAddedItemId(null), 300);
     };
 
-    /** פותח מודל בחירת/הגדרת dateSetId ואז מוסיף מקטע במיקום index */
+    /** פותח חלון הוספת פריט (כל המאפיינים + המשך פסקה + dateSetId ברירת מחדל 100) */
     const addNewItemAt = (index: number) => {
         setPendingAddKind("part");
         setPendingAddIndex(index);
-        setDateSetIdModalOpen(true);
+        setAddItemForm(defaultAddItemForm(false));
+        setAddItemModalOpen(true);
     };
 
-    /** פותח מודל בחירת/הגדרת dateSetId ואז מוסיף הוראה במיקום index */
+    /** פותח חלון הוספת הוראה */
     const addNewInstructionAt = (index: number) => {
         setPendingAddKind("instruction");
         setPendingAddIndex(index);
+        setAddItemForm(defaultAddItemForm(true));
+        setAddItemModalOpen(true);
+    };
+
+    const closeAddItemModal = () => {
+        setAddItemModalOpen(false);
+        setPendingAddKind((k) => (k === "part" || k === "instruction" ? null : k));
+        setPendingAddIndex(0);
+    };
+
+    const confirmAddItemModal = () => {
+        const dateSetId = addItemForm.dateSetId?.trim() || "100";
+        let added: void | false = undefined;
+        if (pendingAddKind === "part") {
+            added = doAddNewItemAt(pendingAddIndex, dateSetId, addItemForm.isContinuation, addItemForm);
+        } else if (pendingAddKind === "instruction") {
+            added = doAddNewInstructionAt(pendingAddIndex, dateSetId, addItemForm.isContinuation, addItemForm);
+        }
+        if (added !== false) closeAddItemModal();
+    };
+
+    /** פותח מודל הגדרת dateSetId מתוך חלון הוספת פריט (הערך מתעדכן בטופס) */
+    const openDateSetIdFromAddItemModal = () => {
+        setAddItemDateSetIdSource(pendingAddKind === "part" || pendingAddKind === "instruction" ? pendingAddKind : null);
+        setPendingAddKind("addItemDateSetId");
+        setDateSetIdInitialForEdit(addItemForm.dateSetId?.trim() || undefined);
         setDateSetIdModalOpen(true);
     };
 
     const closeDateSetIdModal = () => {
         setDateSetIdModalOpen(false);
-        setPendingAddKind(null);
+        if (pendingAddKind === "addItemDateSetId") {
+            setPendingAddKind(addItemDateSetIdSource);
+            setAddItemDateSetIdSource(null);
+        } else {
+            setPendingAddKind(null);
+        }
         setPendingEditEntityId(null);
         setDateSetIdInitialForEdit(undefined);
     };
 
-    const onDateSetIdSelected = (dateSetId: string) => {
+    const onDateSetIdSelected = (dateSetId: string, isContinuation: boolean = false) => {
+        if (pendingAddKind === "addItemDateSetId") {
+            setAddItemForm((prev) => ({ ...prev, dateSetId }));
+            setPendingAddKind(addItemDateSetIdSource);
+            setAddItemDateSetIdSource(null);
+            setDateSetIdModalOpen(false);
+            return;
+        }
         if (pendingAddKind === "part") {
-            doAddNewItemAt(pendingAddIndex, dateSetId);
+            doAddNewItemAt(pendingAddIndex, dateSetId, isContinuation);
         } else if (pendingAddKind === "instruction") {
-            doAddNewInstructionAt(pendingAddIndex, dateSetId);
+            doAddNewInstructionAt(pendingAddIndex, dateSetId, isContinuation);
         } else if (pendingAddKind === "addTranslation") {
             setAddTranslationForm((prev) => ({ ...prev, dateSetId }));
         } else if (pendingAddKind === "edit" && pendingEditEntityId) {
@@ -917,7 +1298,7 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationForm((prev) => ({ ...prev, [field]: value }));
     };
 
-    /** טוען פריטי המקטע בתרגום היעד שמקושרים לפריט הבסיס – לקביעת מיקום */
+    /** טוען רק את הפריטים בתרגום היעד שמקושרים לפריט הבסיס הנוכחי – להצגת מיקום (בין אלה בוחרים איפה להוסיף). */
     const loadTargetPartItemsForAddTranslation = async (translationId: string) => {
         if (!selectedPrayerId || !selectedGroupId || !addTranslationBaseItem) return;
         const baseItemId = getEffectiveItemId(addTranslationBaseItem);
@@ -929,11 +1310,28 @@ export function usePartEdit(context: PartEditContext) {
                 selectedPrayerId,
                 selectedGroupId
             );
-            const linked = partItems.filter((e: any) => {
+            const linkedToThisBase = partItems.filter((e: Entity<any>) => {
                 const link = e.values?.linkedItem;
-                return Array.isArray(link) ? link.includes(baseItemId) : link === baseItemId;
+                const linkedId = Array.isArray(link) ? link[0] : link;
+                return linkedId === baseItemId;
             });
-            setAddTranslationTargetLinkedItems(linked);
+            setAddTranslationTargetLinkedItems(linkedToThisBase);
+            // ברירת מחדל: הוסף אחרי הפריט שמקושר לפריט הבסיס הקודם (אם קיים ברשימה), אחרת בהתחלה
+            const baseIndex = baseItems.findIndex(
+                (b) => (localValues[b.id]?.itemId ?? b.values?.itemId) === baseItemId
+            );
+            if (baseIndex > 0) {
+                const prevBaseItemId = localValues[baseItems[baseIndex - 1].id]?.itemId ?? baseItems[baseIndex - 1].values?.itemId;
+                const insertAfter = partItems.find((e: any) => {
+                    const link = e.values?.linkedItem;
+                    return Array.isArray(link) ? link.includes(prevBaseItemId) : link === prevBaseItemId;
+                });
+                const afterId = insertAfter?.values?.itemId ?? insertAfter?.id;
+                const inFilteredList = linkedToThisBase.some((e: Entity<any>) => (e.values?.itemId ?? e.id) === afterId);
+                setAddTranslationInsertAfterId(inFilteredList ? afterId : null);
+            } else {
+                setAddTranslationInsertAfterId(null);
+            }
         } catch (err) {
             console.error(`${LOG_PREFIX} Load target part items failed`, err);
             setAddTranslationTargetLinkedItems([]);
@@ -1113,6 +1511,7 @@ export function usePartEdit(context: PartEditContext) {
             !addTranslationTargetId ||
             !selectedPrayerId ||
             !selectedGroupId ||
+            !currentTranslationData ||
             !currentTocData?.translations?.some((t: any) => t.translationId === addTranslationTargetId)
         )
             return;
@@ -1121,29 +1520,67 @@ export function usePartEdit(context: PartEditContext) {
         const form = addTranslationForm;
         setSaving(true);
         try {
-            const { newItemId, newMitId } = await createTranslationItem(dataSource, {
-                targetTranslationId: addTranslationTargetId,
-                selectedPrayerId,
-                partId: selectedGroupId,
-                baseItemId,
-                afterItemId: addTranslationInsertAfterId,
-                content: (form.content ?? addTranslationContent ?? "").toString().trim(),
-                type: form.type ?? "body",
-                titleType: form.titleType,
-                title: form.title,
-                fontTanach: form.fontTanach,
-                noSpace: form.noSpace,
-                block: form.block,
-                firstInPage: form.firstInPage,
-                specialDate: form.specialDate,
-                cohanim: form.cohanim,
-                hazan: form.hazan,
-                minyan: form.minyan,
-                role: form.role,
-                reference: form.reference,
-                specialSign: form.specialSign,
-                dateSetId: form.dateSetId,
-            });
+            // אם הפריט הבסיס עדיין לא נשמר (new_xxx) – שומרים אותו קודם כדי שהתרגום יתקשר לפריט קיים בשרת
+            const baseIsNew = addTranslationBaseItem.id.startsWith("new_");
+            if (baseIsNew && changedIds.has(addTranslationBaseItem.id)) {
+                const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
+                await savePartItems(dataSource, {
+                    path,
+                    changedIds: Array.from(changedIds),
+                    localValues,
+                });
+                // אחרי השמירה הפריט בשרת עם document id = itemId; הרענון יטען אותו
+            }
+            let newItemId: string;
+            let newMitId: string;
+            try {
+                const result = await createTranslationItem(dataSource, {
+                    targetTranslationId: addTranslationTargetId,
+                    selectedPrayerId,
+                    partId: selectedGroupId,
+                    baseItemId,
+                    afterItemId: addTranslationInsertAfterId,
+                    content: (form.content ?? addTranslationContent ?? "").toString().trim(),
+                    type: form.type ?? "body",
+                    titleType: form.titleType,
+                    title: form.title,
+                    fontTanach: form.fontTanach,
+                    noSpace: form.noSpace,
+                    block: form.block,
+                    firstInPage: form.firstInPage,
+                    specialDate: form.specialDate,
+                    cohanim: form.cohanim,
+                    hazan: form.hazan,
+                    minyan: form.minyan,
+                    role: form.role,
+                    reference: form.reference,
+                    specialSign: form.specialSign,
+                    dateSetId: form.dateSetId,
+                    onAboutToTryDecimals: () => {
+                        snackbar.open({
+                            type: "info",
+                            message: "אין מקום פנוי – מחפש מזהה עשרוני בין הפריטים…",
+                        });
+                    },
+                });
+                newItemId = result.newItemId;
+                newMitId = result.newMitId;
+            } catch (err) {
+                if (err instanceof Error && err.message === NO_SPACE_BETWEEN_ITEMS) {
+                    snackbar.open({
+                        type: "error",
+                        message: "אין מקום פנוי בין הפריטים – לא ניתן להוסיף תרגום ללא עקיפת הסדר.",
+                    });
+                    return;
+                }
+                throw err;
+            }
+            if (newItemId.includes(".")) {
+                snackbar.open({
+                    type: "info",
+                    message: "התרגום נוסף עם מזהה עשרוני בשל צפיפות בין פריטים.",
+                });
+            }
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "create_translation_item",
@@ -1163,7 +1600,8 @@ export function usePartEdit(context: PartEditContext) {
             });
             snackbar.open({ type: "success", message: "תרגום נוסף בהצלחה" });
             closeAddTranslation();
-            if (selectedGroupId) await fetchItemsWithEnhancements(selectedGroupId);
+            if (selectedGroupId)
+                await fetchItemsWithEnhancements(selectedGroupId, { preserveLocalEdits: true });
         } catch (err) {
             console.error(`${LOG_PREFIX} Add translation item failed`, err);
             snackbar.open({ type: "error", message: "שגיאה בהוספת תרגום" });
@@ -1221,17 +1659,54 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationFormField,
         loadTargetPartItemsForAddTranslation,
         submitAddTranslation,
+        // מודל "הוסף פריט" – נפתח תחילה עם כל המאפיינים, המשך פסקה במרכז, dateSetId ברירת מחדל 100
+        addItemModalOpen,
+        addItemForm,
+        setAddItemFormField: (field: keyof AddItemFormValues, value: unknown) =>
+            setAddItemForm((prev) => ({ ...prev, [field]: value })),
+        closeAddItemModal,
+        confirmAddItemModal,
+        openDateSetIdFromAddItemModal,
+        addItemShowParagraphQuestion:
+            (pendingAddKind === "part" || pendingAddKind === "instruction") && pendingAddIndex > 0,
+        addItemPrevItemContent:
+            (pendingAddKind === "part" || pendingAddKind === "instruction") &&
+            pendingAddIndex > 0 &&
+            allItems[pendingAddIndex - 1]
+                ? String(
+                      localValues[allItems[pendingAddIndex - 1].id]?.content ??
+                          allItems[pendingAddIndex - 1].values?.content ??
+                          ""
+                  )
+                : "",
+        addItemIsInstruction: pendingAddKind === "instruction",
+        /** האם להציג שאלת "המשך פסקה?" בתוך מודל dateSetId (רק כשמוסיפים פריט/הוראה ויש פריט מעל) */
+        showParagraphQuestionInModal:
+            (pendingAddKind === "part" || pendingAddKind === "instruction") && pendingAddIndex > 0,
+        /** תוכן הפריט שמעל — לתצוגה מקדימה בתוך המודל */
+        paragraphModalPrevItemContent:
+            (pendingAddKind === "part" || pendingAddKind === "instruction") &&
+            pendingAddIndex > 0 &&
+            allItems[pendingAddIndex - 1]
+                ? String(
+                      localValues[allItems[pendingAddIndex - 1].id]?.content ??
+                          allItems[pendingAddIndex - 1].values?.content ??
+                          ""
+                  )
+                : "",
         dateSetIdModalOpen,
         closeDateSetIdModal,
         onDateSetIdSelected,
         dateSetIdModalTitle:
-            pendingAddKind === "part"
-                ? "הגדר סט תאריכים למקטע"
-                : pendingAddKind === "instruction"
-                  ? "הגדר סט תאריכים להוראה"
-                  : pendingAddKind === "edit"
-                    ? "ערוך סט תאריכים (dateSetId)"
-                    : "הגדר סט תאריכים לתרגום",
+            pendingAddKind === "addItemDateSetId"
+                ? "הגדר סט תאריכים לפריט"
+                : pendingAddKind === "part"
+                  ? "הגדר סט תאריכים למקטע"
+                  : pendingAddKind === "instruction"
+                    ? "הגדר סט תאריכים להוראה"
+                    : pendingAddKind === "edit"
+                      ? "ערוך סט תאריכים (dateSetId)"
+                      : "הגדר סט תאריכים לתרגום",
         dataSource,
         openDateSetIdModalForAddTranslation,
         openDateSetIdModalForEdit,

@@ -11,10 +11,9 @@
 
 import { Entity } from "@firecms/cloud";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
-import { chunkArray, mitIdBetween } from "../utils/itemUtils";
+import { chunkArray, computeNextAvailableItemId, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
 
-/** נזרק כשאין מקום פנוי בין הפריטים (לא עוקפים) */
-export const NO_SPACE_BETWEEN_ITEMS = "NO_SPACE_BETWEEN_ITEMS";
+export { NO_SPACE_BETWEEN_ITEMS };
 
 /** ממשק מינימלי ל-DataSource (fetchCollection, saveEntity, deleteEntity) – מאפשר טסטים עם mock */
 type DataSource = {
@@ -337,89 +336,29 @@ export async function createTranslationItem(
         selectedPrayerId,
         partId
     );
-    const linkedToBase = allItems.filter((e: any) => {
-        const link = e.values?.linkedItem;
-        return Array.isArray(link) ? link.includes(baseItemId) : link === baseItemId;
-    });
+    const orderedItemIds = allItems.map((e: any) => e.values?.itemId ?? "");
 
-    let itemIdBefore: string | null = null;
-    let itemIdAfter: string | null = null;
-
+    let insertIndex: number;
     if (afterItemId == null || afterItemId === "") {
+        const linkedToBase = allItems.filter((e: any) => {
+            const link = e.values?.linkedItem;
+            return Array.isArray(link) ? link.includes(baseItemId) : link === baseItemId;
+        });
         if (linkedToBase.length > 0) {
-            itemIdAfter = linkedToBase[0].values?.itemId ?? null;
-        } else if (allItems.length > 0) {
-            itemIdAfter = allItems[0].values?.itemId ?? null;
+            const firstLinkedIdx = allItems.findIndex((e: any) => e.id === linkedToBase[0].id);
+            insertIndex = firstLinkedIdx >= 0 ? firstLinkedIdx : 0;
+        } else {
+            insertIndex = 0;
         }
     } else {
         const inAll = allItems.findIndex((e: any) => e.values?.itemId === afterItemId);
-        if (inAll >= 0) {
-            const afterItem = allItems[inAll];
-            itemIdBefore = afterItem.values?.itemId ?? null;
-            if (inAll + 1 < allItems.length) {
-                itemIdAfter = allItems[inAll + 1].values?.itemId ?? null;
-            }
-        }
+        insertIndex = inAll >= 0 ? inAll + 1 : allItems.length;
     }
 
-    // תרגום לא יקבל itemId קטן מפריט הבסיס – כך המיקום יישאר לוגי ביחס לבסיס
-    const baseNum = Number(baseItemId);
-    if (!Number.isNaN(baseNum)) {
-        const beforeNum = itemIdBefore != null && itemIdBefore !== "" ? Number(itemIdBefore) : NaN;
-        const afterNum = itemIdAfter != null && itemIdAfter !== "" ? Number(itemIdAfter) : NaN;
-        if (Number.isNaN(beforeNum) || beforeNum < baseNum) {
-            itemIdBefore = baseItemId;
-        }
-        if (!Number.isNaN(afterNum) && afterNum <= baseNum) {
-            itemIdAfter = null;
-        }
-    }
-
-    // חישוב newItemId קודם (לפי מיקום + ייחודיות)
-    const existingIds = new Set(allItems.map((e: any) => e.values?.itemId).filter(Boolean));
-    let newItemId = mitIdBetween(itemIdBefore ?? undefined, itemIdAfter ?? undefined);
-
-    const itemIdBeforeNum = itemIdBefore != null && itemIdBefore !== "" ? Number(itemIdBefore) : NaN;
-    const itemIdAfterNum = itemIdAfter != null && itemIdAfter !== "" ? Number(itemIdAfter) : NaN;
-    const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
-
-    const tryDecimalSlot = (value: number): string | null => {
-        const s = value === Math.floor(value) ? `${value}` : String(value);
-        return !existingIds.has(s) ? s : null;
-    };
-
-    while (existingIds.has(newItemId)) {
-        const nextNum = (Number(newItemId) || 0) + 1;
-        if (!Number.isNaN(itemIdAfterNum) && nextNum >= itemIdAfterNum) {
-            onAboutToTryDecimals?.();
-            let fallbackStr: string | null = null;
-            if (!Number.isNaN(itemIdBeforeNum) && itemIdBeforeNum < itemIdAfterNum) {
-                for (const o of offsets) {
-                    const v = itemIdBeforeNum + o;
-                    if (v < itemIdAfterNum) {
-                        fallbackStr = tryDecimalSlot(v);
-                        if (fallbackStr) break;
-                    }
-                }
-            }
-            if (!fallbackStr && !Number.isNaN(itemIdAfterNum)) {
-                for (const o of offsets) {
-                    const v = itemIdAfterNum - o;
-                    if (Number.isNaN(itemIdBeforeNum) || v > itemIdBeforeNum) {
-                        fallbackStr = tryDecimalSlot(v);
-                        if (fallbackStr) break;
-                    }
-                }
-            }
-            if (fallbackStr) {
-                newItemId = fallbackStr;
-            } else {
-                throw new Error(NO_SPACE_BETWEEN_ITEMS);
-            }
-            break;
-        }
-        newItemId = String(nextNum);
-    }
+    const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
+        minIdBefore: baseItemId,
+        onAboutToTryDecimals,
+    });
 
     // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
     const baseItemMitId = baseItemMitIdParam != null && String(baseItemMitIdParam).trim() !== "" ? String(baseItemMitIdParam).trim() : null;
@@ -621,60 +560,11 @@ export async function moveItemsToPart(
 
     const movedIdSet = new Set(movedItemIds);
 
-    const toNum = (v: string | null | undefined): number =>
-        v != null && v !== "" ? Number(v) : Number.NaN;
-
     const replaceLinkedItemId = (linked: unknown, oldId: string, newId: string): unknown => {
         if (Array.isArray(linked)) {
             return linked.map((v) => (v === oldId ? newId : v));
         }
         return linked === oldId ? [newId] : linked;
-    };
-
-    const computeNextAvailableItemId = (
-        idBefore: string | null | undefined,
-        idAfter: string | null | undefined,
-        takenIds: Set<string>
-    ): string => {
-        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
-        const afterNum = toNum(idAfter);
-        const beforeNum = toNum(idBefore);
-        const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
-
-        const tryDecimalSlot = (value: number): string | null => {
-            const s = value === Math.floor(value) ? `${value}` : String(value);
-            return !takenIds.has(s) ? s : null;
-        };
-
-        while (takenIds.has(result)) {
-            const nextNum = (Number(result) || 0) + 1;
-            if (!Number.isNaN(afterNum) && nextNum >= afterNum) {
-                let fallback: string | null = null;
-                if (!Number.isNaN(beforeNum) && beforeNum < afterNum) {
-                    for (const o of offsets) {
-                        const v = beforeNum + o;
-                        if (v < afterNum) {
-                            fallback = tryDecimalSlot(v);
-                            if (fallback) break;
-                        }
-                    }
-                }
-                if (!fallback && !Number.isNaN(afterNum)) {
-                    for (const o of offsets) {
-                        const v = afterNum - o;
-                        if (Number.isNaN(beforeNum) || v > beforeNum) {
-                            fallback = tryDecimalSlot(v);
-                            if (fallback) break;
-                        }
-                    }
-                }
-                if (!fallback) throw new Error(NO_SPACE_BETWEEN_ITEMS);
-                result = fallback;
-                break;
-            }
-            result = String(nextNum);
-        }
-        return result;
     };
 
     // פריטי בסיס מועברים (מהתרגום הנוכחי) ממוינים לפי itemId הנוכחי (שמירת סדר)

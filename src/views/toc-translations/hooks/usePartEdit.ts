@@ -26,12 +26,11 @@ import {
     createTranslationItem,
     splitPartItems,
     moveItemsToPart,
-    NO_SPACE_BETWEEN_ITEMS,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
-import { mitIdBetween } from "../utils/itemUtils";
+import { mitIdBetween, computeNextAvailableItemId, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
 
@@ -908,168 +907,38 @@ export function usePartEdit(context: PartEditContext) {
      * onAboutToTryDecimals – נקרא פעם אחת לפני ניסיון ערכים עשרוניים (כשאין מקום שלם).
      */
     const computeItemIdForIndex = (index: number, onAboutToTryDecimals?: () => void): string => {
-        let idBefore: string | null = null;
-        let idAfter: string | null | undefined = undefined;
+        const orderedItemIds = allItems.map((i) => getItemIdInCurrentContext(i));
 
-        if (index > 0) {
-            const sliceAbove = allItems.slice(0, index);
-            const idsAbove = sliceAbove
-                .map((i) => getItemIdInCurrentContext(i))
-                .filter((id) => id != null && id !== "");
-            const baseIdsAbove = new Set(sliceAbove.map((i) => getItemIdForPosition(i)).filter((id) => id != null && id !== ""));
-            const enhancementIdsAbove = (Object.values(enhancements).flat() as Entity<any>[])
+        const allEnhancements = Object.values(enhancements).flat() as Entity<any>[];
+        const linkedIdsPerPosition = allItems.map((item) => {
+            const positionId = getItemIdForPosition(item);
+            if (!positionId) return [];
+            return allEnhancements
                 .filter((e) => {
                     const link = e.values?.linkedItem;
                     const baseId = Array.isArray(link) ? link[0] : link;
-                    return baseId != null && baseIdsAbove.has(baseId);
+                    return baseId === positionId;
                 })
                 .map((e) => (e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")))
                 .filter((id) => id != null && id !== "");
-            const allIdsAbove = [...idsAbove, ...enhancementIdsAbove];
-            idBefore = allIdsAbove.length > 0 ? allIdsAbove.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : (getItemIdForPosition(allItems[index - 1]) || null);
-        } else if (neighborBounds.prevLastItemId) {
-            idBefore = neighborBounds.prevLastItemId;
-        }
-
-        if (index < allItems.length) {
-            const sliceBelow = allItems.slice(index);
-            const idsBelow = sliceBelow
-                .map((i) => getItemIdInCurrentContext(i))
-                .filter((id) => id != null && id !== "");
-            const baseIdsBelow = new Set(sliceBelow.map((i) => getItemIdForPosition(i)).filter((id) => id != null && id !== ""));
-            const enhancementIdsBelow = (Object.values(enhancements).flat() as Entity<any>[])
-                .filter((e) => {
-                    const link = e.values?.linkedItem;
-                    const baseId = Array.isArray(link) ? link[0] : link;
-                    return baseId != null && baseIdsBelow.has(baseId);
-                })
-                .map((e) => (e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")))
-                .filter((id) => id != null && id !== "");
-            const allIdsBelow = [...idsBelow, ...enhancementIdsBelow];
-            idAfter = allIdsBelow.length > 0 ? allIdsBelow.reduce((a, b) => (Number(a) <= Number(b) ? a : b)) : (getItemIdForPosition(allItems[index]) || undefined);
-        } else if (baseItems.length > 0 && idBefore) {
-            idAfter = getNextBaseItemIdAfter(idBefore) ?? undefined;
-        }
-
-        if ((idAfter === undefined || idAfter === null) && neighborBounds.nextFirstItemId) {
-            idAfter = neighborBounds.nextFirstItemId;
-        }
-
-        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
-
-        const fromAllItems = allItems.map((i) => getItemIdInCurrentContext(i)).filter((id) => id != null && id !== "");
-        const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
-        const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
-        const translationIdsInRange: string[] = [];
-        Object.values(enhancements).flat().forEach((e: Entity<any>) => {
-            const link = e.values?.linkedItem;
-            const baseItemId = Array.isArray(link) ? link[0] : link;
-            if (baseItemId == null || baseItemId === "") return;
-            const baseNum = Number(baseItemId);
-            if (Number.isNaN(baseNum)) return;
-            const inRange =
-                (Number.isNaN(idBeforeNum) || baseNum >= idBeforeNum) &&
-                (Number.isNaN(idAfterNum) || baseNum <= idAfterNum);
-            if (!inRange) return;
-            const transItemId = e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "");
-            if (transItemId) translationIdsInRange.push(transItemId);
         });
-        const takenItemIds = new Set<string>(
-            [
-                ...fromAllItems,
-                ...translationIdsInRange,
+
+        let nextFirstItemId = neighborBounds.nextFirstItemId;
+        if (!nextFirstItemId && baseItems.length > 0 && index >= allItems.length) {
+            const allIds = [...orderedItemIds.filter(Boolean), ...linkedIdsPerPosition.flat()];
+            const maxAbove = allIds.length > 0 ? allIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
+            if (maxAbove) nextFirstItemId = getNextBaseItemIdAfter(maxAbove) ?? undefined;
+        }
+
+        return computeItemIdForInsert(orderedItemIds, index, {
+            neighborBounds: { prevLastItemId: neighborBounds.prevLastItemId, nextFirstItemId },
+            extraTakenIds: [
                 ...deletedIdsFromServer.itemIds,
                 ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
-            ].filter((id) => id != null && id !== "")
-        );
-
-        const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
-
-        const tryDecimalSlot = (value: number): string | null => {
-            const s = value === Math.floor(value) ? `${value}` : String(value);
-            return !takenItemIds.has(s) ? s : null;
-        };
-
-        while (takenItemIds.has(result)) {
-            const nextNum = (Number(result) || 0) + 1;
-            if (!Number.isNaN(idAfterNum) && nextNum >= idAfterNum) {
-                onAboutToTryDecimals?.();
-                let fallbackStr: string | null = null;
-                if (!Number.isNaN(idBeforeNum) && idBeforeNum < idAfterNum) {
-                    for (const o of offsets) {
-                        const v = idBeforeNum + o;
-                        if (v < idAfterNum) {
-                            fallbackStr = tryDecimalSlot(v);
-                            if (fallbackStr) break;
-                        }
-                    }
-                }
-                if (!fallbackStr && !Number.isNaN(idAfterNum)) {
-                    for (const o of offsets) {
-                        const v = idAfterNum - o;
-                        if (Number.isNaN(idBeforeNum) || v > idBeforeNum) {
-                            fallbackStr = tryDecimalSlot(v);
-                            if (fallbackStr) break;
-                        }
-                    }
-                }
-                if (fallbackStr) {
-                    result = fallbackStr;
-                } else {
-                    throw new Error(NO_SPACE_BETWEEN_ITEMS);
-                }
-                break;
-            }
-            result = String(nextNum);
-        }
-
-        return result;
-    };
-
-    const computeNextAvailableItemIdInList = (
-        idBefore: string | null | undefined,
-        idAfter: string | null | undefined,
-        takenIds: Set<string>
-    ): string => {
-        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
-        const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
-        const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
-        const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
-
-        const tryDecimalSlot = (value: number): string | null => {
-            const s = value === Math.floor(value) ? `${value}` : String(value);
-            return !takenIds.has(s) ? s : null;
-        };
-
-        while (takenIds.has(result)) {
-            const nextNum = (Number(result) || 0) + 1;
-            if (!Number.isNaN(idAfterNum) && nextNum >= idAfterNum) {
-                let fallbackStr: string | null = null;
-                if (!Number.isNaN(idBeforeNum) && idBeforeNum < idAfterNum) {
-                    for (const o of offsets) {
-                        const v = idBeforeNum + o;
-                        if (v < idAfterNum) {
-                            fallbackStr = tryDecimalSlot(v);
-                            if (fallbackStr) break;
-                        }
-                    }
-                }
-                if (!fallbackStr && !Number.isNaN(idAfterNum)) {
-                    for (const o of offsets) {
-                        const v = idAfterNum - o;
-                        if (Number.isNaN(idBeforeNum) || v > idBeforeNum) {
-                            fallbackStr = tryDecimalSlot(v);
-                            if (fallbackStr) break;
-                        }
-                    }
-                }
-                if (!fallbackStr) throw new Error(NO_SPACE_BETWEEN_ITEMS);
-                result = fallbackStr;
-                break;
-            }
-            result = String(nextNum);
-        }
-        return result;
+            ],
+            linkedIdsPerPosition,
+            onAboutToTryDecimals,
+        });
     };
 
     const reorderItemsWithinPart = (activeId: string, overId: string) => {
@@ -1085,25 +954,22 @@ export function usePartEdit(context: PartEditContext) {
         if (!movedOldItemId) return;
 
         const prev = newIndex > 0 ? reordered[newIndex - 1] : null;
-        const next = newIndex < reordered.length - 1 ? reordered[newIndex + 1] : null;
-        const idBefore = prev ? getItemIdInCurrentContext(prev) : (neighborBounds.prevLastItemId ?? null);
-        const idAfter = next ? getItemIdInCurrentContext(next) : (neighborBounds.nextFirstItemId ?? null);
 
-        const takenIds = new Set<string>(
-            reordered
-                .filter((i) => i.id !== moved.id)
-                .map((i) => getItemIdInCurrentContext(i))
-                .filter((id) => id != null && id !== "")
-        );
-        deletedIdsFromServer.itemIds.forEach((id) => id && takenIds.add(id));
-        pendingDeletes.forEach((p) => p.itemId && takenIds.add(p.itemId));
+        const orderedIdsWithoutMoved = reordered
+            .filter((i) => i.id !== moved.id)
+            .map((i) => getItemIdInCurrentContext(i));
+
+        const extraTakenIds = [
+            ...deletedIdsFromServer.itemIds,
+            ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
+        ];
 
         let newBaseItemId: string;
         try {
-            newBaseItemId = computeNextAvailableItemIdInList(
-                idBefore ?? undefined,
-                idAfter ?? undefined,
-                takenIds
+            newBaseItemId = computeItemIdForInsert(
+                orderedIdsWithoutMoved,
+                newIndex,
+                { neighborBounds, extraTakenIds }
             );
         } catch (e) {
             if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
@@ -1179,7 +1045,7 @@ export function usePartEdit(context: PartEditContext) {
                 .forEach((enh: any) => {
                     let newEnhItemId = newBaseItemId;
                     try {
-                        newEnhItemId = computeNextAvailableItemIdInList(
+                        newEnhItemId = computeNextAvailableItemId(
                             prevEnhId ?? undefined,
                             nextEnhId ?? undefined,
                             takenEnhIds
@@ -1233,8 +1099,8 @@ export function usePartEdit(context: PartEditContext) {
         return computedItemId;
     };
 
-    /** מוסיף פריט חדש (מזהה new_xxx מקומי) במקום index. מחזיר false אם אין מקום (שגיאה), אחרת void. */
-    const doAddNewItemAt = (index: number, dateSetId: string, isContinuation: boolean, form?: AddItemFormValues): void | false => {
+    /** מוסיף פריט חדש (מזהה new_xxx מקומי) במקום index. defaultType קובע את ברירת המחדל ("body" / "instructions"). מחזיר false אם אין מקום. */
+    const doAddNewItemAt = (index: number, dateSetId: string, isContinuation: boolean, form?: AddItemFormValues, defaultType: string = "body"): void | false => {
         let computedItemId: string;
         try {
             computedItemId = computeItemIdForIndex(index, () => {
@@ -1262,70 +1128,7 @@ export function usePartEdit(context: PartEditContext) {
         const newEntityId = `new_${Date.now()}`;
         const newItemValues: Record<string, any> = {
             content: form?.content ?? "",
-            type: form?.type ?? "body",
-            partId: selectedGroupId,
-            itemId: computedItemId,
-            mit_id: resolveMitIdForNew(index, computedItemId, isContinuation),
-            timestamp: Date.now(),
-        };
-        if (dateSetId) newItemValues.dateSetId = dateSetId;
-        if (form) {
-            if (form.titleType !== undefined) newItemValues.titleType = form.titleType;
-            if (form.title !== undefined) newItemValues.title = form.title;
-            if (form.fontTanach !== undefined) newItemValues.fontTanach = form.fontTanach;
-            if (form.noSpace !== undefined) newItemValues.noSpace = form.noSpace;
-            if (form.block !== undefined) newItemValues.block = form.block;
-            if (form.firstInPage !== undefined) newItemValues.firstInPage = form.firstInPage;
-            if (form.specialDate !== undefined) newItemValues.specialDate = form.specialDate;
-            if (form.cohanim != null) newItemValues.cohanim = form.cohanim;
-            if (form.hazan != null) newItemValues.hazan = form.hazan;
-            if (form.minyan != null) newItemValues.minyan = form.minyan;
-            if (form.role !== undefined) newItemValues.role = form.role;
-            if (form.reference !== undefined) newItemValues.reference = form.reference;
-            if (form.specialSign !== undefined) newItemValues.specialSign = form.specialSign;
-        }
-        const updated = [...allItems];
-        updated.splice(index, 0, {
-            id: newEntityId,
-            values: newItemValues,
-        } as any);
-        setAllItems(updated);
-        setLocalValues((prev) => ({ ...prev, [newEntityId]: newItemValues }));
-        setChangedIds((prev) => new Set(prev).add(newEntityId));
-        setLastAddedItemId(newEntityId);
-        setTimeout(() => setLastAddedItemId(null), 300);
-    };
-
-    /** מוסיף פריט הוראה חדש. מחזיר false אם אין מקום (שגיאה), אחרת void. */
-    const doAddNewInstructionAt = (index: number, dateSetId: string, isContinuation: boolean, form?: AddItemFormValues): void | false => {
-        let computedItemId: string;
-        try {
-            computedItemId = computeItemIdForIndex(index, () => {
-                snackbar.open({
-                    type: "info",
-                    message: "אין מקום פנוי – מחפש מזהה עשרוני בין הפריטים…",
-                });
-            });
-        } catch (e) {
-            if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
-                snackbar.open({
-                    type: "error",
-                    message: "אין מקום פנוי בין הפריטים – לא ניתן להוסיף ללא עקיפת הסדר.",
-                });
-                return false;
-            }
-            throw e;
-        }
-        if (computedItemId.includes(".")) {
-            snackbar.open({
-                type: "info",
-                message: "הפריט נוסף עם מזהה עשרוני בשל צפיפות בין פריטים.",
-            });
-        }
-        const newEntityId = `new_${Date.now()}`;
-        const newItemValues: Record<string, any> = {
-            content: form?.content ?? "",
-            type: form?.type ?? "instructions",
+            type: form?.type ?? defaultType,
             partId: selectedGroupId,
             itemId: computedItemId,
             mit_id: resolveMitIdForNew(index, computedItemId, isContinuation),
@@ -1383,11 +1186,10 @@ export function usePartEdit(context: PartEditContext) {
 
     const confirmAddItemModal = () => {
         const dateSetId = addItemForm.dateSetId?.trim() || "100";
+        const defaultType = pendingAddKind === "instruction" ? "instructions" : "body";
         let added: void | false = undefined;
-        if (pendingAddKind === "part") {
-            added = doAddNewItemAt(pendingAddIndex, dateSetId, addItemForm.isContinuation, addItemForm);
-        } else if (pendingAddKind === "instruction") {
-            added = doAddNewInstructionAt(pendingAddIndex, dateSetId, addItemForm.isContinuation, addItemForm);
+        if (pendingAddKind === "part" || pendingAddKind === "instruction") {
+            added = doAddNewItemAt(pendingAddIndex, dateSetId, addItemForm.isContinuation, addItemForm, defaultType);
         }
         if (added !== false) closeAddItemModal();
     };
@@ -1421,9 +1223,9 @@ export function usePartEdit(context: PartEditContext) {
             return;
         }
         if (pendingAddKind === "part") {
-            doAddNewItemAt(pendingAddIndex, dateSetId, isContinuation);
+            doAddNewItemAt(pendingAddIndex, dateSetId, isContinuation, undefined, "body");
         } else if (pendingAddKind === "instruction") {
-            doAddNewInstructionAt(pendingAddIndex, dateSetId, isContinuation);
+            doAddNewItemAt(pendingAddIndex, dateSetId, isContinuation, undefined, "instructions");
         } else if (pendingAddKind === "addTranslation") {
             setAddTranslationForm((prev) => ({ ...prev, dateSetId }));
         } else if (pendingAddKind === "edit" && pendingEditEntityId) {

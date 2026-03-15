@@ -412,7 +412,7 @@ describe("partEditService – moveItemsToPart", () => {
         vi.clearAllMocks();
     });
 
-    it("העברה לסוף מקטע ריק – mit_id = mit_id_gap מ-0", async () => {
+    it("העברה למקטע ריק – לפריט בסיס מחושב itemId חדש וגם mit_id בהתאם", async () => {
         const sourceItem = {
             id: "e1",
             values: { itemId: "100", mit_id: "50", partId: "src", partName: "מקור", content: "א" },
@@ -453,11 +453,12 @@ describe("partEditService – moveItemsToPart", () => {
         expect(call.values.partId).toBe("tgt");
         expect(call.values.partName).toBe("יעד");
         expect(call.values.partIdAndName).toBe("tgt יעד");
-        expect(call.values.mit_id).toBe("0"); // mitIdBetween(null, null) → "0"
+        expect(call.values.itemId).toBe("0"); // mitIdBetween(null, null) -> "0"
+        expect(call.values.mit_id).toBe("0");
         expect(typeof call.values.timestamp).toBe("number");
     });
 
-    it("העברת שני פריטים – mit_id ממויינים בסדר נכון בין שניים קיימים", async () => {
+    it("העברת שני פריטי בסיס – itemId מחושב לפי מיקום יעד, ו-mit_id לפי כלל הפסקה", async () => {
         const src1 = { id: "s1", values: { itemId: "10", mit_id: "10", partId: "src" } };
         const src2 = { id: "s2", values: { itemId: "20", mit_id: "20", partId: "src" } };
         const tgtBefore = { id: "t1", values: { itemId: "100", mit_id: "100", partId: "tgt" } };
@@ -489,6 +490,7 @@ describe("partEditService – moveItemsToPart", () => {
             sourcePartId: "src",
             targetPartId: "tgt",
             insertAfterItemId: "100",
+            paragraphByBaseItemId: { "10": true, "20": false },
             translations,
         };
 
@@ -496,13 +498,82 @@ describe("partEditService – moveItemsToPart", () => {
 
         expect(ds.saveEntity).toHaveBeenCalledTimes(2);
 
-        const m1 = Number(ds.saveEntity.mock.calls[0][0].values.mit_id);
-        const m2 = Number(ds.saveEntity.mock.calls[1][0].values.mit_id);
+        const call1 = ds.saveEntity.mock.calls[0][0];
+        const call2 = ds.saveEntity.mock.calls[1][0];
+        const i1 = Number(call1.values.itemId);
+        const i2 = Number(call2.values.itemId);
 
-        // שני ה-mit_id צריכים להיות בין 100 ל-200
-        expect(m1).toBeGreaterThan(100);
-        expect(m1).toBeLessThan(200);
-        expect(m2).toBeGreaterThan(m1);
-        expect(m2).toBeLessThan(200);
+        // itemId מחושב בין 100 ל-200 ובסדר עולה
+        expect(i1).toBeGreaterThan(100);
+        expect(i1).toBeLessThan(200);
+        expect(i2).toBeGreaterThan(i1);
+        expect(i2).toBeLessThan(200);
+
+        // פריט ראשון חלק מפסקה -> mit_id של הפריט הקודם ביעד (100)
+        expect(call1.values.mit_id).toBe("100");
+        // פריט שני לא חלק מפסקה -> mit_id=itemId החדש שלו
+        expect(call2.values.mit_id).toBe(call2.values.itemId);
+    });
+
+    it("תרגומים מקושרים מתעדכנים בנפרד: linkedItem חדש, itemId מחושב מקומית, mit_id לפי כלל הבסיס", async () => {
+        const srcBase = { id: "b1", values: { itemId: "10", mit_id: "10", partId: "src", content: "base" } };
+        const tgtExistingBase = { id: "tb1", values: { itemId: "100", mit_id: "100", partId: "tgt", content: "x" } };
+
+        const trTargetExisting = { id: "tr_tgt_1", values: { itemId: "105", mit_id: "105", partId: "tgt", content: "existing tr" } };
+        const trRelated1 = { id: "tr_rel_1", values: { itemId: "11", mit_id: "11", partId: "src", linkedItem: ["10"], content: "rel1" } };
+        const trRelated2 = { id: "tr_rel_2", values: { itemId: "12", mit_id: "12", partId: "src", linkedItem: ["10"], content: "rel2" } };
+
+        const translations = [
+            {
+                translationId: "0-ashkenaz",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "יעד" }] }] }],
+            },
+            {
+                translationId: "1-ashkenaz",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "Target" }] }] }],
+            },
+        ];
+
+        const ds = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                const pid = filter?.partId?.[1];
+                if (path.includes("translations/0-ashkenaz") && pid === "src") return Promise.resolve([srcBase]);
+                if (path.includes("translations/0-ashkenaz") && pid === "tgt") return Promise.resolve([tgtExistingBase]);
+                if (path.includes("translations/1-ashkenaz") && pid === "tgt") return Promise.resolve([trTargetExisting]);
+                if (path.includes("translations/1-ashkenaz") && filter?.linkedItem) return Promise.resolve([trRelated1, trRelated2]);
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const params: MoveItemsToPartParams = {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            movedItemIds: ["10"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: "100",
+            paragraphByBaseItemId: { "10": true },
+            translations,
+        };
+
+        await moveItemsToPart(ds, params);
+
+        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
+        const baseCall = saveCalls.find((c: any) => c.path.includes("translations/0-ashkenaz") && c.entityId === "b1");
+        const relCalls = saveCalls.filter((c: any) => c.path.includes("translations/1-ashkenaz"));
+
+        expect(baseCall).toBeTruthy();
+        expect(baseCall.values.itemId).toBe("110");
+        expect(baseCall.values.mit_id).toBe("100");
+
+        expect(relCalls.length).toBe(2);
+        relCalls.forEach((c: any) => {
+            expect(c.values.partId).toBe("tgt");
+            expect(c.values.linkedItem).toContain("110"); // linkedItem עודכן ל-itemId החדש של הבסיס
+            expect(c.values.mit_id).toBe("100"); // הבסיס חלק מפסקה -> אותו mit_id לתרגומים
+            expect(c.values.itemId).not.toBe("110"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
+        });
     });
 });

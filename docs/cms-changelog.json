@@ -945,5 +945,461 @@
     "savedToFirestore": true,
     "id": "chg_1773319277075_1k2rv58",
     "timestampIso": "2026-03-12T12:41:17.075Z"
+  },
+  {
+    "timestamp": 1773323861909,
+    "action": "create_translation_item",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "1-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "newItemId": "101001661040",
+      "newMitId": "101001661040",
+      "baseItemId": "101001661030",
+      "targetTranslationId": "1-ashkenaz"
+    },
+    "savedToFirestore": true,
+    "id": "chg_1773323861911_qtcgd2l",
+    "timestampIso": "2026-03-12T13:57:41.909Z"
+  },
+  {
+    "timestamp": 1773325303067,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773325303068_m23nca8",
+    "timestampIso": "2026-03-12T14:21:43.067Z"
+  },
+  {
+    "timestamp": 1773325725524,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773325725524_s51fr7l",
+    "timestampIso": "2026-03-12T14:28:45.524Z"
+  },
+  {
+    "timestamp": 1773331055177,
+    "action": "create_translation_item",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "1-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "newItemId": "101002061030",
+      "newMitId": "101002061030",
+      "baseItemId": "101001811030",
+      "targetTranslationId": "1-ashkenaz"
+    },
+    "savedToFirestore": true,
+    "id": "chg_1773331055178_z45mvye",
+    "timestampIso": "2026-03-12T15:57:35.177Z"
+  },
+  {
+    "timestamp": 1773332448971,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "new_1773332446379",
+          "itemId": "101001586030",
+          "mitId": "101001586030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "content",
+              "newValue": "mn"
+            },
+            {
+              "field": "type",
+              "newValue": "body"
+            },
+            {
+              "field": "titleType",
+              "newValue": ""
+            },
+            {
+              "field": "title",
+              "newValue": ""
+            },
+            {
+              "field": "fontTanach",
+              "newValue": false
+            },
+            {
+              "field": "noSpace",
+              "newValue": false
+            },
+            {
+              "field": "block",
+              "newValue": false
+            },
+            {
+              "field": "firstInPage",
+              "newValue": false
+            },
+            {
+              "field": "specialDate",
+              "newValue": false
+            },
+            {
+              "field": "cohanim",
+              "newValue": false
+            },
+            {
+              "field": "hazan",
+              "newValue": false
+            },
+            {
+              "field": "minyan",
+              "newValue": false
+            },
+            {
+              "field": "role",
+              "newValue": ""
+            },
+            {
+              "field": "reference",
+              "newValue": ""
+            },
+            {
+              "field": "specialSign",
+              "newValue": ""
+            },
+            {
+              "field": "dateSetId",
+              "newValue": "100"
+            },
+            {
+              "field": "mit_id",
+              "newValue": "101001586030"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773332448971_lw3gmdk",
+    "timestampIso": "2026-03-12T16:20:48.971Z"
+  },
+  {
+    "timestamp": 1773332452989,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773332452989_765xenc",
+    "timestampIso": "2026-03-12T16:20:52.989Z"
+  },
+  {
+    "timestamp": 1773334000877,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "new_1773333981301",
+          "itemId": "101001736035",
+          "mitId": "101001736035",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "content",
+              "newValue": "בלי טעינה מחדש"
+            },
+            {
+              "field": "type",
+              "newValue": "body"
+            },
+            {
+              "field": "titleType",
+              "newValue": ""
+            },
+            {
+              "field": "title",
+              "newValue": ""
+            },
+            {
+              "field": "fontTanach",
+              "newValue": false
+            },
+            {
+              "field": "noSpace",
+              "newValue": false
+            },
+            {
+              "field": "block",
+              "newValue": false
+            },
+            {
+              "field": "firstInPage",
+              "newValue": false
+            },
+            {
+              "field": "specialDate",
+              "newValue": false
+            },
+            {
+              "field": "cohanim",
+              "newValue": false
+            },
+            {
+              "field": "hazan",
+              "newValue": false
+            },
+            {
+              "field": "minyan",
+              "newValue": false
+            },
+            {
+              "field": "role",
+              "newValue": ""
+            },
+            {
+              "field": "reference",
+              "newValue": ""
+            },
+            {
+              "field": "specialSign",
+              "newValue": ""
+            },
+            {
+              "field": "dateSetId",
+              "newValue": "100"
+            },
+            {
+              "field": "mit_id",
+              "newValue": "101001736035"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773334000877_n0gb2rd",
+    "timestampIso": "2026-03-12T16:46:40.877Z"
+  },
+  {
+    "timestamp": 1773334066052,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773334066052_sb8dwvm",
+    "timestampIso": "2026-03-12T16:47:46.052Z"
+  },
+  {
+    "timestamp": 1773565391954,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "101001661030",
+          "itemId": "101001498530",
+          "mitId": "101001498530",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "mit_id",
+              "oldValue": "101001661030",
+              "newValue": "101001498530"
+            }
+          ]
+        },
+        {
+          "entityId": "101001661040",
+          "itemId": "101001504780",
+          "mitId": "101001504780",
+          "isEnhancement": true,
+          "enhancementTranslationId": "1-ashkenaz",
+          "changes": [
+            {
+              "field": "mit_id",
+              "oldValue": "101001661040",
+              "newValue": "101001504780"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773565391955_coye8jm",
+    "timestampIso": "2026-03-15T09:03:11.954Z"
+  },
+  {
+    "timestamp": 1773565421547,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773565421547_25u8f2c",
+    "timestampIso": "2026-03-15T09:03:41.547Z"
+  },
+  {
+    "timestamp": 1773566595004,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "0-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "new_1773566590818",
+          "itemId": "101002186030",
+          "mitId": "101002186030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "content",
+              "newValue": "בלי מאפיינים מיותרים"
+            },
+            {
+              "field": "type",
+              "newValue": "body"
+            },
+            {
+              "field": "titleType",
+              "newValue": ""
+            },
+            {
+              "field": "title",
+              "newValue": ""
+            },
+            {
+              "field": "fontTanach",
+              "newValue": false
+            },
+            {
+              "field": "noSpace",
+              "newValue": true
+            },
+            {
+              "field": "block",
+              "newValue": false
+            },
+            {
+              "field": "firstInPage",
+              "newValue": false
+            },
+            {
+              "field": "specialDate",
+              "newValue": false
+            },
+            {
+              "field": "role",
+              "newValue": ""
+            },
+            {
+              "field": "reference",
+              "newValue": ""
+            },
+            {
+              "field": "specialSign",
+              "newValue": ""
+            },
+            {
+              "field": "dateSetId",
+              "newValue": "100"
+            },
+            {
+              "field": "mit_id",
+              "newValue": "101002186030"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773566595005_g4kspeu",
+    "timestampIso": "2026-03-15T09:23:15.004Z"
+  },
+  {
+    "timestamp": 1773566599908,
+    "action": "publish_to_bagel",
+    "context": {
+      "tocId": "ashkenaz"
+    },
+    "details": {
+      "selectedTocId": "ashkenaz"
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": true,
+    "id": "chg_1773566599908_xaxp5bv",
+    "timestampIso": "2026-03-15T09:23:19.908Z"
+  },
+  {
+    "timestamp": 1773567147993,
+    "action": "create_translation_item",
+    "context": {
+      "tocId": "ashkenaz",
+      "translationId": "1-ashkenaz",
+      "prayerId": "1015010",
+      "partId": "1011030"
+    },
+    "details": {
+      "newItemId": "101002186040",
+      "newMitId": "101002186040",
+      "baseItemId": "101002186030",
+      "targetTranslationId": "1-ashkenaz"
+    },
+    "savedToFirestore": true,
+    "id": "chg_1773567147994_v5ugqjl",
+    "timestampIso": "2026-03-15T09:32:27.993Z"
   }
 ]

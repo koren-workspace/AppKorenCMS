@@ -9,8 +9,6 @@
  */
 
 import React from "react";
-import { ChangeLogEntry } from "../hooks/usePartEdit";
-import { FIELD_LABELS } from "../constants/itemFields";
 
 export type PartEditToolbarProps = {
     selectedGroupId: string | null;
@@ -18,20 +16,11 @@ export type PartEditToolbarProps = {
     hasChanges: boolean;
     onSaveGroup: () => void;
     onFinalPublish: () => void;
-    lastSaveEntries?: ChangeLogEntry[];
-    onClearLastSave?: () => void;
     /** מציג כפתורי פיצול והעברה – רק בנוסח הבסיסי */
     allowSplitAndMove?: boolean;
     onSplitPart?: () => void;
     onMoveItemsToPart?: () => void;
 };
-
-function fmtVal(v: unknown): string {
-    if (v === null || v === undefined) return "—";
-    if (typeof v === "boolean") return v ? "כן" : "לא";
-    const s = String(v);
-    return s === "" ? "(ריק)" : s.length > 30 ? s.slice(0, 30) + "…" : s;
-}
 
 export function PartEditToolbar({
     selectedGroupId,
@@ -39,15 +28,11 @@ export function PartEditToolbar({
     hasChanges,
     onSaveGroup,
     onFinalPublish,
-    lastSaveEntries = [],
-    onClearLastSave,
     allowSplitAndMove,
     onSplitPart,
     onMoveItemsToPart,
 }: PartEditToolbarProps) {
     if (!selectedGroupId) return null;
-
-    const published = lastSaveEntries.length > 0 && lastSaveEntries.every((e) => e.publishedToBagel);
 
     return (
         <div className="mb-3 pb-2 border-b shrink-0">
@@ -94,38 +79,6 @@ export function PartEditToolbar({
                     </button>
                 </div>
             </div>
-
-            {/* סיכום שמירה אחרונה */}
-            {lastSaveEntries.length > 0 && (
-                <div className={`mt-2 p-2 rounded text-[10px] border ${published ? "bg-blue-50 border-blue-200" : "bg-green-50 border-green-200"}`} dir="rtl">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className={`font-bold ${published ? "text-blue-700" : "text-green-700"}`}>
-                            {published ? "✓ פורסם –" : "✓ נשמר –"} {lastSaveEntries.length} שינויים
-                        </span>
-                        {onClearLastSave && (
-                            <button type="button" onClick={onClearLastSave} className="text-gray-400 hover:text-gray-600 text-[9px]">
-                                ✕ סגור
-                            </button>
-                        )}
-                    </div>
-                    <div className="space-y-0.5">
-                        {lastSaveEntries.map((e) => (
-                            <div key={e.id} className="flex gap-1 items-baseline flex-wrap">
-                                <span className="text-gray-500 font-mono shrink-0">
-                                    {e.isEnhancement ? `[${e.enhancementTranslationId}]` : `[${e.translationId}]`}
-                                </span>
-                                <span className="text-gray-500 shrink-0">item {e.itemId}</span>
-                                <span className="font-semibold text-gray-700 shrink-0">
-                                    {FIELD_LABELS[e.field] ?? e.field}:
-                                </span>
-                                <span className="text-red-600 line-through shrink-0">{fmtVal(e.oldValue)}</span>
-                                <span className="text-gray-400 shrink-0">→</span>
-                                <span className="text-green-700 font-medium shrink-0">{fmtVal(e.newValue)}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

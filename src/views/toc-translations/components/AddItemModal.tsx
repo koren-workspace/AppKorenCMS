@@ -23,9 +23,9 @@ export type AddItemFormValues = {
     block: boolean;
     firstInPage: boolean;
     specialDate: boolean;
-    cohanim: boolean;
-    hazan: boolean;
-    minyan: boolean;
+    cohanim: boolean | null;
+    hazan: boolean | null;
+    minyan: boolean | null;
     role: string;
     reference: string;
     specialSign: string;
@@ -43,9 +43,9 @@ export const defaultAddItemForm = (isInstruction: boolean): AddItemFormValues =>
     block: false,
     firstInPage: false,
     specialDate: false,
-    cohanim: false,
-    hazan: false,
-    minyan: false,
+    cohanim: null,
+    hazan: null,
+    minyan: null,
     role: "",
     reference: "",
     specialSign: "",
@@ -213,28 +213,40 @@ export function AddItemModal({
                             <span className="text-gray-600">תאריך מיוחד</span>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.cohanim}>
-                            <input
-                                type="checkbox"
-                                checked={form.cohanim}
-                                onChange={(e) => setField("cohanim", e.target.checked)}
-                            />
-                            <span className="text-gray-600">כהנים</span>
+                            <span className="text-gray-600 w-20 shrink-0">כהנים</span>
+                            <select
+                                value={form.cohanim === null ? "" : form.cohanim ? "true" : "false"}
+                                onChange={(e) => setField("cohanim", e.target.value === "" ? null : e.target.value === "true")}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            >
+                                <option value="">לא מוגדר</option>
+                                <option value="true">כן</option>
+                                <option value="false">לא</option>
+                            </select>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.hazan}>
-                            <input
-                                type="checkbox"
-                                checked={form.hazan}
-                                onChange={(e) => setField("hazan", e.target.checked)}
-                            />
-                            <span className="text-gray-600">חזן</span>
+                            <span className="text-gray-600 w-20 shrink-0">חזן</span>
+                            <select
+                                value={form.hazan === null ? "" : form.hazan ? "true" : "false"}
+                                onChange={(e) => setField("hazan", e.target.value === "" ? null : e.target.value === "true")}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            >
+                                <option value="">לא מוגדר</option>
+                                <option value="true">כן</option>
+                                <option value="false">לא</option>
+                            </select>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.minyan}>
-                            <input
-                                type="checkbox"
-                                checked={form.minyan}
-                                onChange={(e) => setField("minyan", e.target.checked)}
-                            />
-                            <span className="text-gray-600">מניין</span>
+                            <span className="text-gray-600 w-20 shrink-0">מניין</span>
+                            <select
+                                value={form.minyan === null ? "" : form.minyan ? "true" : "false"}
+                                onChange={(e) => setField("minyan", e.target.value === "" ? null : e.target.value === "true")}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            >
+                                <option value="">לא מוגדר</option>
+                                <option value="true">כן</option>
+                                <option value="false">לא</option>
+                            </select>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
                             <span className="text-gray-600 w-20 shrink-0">תפקיד</span>

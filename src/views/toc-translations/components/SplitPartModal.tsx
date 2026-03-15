@@ -16,7 +16,7 @@ import { Entity } from "@firecms/cloud";
 export type SplitPartModalProps = {
     open: boolean;
     onClose: () => void;
-    /** פריטי המקטע הנוכחי (ממוינים לפי mit_id) */
+    /** פריטי המקטע הנוכחי (ממוינים לפי itemId) */
     items: Entity<any>[];
     /** ערכים מקומיים (לתצוגת content) */
     localValues: Record<string, any>;

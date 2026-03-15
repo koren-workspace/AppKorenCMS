@@ -13,7 +13,20 @@ import React from "react";
 import { Entity } from "@firecms/cloud";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
-import { ChangeLogEntry } from "../hooks/usePartEdit";
+import {
+    DndContext,
+    closestCenter,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from "@dnd-kit/core";
+import {
+    SortableContext,
+    verticalListSortingStrategy,
+    useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 export type PartEditPanelProps = {
     selectedGroupId: string | null;
@@ -59,14 +72,37 @@ export type PartEditPanelProps = {
     lastAddedItemId?: string | null;
     /** פותח מודל הגדרת/עריכת dateSetId בלחיצה על השדה במאפיינים */
     onOpenDateSetIdForItem?: (entityId: string, currentDateSetId: string) => void;
-    /** שינויי השמירה האחרונה – לסיכום קטן בטולבר */
-    lastSaveEntries?: ChangeLogEntry[];
-    onClearLastSave?: () => void;
     /** כפתורי פיצול והעברה – רק בנוסח הבסיסי */
     allowSplitAndMove?: boolean;
     onSplitPart?: () => void;
     onMoveItemsToPart?: () => void;
+    onReorderItems?: (activeId: string, overId: string) => void;
 };
+
+function SortableItemRow({
+    item,
+    children,
+}: {
+    item: Entity<any>;
+    children: (dragHandleProps: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }) => React.ReactNode;
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: item.id,
+    });
+    const style: React.CSSProperties = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+    };
+    return (
+        <div ref={setNodeRef} style={style}>
+            {children({
+                attributes: attributes as unknown as Record<string, unknown>,
+                listeners: listeners as unknown as Record<string, unknown>,
+            })}
+        </div>
+    );
+}
 
 export function PartEditPanel({
     selectedGroupId,
@@ -96,14 +132,23 @@ export function PartEditPanel({
     isBaseTranslation = false,
     lastAddedItemId = null,
     onOpenDateSetIdForItem,
-    lastSaveEntries = [],
-    onClearLastSave,
     allowSplitAndMove = false,
     onSplitPart,
     onMoveItemsToPart,
+    onReorderItems,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0 || pendingDeletesCount > 0;
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    );
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+        onReorderItems?.(String(active.id), String(over.id));
+    };
+
     return (
         <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
             <PartEditToolbar
@@ -112,8 +157,6 @@ export function PartEditPanel({
                 hasChanges={hasAnyChanges}
                 onSaveGroup={onSaveGroup}
                 onFinalPublish={onFinalPublish}
-                lastSaveEntries={lastSaveEntries}
-                onClearLastSave={onClearLastSave}
                 allowSplitAndMove={allowSplitAndMove}
                 onSplitPart={onSplitPart}
                 onMoveItemsToPart={onMoveItemsToPart}
@@ -146,53 +189,68 @@ export function PartEditPanel({
                             </button>
                         )}
                         {/* לכל פריט: ערכים מקומיים + תרגומים מקושרים (לפי itemId/linkedItem) */}
-                        {allItems.map((item, index) => {
-                            const val = localValues[item.id] || {};
-                            const curId = val.itemId;
-                            const related = Object.entries(enhancements).flatMap(
-                                ([tId, list]) =>
-                                    list
-                                        .filter((e) => {
-                                            const link = e.values?.linkedItem;
-                                            return Array.isArray(link)
-                                                ? link.includes(curId)
-                                                : link === curId;
-                                        })
-                                        .map((e) => ({ ...e, tId }))
-                            );
-                            return (
-                                <PartItemRow
-                                    key={item.id}
-                                    item={item}
-                                    localVal={val}
-                                    isChanged={changedIds.has(item.id)}
-                                    related={related}
-                                    enhancementLocalValues={enhancementLocalValues}
-                                    onEnhancementFieldChange={onEnhancementFieldChange}
-                                    isEnhancementChanged={(eid) => enhancementChangedIds.has(eid)}
-                                    onContentChange={onContentChange}
-                                    onFieldChange={onFieldChange}
-                                    onDelete={onDeleteItem}
-                                    isPendingDelete={pendingDeleteIds.has(item.id)}
-                                    onRestore={onRestoreItem}
-                                    isBaseTranslation={isBaseTranslation}
-                                    onAddAfter={
-                                        allowAddPart
-                                            ? () => onAddNewItemAt(index + 1)
-                                            : undefined
-                                    }
-                                    onAddInstructionAfter={
-                                        allowAddInstruction && onAddNewInstructionAt
-                                            ? () => onAddNewInstructionAt(index + 1)
-                                            : undefined
-                                    }
-                                    onAddTranslation={onAddTranslation}
-                                    restrictTypeToInstructions={restrictTypeToInstructions}
-                                    autoFocus={lastAddedItemId === item.id}
-                                    onOpenDateSetIdConfig={onOpenDateSetIdForItem}
-                                />
-                            );
-                        })}
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <SortableContext
+                                items={allItems.map((item) => item.id)}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                {allItems.map((item, index) => {
+                                    const val = localValues[item.id] || {};
+                                    const curId = val.itemId;
+                                    const related = Object.entries(enhancements).flatMap(
+                                        ([tId, list]) =>
+                                            list
+                                                .filter((e) => {
+                                                    const link = e.values?.linkedItem;
+                                                    return Array.isArray(link)
+                                                        ? link.includes(curId)
+                                                        : link === curId;
+                                                })
+                                                .map((e) => ({ ...e, tId }))
+                                    );
+                                    return (
+                                        <SortableItemRow key={item.id} item={item}>
+                                            {(dragHandleProps) => (
+                                                <PartItemRow
+                                                    item={item}
+                                                    localVal={val}
+                                                    isChanged={changedIds.has(item.id)}
+                                                    related={related}
+                                                    enhancementLocalValues={enhancementLocalValues}
+                                                    onEnhancementFieldChange={onEnhancementFieldChange}
+                                                    isEnhancementChanged={(eid) => enhancementChangedIds.has(eid)}
+                                                    onContentChange={onContentChange}
+                                                    onFieldChange={onFieldChange}
+                                                    onDelete={onDeleteItem}
+                                                    isPendingDelete={pendingDeleteIds.has(item.id)}
+                                                    onRestore={onRestoreItem}
+                                                    isBaseTranslation={isBaseTranslation}
+                                                    onAddAfter={
+                                                        allowAddPart
+                                                            ? () => onAddNewItemAt(index + 1)
+                                                            : undefined
+                                                    }
+                                                    onAddInstructionAfter={
+                                                        allowAddInstruction && onAddNewInstructionAt
+                                                            ? () => onAddNewInstructionAt(index + 1)
+                                                            : undefined
+                                                    }
+                                                    onAddTranslation={onAddTranslation}
+                                                    restrictTypeToInstructions={restrictTypeToInstructions}
+                                                    autoFocus={lastAddedItemId === item.id}
+                                                    onOpenDateSetIdConfig={onOpenDateSetIdForItem}
+                                                    dragHandleProps={dragHandleProps}
+                                                />
+                                            )}
+                                        </SortableItemRow>
+                                    );
+                                })}
+                            </SortableContext>
+                        </DndContext>
                     </div>
                 )
             )}

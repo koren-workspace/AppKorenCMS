@@ -52,6 +52,11 @@ type PartItemRowProps = {
     autoFocus?: boolean;
     /** פותח מודל הגדרת/עריכת dateSetId (לחיצה על שדה dateSetId) */
     onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string) => void;
+    /** props לידית גרירה */
+    dragHandleProps?: {
+        attributes?: Record<string, unknown>;
+        listeners?: Record<string, unknown>;
+    };
 };
 
 export function PartItemRow({
@@ -74,6 +79,7 @@ export function PartItemRow({
     restrictTypeToInstructions = false,
     autoFocus = false,
     onOpenDateSetIdConfig,
+    dragHandleProps,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
     const [showProps, setShowProps] = useState(false);
@@ -127,6 +133,18 @@ export function PartItemRow({
                                 className="px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-[8px]"
                             >
                                 {showProps ? "הסתר מאפיינים" : "מאפיינים"}
+                            </button>
+                        )}
+                        {dragHandleProps && (
+                            <button
+                                type="button"
+                                {...(dragHandleProps.attributes ?? {})}
+                                {...(dragHandleProps.listeners ?? {})}
+                                className="px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-[8px] cursor-grab active:cursor-grabbing touch-none"
+                                title="גרור לשינוי סדר"
+                                tabIndex={-1}
+                            >
+                                ⠿
                             </button>
                         )}
                         {onDelete && !isPendingDelete && (
@@ -248,28 +266,40 @@ export function PartItemRow({
                             <span className="text-gray-600">תאריך מיוחד</span>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.cohanim}>
-                            <input
-                                type="checkbox"
-                                checked={!!localVal.cohanim}
-                                onChange={(e) => onFieldChange(entityId, "cohanim", e.target.checked)}
-                            />
-                            <span className="text-gray-600">כהנים</span>
+                            <span className="text-gray-600 w-20 shrink-0">כהנים</span>
+                            <select
+                                value={localVal.cohanim === null || localVal.cohanim === undefined ? "" : localVal.cohanim ? "true" : "false"}
+                                onChange={(e) => onFieldChange(entityId, "cohanim", e.target.value === "" ? null : e.target.value === "true")}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            >
+                                <option value="">לא מוגדר</option>
+                                <option value="true">כן</option>
+                                <option value="false">לא</option>
+                            </select>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.hazan}>
-                            <input
-                                type="checkbox"
-                                checked={!!localVal.hazan}
-                                onChange={(e) => onFieldChange(entityId, "hazan", e.target.checked)}
-                            />
-                            <span className="text-gray-600">חזן</span>
+                            <span className="text-gray-600 w-20 shrink-0">חזן</span>
+                            <select
+                                value={localVal.hazan === null || localVal.hazan === undefined ? "" : localVal.hazan ? "true" : "false"}
+                                onChange={(e) => onFieldChange(entityId, "hazan", e.target.value === "" ? null : e.target.value === "true")}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            >
+                                <option value="">לא מוגדר</option>
+                                <option value="true">כן</option>
+                                <option value="false">לא</option>
+                            </select>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.minyan}>
-                            <input
-                                type="checkbox"
-                                checked={!!localVal.minyan}
-                                onChange={(e) => onFieldChange(entityId, "minyan", e.target.checked)}
-                            />
-                            <span className="text-gray-600">מניין</span>
+                            <span className="text-gray-600 w-20 shrink-0">מניין</span>
+                            <select
+                                value={localVal.minyan === null || localVal.minyan === undefined ? "" : localVal.minyan ? "true" : "false"}
+                                onChange={(e) => onFieldChange(entityId, "minyan", e.target.value === "" ? null : e.target.value === "true")}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            >
+                                <option value="">לא מוגדר</option>
+                                <option value="true">כן</option>
+                                <option value="false">לא</option>
+                            </select>
                         </label>
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
                             <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
@@ -444,19 +474,40 @@ export function PartItemRow({
                                             <span className="text-gray-600">תאריך מיוחד</span>
                                         </label>
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.cohanim}>
-                                            <input type="checkbox" checked={!!displayVal.cohanim}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "cohanim", e.target.checked)} />
-                                            <span className="text-gray-600">כהנים</span>
+                                            <span className="text-gray-600 w-20 shrink-0">כהנים</span>
+                                            <select
+                                                value={displayVal.cohanim === null || displayVal.cohanim === undefined ? "" : displayVal.cohanim ? "true" : "false"}
+                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "cohanim", e.target.value === "" ? null : e.target.value === "true")}
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            >
+                                                <option value="">לא מוגדר</option>
+                                                <option value="true">כן</option>
+                                                <option value="false">לא</option>
+                                            </select>
                                         </label>
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.hazan}>
-                                            <input type="checkbox" checked={!!displayVal.hazan}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "hazan", e.target.checked)} />
-                                            <span className="text-gray-600">חזן</span>
+                                            <span className="text-gray-600 w-20 shrink-0">חזן</span>
+                                            <select
+                                                value={displayVal.hazan === null || displayVal.hazan === undefined ? "" : displayVal.hazan ? "true" : "false"}
+                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "hazan", e.target.value === "" ? null : e.target.value === "true")}
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            >
+                                                <option value="">לא מוגדר</option>
+                                                <option value="true">כן</option>
+                                                <option value="false">לא</option>
+                                            </select>
                                         </label>
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.minyan}>
-                                            <input type="checkbox" checked={!!displayVal.minyan}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "minyan", e.target.checked)} />
-                                            <span className="text-gray-600">מניין</span>
+                                            <span className="text-gray-600 w-20 shrink-0">מניין</span>
+                                            <select
+                                                value={displayVal.minyan === null || displayVal.minyan === undefined ? "" : displayVal.minyan ? "true" : "false"}
+                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "minyan", e.target.value === "" ? null : e.target.value === "true")}
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            >
+                                                <option value="">לא מוגדר</option>
+                                                <option value="true">כן</option>
+                                                <option value="false">לא</option>
+                                            </select>
                                         </label>
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
                                             <span className="text-gray-600 w-20 shrink-0">תפקיד</span>

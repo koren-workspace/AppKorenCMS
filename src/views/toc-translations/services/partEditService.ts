@@ -4,7 +4,7 @@
  * פונקציות "טהורות": מקבלות dataSource (ו-params) ומבצעות קריאות ל-Firestore/API.
  * אין כאן state או UI – רק פעולות. ה-hook usePartEdit קורא לפונקציות ומעדכן state + snackbar.
  *
- * - fetchPartWithEnhancements: טוען פריטי מקטע, ממיין לפי mit_id, טוען תרגומים מקושרים במנות
+ * - fetchPartWithEnhancements: טוען פריטי מקטע, ממיין לפי itemId, טוען תרגומים מקושרים במנות
  * - savePartItems: שומר רשימת פריטים (חדשים + קיימים) לפי path
  * - updateFirestoreTimestamp: מעדכן db-update-time ב-Firestore (Bagel SDK ב-bagelUpdateTimeService)
  */
@@ -45,7 +45,7 @@ export type FetchPartResult = {
 };
 
 /**
- * טוען פריטי מקטע (filter partId), ממיין לפי mit_id.
+ * טוען פריטי מקטע (filter partId), ממיין לפי itemId.
  * לכל תרגום אחר טוען פריטים עם linkedItem שמכיל את ה-itemIds (במנות של 30 בגלל מגבלת Firestore).
  */
 export async function fetchPartWithEnhancements(
@@ -73,8 +73,8 @@ export async function fetchPartWithEnhancements(
 
     const sorted = [...sourceEntities].sort(
         (a: any, b: any) =>
-            (a.values?.mit_id || "").localeCompare(
-                b.values?.mit_id || "",
+            (a.values?.itemId || "").localeCompare(
+                b.values?.itemId || "",
                 undefined,
                 { numeric: true }
             )
@@ -122,8 +122,8 @@ export async function fetchPartWithEnhancements(
             })).filter((e) => e.values?.deleted !== true);
             baseItems = [...baseEntities].sort(
                 (a: any, b: any) =>
-                    (a.values?.mit_id || "").localeCompare(
-                        b.values?.mit_id || "",
+                    (a.values?.itemId || "").localeCompare(
+                        b.values?.itemId || "",
                         undefined,
                         { numeric: true }
                     )
@@ -144,6 +144,20 @@ export type SavePartParams = {
 /** גודל מנה לשמירה – מונע מאות כתיבות סימולטניות ל-Firestore (rate limits / timeouts) */
 const SAVE_CHUNK_SIZE = 50;
 
+/** שדות סינון שיש להסיר מהנתונים כש-null – כדי שלא יישמרו ב-Firestore ולא יפעילו סינון באפליקציה */
+const NULLABLE_FILTER_FIELDS = ["cohanim", "hazan", "minyan"] as const;
+
+/** מנקה שדות סינון שערכם null – מסיר את השדה כדי שלא יגיע ל-Firestore */
+function stripNullFilterFields(values: Record<string, any>): Record<string, any> {
+    const cleaned = { ...values };
+    for (const field of NULLABLE_FILTER_FIELDS) {
+        if (cleaned[field] === null || cleaned[field] === undefined) {
+            delete cleaned[field];
+        }
+    }
+    return cleaned;
+}
+
 /**
  * שומר כל פריט ב-changedIds: ID שמתחיל ב-new_ נשמר כ-entity חדש, אחרת עדכון.
  * שמירה במנות (chunks) כדי לעמוד בעשרות/מאות תיקונים בלי להעמיס על Firestore.
@@ -160,13 +174,11 @@ export async function savePartItems(
         const savePromises = chunkIds.map((id) => {
             const isNew = id.startsWith("new_");
             const values = localValues[id];
-            // לפריט חדש: document ID = itemId (כמו createTranslationItem) כדי שהמסמך יישמר בשם הנכון.
-            // אם itemId חסר מסיבה כלשהי – Firestore מפיק ID אוטומטי.
             const entityId = isNew ? (values?.itemId || undefined) : id;
             return dataSource.saveEntity({
                 path,
                 entityId,
-                values: { ...values, timestamp: now },
+                values: stripNullFilterFields({ ...values, timestamp: now }),
                 status: isNew ? "new" : "existing",
                 collection: itemsCollection,
             });
@@ -226,7 +238,7 @@ export async function deletePartItemAndRelatedTranslations(
 }
 
 /**
- * טוען פריטי מקטע של תרגום אחד (לפי partId), ממוינים לפי mit_id.
+ * טוען פריטי מקטע של תרגום אחד (לפי partId), ממוינים לפי itemId.
  */
 export async function fetchPartItems(
     dataSource: DataSource,
@@ -242,8 +254,8 @@ export async function fetchPartItems(
     })).filter((e) => e.values?.deleted !== true);
     return [...entities].sort(
         (a: any, b: any) =>
-            (a.values?.mit_id || "").localeCompare(
-                b.values?.mit_id || "",
+            (a.values?.itemId || "").localeCompare(
+                b.values?.itemId || "",
                 undefined,
                 { numeric: true }
             )
@@ -437,9 +449,9 @@ export async function createTranslationItem(
     if (block !== undefined) values.block = block;
     if (firstInPage !== undefined) values.firstInPage = firstInPage;
     if (specialDate !== undefined) values.specialDate = specialDate;
-    if (cohanim !== undefined) values.cohanim = cohanim;
-    if (hazan !== undefined) values.hazan = hazan;
-    if (minyan !== undefined) values.minyan = minyan;
+    if (cohanim != null) values.cohanim = cohanim;
+    if (hazan != null) values.hazan = hazan;
+    if (minyan != null) values.minyan = minyan;
     if (role !== undefined) values.role = role;
     if (reference !== undefined) values.reference = reference;
     if (specialSign !== undefined) values.specialSign = specialSign;
@@ -575,13 +587,19 @@ export type MoveItemsToPartParams = {
     targetPartId: string;
     /** itemId של הפריט שאחריו להכניס; null = תחילת המקטע היעד */
     insertAfterItemId: string | null;
+    /**
+     * האם פריט בסיס הוא חלק מפסקה של הפריט שלפניו במיקום החדש.
+     * true  -> mit_id של הפריט הקודם במיקום החדש (אם קיים)
+     * false -> mit_id = itemId החדש של הפריט
+     */
+    paragraphByBaseItemId?: Record<string, boolean>;
     /** translations array from TOC (כולל categories/prayers/parts לכל תרגום) */
     translations: any[];
 };
 
 /**
  * מעביר פריטים (רצף רציף) ממקטע מקור למקטע יעד באותה תפילה.
- * מחשב mit_id חדשים לפי מיקום ההכנסה במקטע היעד.
+ * סדר הפריטים המועברים נשמר לפי itemId, ובמקביל מחושבים mit_id חדשים לפי מיקום ההכנסה במקטע היעד.
  * partName לכל תרגום נלקח מעץ ה-TOC של אותו תרגום.
  */
 export async function moveItemsToPart(
@@ -595,6 +613,7 @@ export async function moveItemsToPart(
         sourcePartId,
         targetPartId,
         insertAfterItemId,
+        paragraphByBaseItemId = {},
         translations,
     } = params;
 
@@ -602,7 +621,63 @@ export async function moveItemsToPart(
 
     const movedIdSet = new Set(movedItemIds);
 
-    // הפריטים המועברים ממוינים לפי mit_id הנוכחי (שמירת הסדר הפנימי)
+    const toNum = (v: string | null | undefined): number =>
+        v != null && v !== "" ? Number(v) : Number.NaN;
+
+    const replaceLinkedItemId = (linked: unknown, oldId: string, newId: string): unknown => {
+        if (Array.isArray(linked)) {
+            return linked.map((v) => (v === oldId ? newId : v));
+        }
+        return linked === oldId ? [newId] : linked;
+    };
+
+    const computeNextAvailableItemId = (
+        idBefore: string | null | undefined,
+        idAfter: string | null | undefined,
+        takenIds: Set<string>
+    ): string => {
+        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+        const afterNum = toNum(idAfter);
+        const beforeNum = toNum(idBefore);
+        const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
+
+        const tryDecimalSlot = (value: number): string | null => {
+            const s = value === Math.floor(value) ? `${value}` : String(value);
+            return !takenIds.has(s) ? s : null;
+        };
+
+        while (takenIds.has(result)) {
+            const nextNum = (Number(result) || 0) + 1;
+            if (!Number.isNaN(afterNum) && nextNum >= afterNum) {
+                let fallback: string | null = null;
+                if (!Number.isNaN(beforeNum) && beforeNum < afterNum) {
+                    for (const o of offsets) {
+                        const v = beforeNum + o;
+                        if (v < afterNum) {
+                            fallback = tryDecimalSlot(v);
+                            if (fallback) break;
+                        }
+                    }
+                }
+                if (!fallback && !Number.isNaN(afterNum)) {
+                    for (const o of offsets) {
+                        const v = afterNum - o;
+                        if (Number.isNaN(beforeNum) || v > beforeNum) {
+                            fallback = tryDecimalSlot(v);
+                            if (fallback) break;
+                        }
+                    }
+                }
+                if (!fallback) throw new Error(NO_SPACE_BETWEEN_ITEMS);
+                result = fallback;
+                break;
+            }
+            result = String(nextNum);
+        }
+        return result;
+    };
+
+    // פריטי בסיס מועברים (מהתרגום הנוכחי) ממוינים לפי itemId הנוכחי (שמירת סדר)
     const sourceItems = await fetchPartItems(
         dataSource,
         currentTranslationId,
@@ -612,17 +687,20 @@ export async function moveItemsToPart(
     const movedEntities = sourceItems
         .filter((e: any) => movedIdSet.has(e.values?.itemId))
         .sort((a: any, b: any) =>
-            (a.values?.mit_id ?? "").localeCompare(b.values?.mit_id ?? "", undefined, { numeric: true })
+            (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, { numeric: true })
         );
 
     if (movedEntities.length === 0) return;
 
-    // מיקום הכנסה במקטע היעד
-    const targetItems = await fetchPartItems(
+    // פריטי יעד של הבסיס (ללא הפריטים המועברים, למקרה עתידי של source==target)
+    const rawTargetItems = await fetchPartItems(
         dataSource,
         currentTranslationId,
         selectedPrayerId,
         targetPartId
+    );
+    const targetItems = rawTargetItems.filter(
+        (e: any) => !movedIdSet.has(e.values?.itemId)
     );
 
     const insertAfterIdx =
@@ -630,20 +708,43 @@ export async function moveItemsToPart(
             ? -1
             : targetItems.findIndex((e: any) => e.values?.itemId === insertAfterItemId);
 
-    const idBefore =
-        insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.mit_id ?? null) : null;
-    const idAfter =
+    const baseIdAfter =
         insertAfterIdx + 1 < targetItems.length
-            ? (targetItems[insertAfterIdx + 1].values?.mit_id ?? null)
+            ? (targetItems[insertAfterIdx + 1].values?.itemId ?? null)
             : null;
 
-    // חישוב mit_id חדש לכל פריט מועבר ברצף (בין idBefore ל-idAfter)
-    const itemIdToNewMitId: Record<string, string> = {};
-    let prevMitId: string | null = idBefore;
+    const takenBaseItemIds = new Set<string>(
+        targetItems
+            .map((e: any) => e.values?.itemId)
+            .filter((v: string | undefined) => !!v)
+    );
+
+    const oldToNewBaseItemId: Record<string, string> = {};
+    const oldToNewBaseMitId: Record<string, string> = {};
+    let prevBaseItemId: string | null =
+        insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.itemId ?? null) : null;
+    let prevBaseMitId: string | null =
+        insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.mit_id ?? null) : null;
+
     for (const item of movedEntities) {
-        const m = mitIdBetween(prevMitId ?? undefined, idAfter ?? undefined);
-        itemIdToNewMitId[item.values?.itemId] = m;
-        prevMitId = m;
+        const oldBaseItemId = item.values?.itemId as string;
+        const newBaseItemId = computeNextAvailableItemId(
+            prevBaseItemId ?? undefined,
+            baseIdAfter ?? undefined,
+            takenBaseItemIds
+        );
+        takenBaseItemIds.add(newBaseItemId);
+        oldToNewBaseItemId[oldBaseItemId] = newBaseItemId;
+
+        const wantsParagraph = paragraphByBaseItemId[oldBaseItemId] === true;
+        const newBaseMitId =
+            wantsParagraph && prevBaseMitId != null && String(prevBaseMitId).trim() !== ""
+                ? String(prevBaseMitId)
+                : newBaseItemId;
+        oldToNewBaseMitId[oldBaseItemId] = newBaseMitId;
+
+        prevBaseItemId = newBaseItemId;
+        prevBaseMitId = newBaseMitId;
     }
 
     const now = Date.now();
@@ -670,18 +771,34 @@ export async function moveItemsToPart(
 
         if (tid === currentTranslationId) {
             for (const item of movedEntities) {
-                const itemId = item.values?.itemId;
-                const newMitId = itemIdToNewMitId[itemId] ?? item.values?.mit_id;
+                const oldItemId = item.values?.itemId as string;
+                const newItemId = oldToNewBaseItemId[oldItemId] ?? oldItemId;
+                const newMitId = oldToNewBaseMitId[oldItemId] ?? item.values?.mit_id;
                 await dataSource.saveEntity({
                     path,
                     entityId: item.id,
-                    values: { ...item.values, partId: targetPartId, partName, partIdAndName, mit_id: newMitId, timestamp: now },
+                    values: {
+                        ...item.values,
+                        partId: targetPartId,
+                        partName,
+                        partIdAndName,
+                        itemId: newItemId,
+                        mit_id: newMitId,
+                        timestamp: now,
+                    },
                     status: "existing",
                     collection: itemsCollection,
                 });
             }
         } else {
+            const targetItemsForTranslation = await fetchPartItems(
+                dataSource,
+                tid,
+                selectedPrayerId,
+                targetPartId
+            );
             const chunks = chunkArray([...movedIdSet], 30);
+            const relatedToMove: Entity<any>[] = [];
             for (const chunk of chunks) {
                 const related = (
                     await dataSource.fetchCollection({
@@ -690,17 +807,95 @@ export async function moveItemsToPart(
                         filter: { linkedItem: ["array-contains-any", chunk] },
                     })
                 ).filter((e: any) => e.values?.deleted !== true);
-                for (const item of related) {
-                    const link = item.values?.linkedItem;
-                    const linkedBaseIds: string[] = Array.isArray(link) ? link : [link].filter(Boolean);
-                    const matchedBaseId = linkedBaseIds.find((id) => movedIdSet.has(id));
-                    const newMitId = matchedBaseId
-                        ? (itemIdToNewMitId[matchedBaseId] ?? item.values?.mit_id)
-                        : item.values?.mit_id;
+                relatedToMove.push(...related);
+            }
+
+            const relatedIds = new Set(relatedToMove.map((e: any) => e.id));
+            const stableTargetItems = targetItemsForTranslation.filter(
+                (e: any) => !relatedIds.has(e.id)
+            );
+            const takenTranslationItemIds = new Set<string>(
+                stableTargetItems
+                    .map((e: any) => e.values?.itemId)
+                    .filter((v: string | undefined) => !!v)
+            );
+
+            // קיבוץ לפי פריט בסיס מקורי, כדי לחשב itemId בנפרד לכל תרגום ובהתאם למיקום הבסיס
+            const relatedByBaseId = new Map<string, Entity<any>[]>();
+            relatedToMove.forEach((item: any) => {
+                const link = item.values?.linkedItem;
+                const linkedBaseIds: string[] = Array.isArray(link) ? link : [link].filter(Boolean);
+                const matchedBaseId = linkedBaseIds.find((id) => movedIdSet.has(id));
+                if (!matchedBaseId) return;
+                if (!relatedByBaseId.has(matchedBaseId)) relatedByBaseId.set(matchedBaseId, []);
+                relatedByBaseId.get(matchedBaseId)!.push(item);
+            });
+            relatedByBaseId.forEach((arr) =>
+                arr.sort((a: any, b: any) =>
+                    (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, {
+                        numeric: true,
+                    })
+                )
+            );
+
+            const orderedOldBaseIds = movedEntities.map((e: any) => e.values?.itemId as string);
+            const stableTargetIdsSorted = stableTargetItems
+                .map((e: any) => e.values?.itemId)
+                .filter((v: string | undefined) => !!v)
+                .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+
+            for (const oldBaseId of orderedOldBaseIds) {
+                const relatedItems = relatedByBaseId.get(oldBaseId) ?? [];
+                if (relatedItems.length === 0) continue;
+
+                const newBaseId = oldToNewBaseItemId[oldBaseId] ?? oldBaseId;
+                const baseIsParagraph =
+                    (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
+
+                const prevCandidates = stableTargetIdsSorted.filter(
+                    (id: string) => Number(id) <= Number(newBaseId)
+                );
+                const nextCandidates = stableTargetIdsSorted.filter(
+                    (id: string) => Number(id) > Number(newBaseId)
+                );
+                let prevIdForTranslation: string | null =
+                    prevCandidates.length > 0
+                        ? prevCandidates[prevCandidates.length - 1]
+                        : newBaseId;
+                const nextIdForTranslation: string | null =
+                    nextCandidates.length > 0 ? nextCandidates[0] : null;
+
+                for (const item of relatedItems) {
+                    const newTranslationItemId = computeNextAvailableItemId(
+                        prevIdForTranslation ?? undefined,
+                        nextIdForTranslation ?? undefined,
+                        takenTranslationItemIds
+                    );
+                    takenTranslationItemIds.add(newTranslationItemId);
+                    prevIdForTranslation = newTranslationItemId;
+
+                    const updatedLinkedItem = replaceLinkedItemId(
+                        item.values?.linkedItem,
+                        oldBaseId,
+                        newBaseId
+                    );
+                    const newTranslationMitId = baseIsParagraph
+                        ? (oldToNewBaseMitId[oldBaseId] ?? item.values?.mit_id)
+                        : newTranslationItemId;
+
                     await dataSource.saveEntity({
                         path,
                         entityId: item.id,
-                        values: { ...item.values, partId: targetPartId, partName, partIdAndName, mit_id: newMitId, timestamp: now },
+                        values: {
+                            ...item.values,
+                            linkedItem: updatedLinkedItem,
+                            itemId: newTranslationItemId,
+                            mit_id: newTranslationMitId,
+                            partId: targetPartId,
+                            partName,
+                            partIdAndName,
+                            timestamp: now,
+                        },
                         status: "existing",
                         collection: itemsCollection,
                     });

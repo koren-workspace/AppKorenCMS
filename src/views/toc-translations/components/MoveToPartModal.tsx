@@ -16,7 +16,7 @@ import { Entity } from "@firecms/cloud";
 export type MoveToPartModalProps = {
     open: boolean;
     onClose: () => void;
-    /** פריטי המקטע הנוכחי (ממוינים לפי mit_id) */
+    /** פריטי המקטע הנוכחי (ממוינים לפי itemId) */
     items: Entity<any>[];
     /** ערכים מקומיים (לתצוגת content) */
     localValues: Record<string, any>;
@@ -31,6 +31,7 @@ export type MoveToPartModalProps = {
         movedItemIds: string[];
         targetPartId: string;
         insertAfterItemId: string | null;
+        paragraphByBaseItemId: Record<string, boolean>;
     }) => void;
     saving: boolean;
 };
@@ -50,12 +51,14 @@ export function MoveToPartModal({
     const [targetPartId, setTargetPartId] = useState<string | null>(null);
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
     const [insertAfterItemId, setInsertAfterItemId] = useState<string | null>(null);
+    const [paragraphByBaseItemId, setParagraphByBaseItemId] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (!open) return;
         setTargetPartId(null);
         setSelectedItemIds(new Set());
         setInsertAfterItemId(null);
+        setParagraphByBaseItemId({});
     }, [open]);
 
     useEffect(() => {
@@ -72,8 +75,16 @@ export function MoveToPartModal({
     const toggleItem = (itemId: string) => {
         setSelectedItemIds((prev) => {
             const next = new Set(prev);
-            if (next.has(itemId)) next.delete(itemId);
-            else next.add(itemId);
+            if (next.has(itemId)) {
+                next.delete(itemId);
+                setParagraphByBaseItemId((m) => {
+                    const n = { ...m };
+                    delete n[itemId];
+                    return n;
+                });
+            } else {
+                next.add(itemId);
+            }
             return next;
         });
     };
@@ -86,6 +97,13 @@ export function MoveToPartModal({
                 .map((e) => (localValues[e.id]?.itemId ?? e.values?.itemId) as string)
                 .filter(Boolean);
             setSelectedItemIds(new Set(allIds));
+            setParagraphByBaseItemId((prev) => {
+                const next = { ...prev };
+                allIds.forEach((id) => {
+                    if (next[id] == null) next[id] = false;
+                });
+                return next;
+            });
         }
     };
 
@@ -94,7 +112,12 @@ export function MoveToPartModal({
 
     const handleSubmit = () => {
         if (!canSubmit || !targetPartId) return;
-        onSubmit({ movedItemIds, targetPartId, insertAfterItemId });
+        onSubmit({
+            movedItemIds,
+            targetPartId,
+            insertAfterItemId,
+            paragraphByBaseItemId,
+        });
     };
 
     // ערך "סוף" בתפריט המיקום
@@ -215,14 +238,29 @@ export function MoveToPartModal({
                                                         "bg-gray-100 text-gray-500"
                                                     }`}>{type}</span>
                                                     {checked && (
-                                                        <span className="text-[9px] bg-orange-200 text-orange-700 px-1 rounded shrink-0">
-                                                            → {targetPartId ?? "יעד"}
-                                                        </span>
+                                                    <span className="text-[9px] bg-orange-200 text-orange-700 px-1 rounded shrink-0">
+                                                        → {targetPartId ?? "יעד"}
+                                                    </span>
                                                     )}
                                                 </div>
                                                 <div className="text-[10px] text-gray-800 truncate mt-0.5" dir="rtl">
                                                     {content || <span className="text-gray-300 italic">(ריק)</span>}
                                                 </div>
+                                                {checked && (
+                                                    <label className="mt-1 inline-flex items-center gap-1 text-[9px] text-gray-700">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={paragraphByBaseItemId[itemId] === true}
+                                                            onChange={(e) =>
+                                                                setParagraphByBaseItemId((prev) => ({
+                                                                    ...prev,
+                                                                    [itemId]: e.target.checked,
+                                                                }))
+                                                            }
+                                                        />
+                                                        <span>הפריט חלק מהפסקה של הפריט שלפניו במיקום החדש</span>
+                                                    </label>
+                                                )}
                                             </div>
                                         </label>
                                     );

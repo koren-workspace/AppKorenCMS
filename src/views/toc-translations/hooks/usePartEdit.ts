@@ -195,9 +195,9 @@ export function usePartEdit(context: PartEditContext) {
         block: false,
         firstInPage: false,
         specialDate: false,
-        cohanim: false,
-        hazan: false,
-        minyan: false,
+        cohanim: null,
+        hazan: null,
+        minyan: null,
         role: "",
         reference: "",
         specialSign: "",
@@ -234,9 +234,9 @@ export function usePartEdit(context: PartEditContext) {
             block: false,
             firstInPage: false,
             specialDate: false,
-            cohanim: false,
-            hazan: false,
-            minyan: false,
+            cohanim: null,
+            hazan: null,
+            minyan: null,
             role: "",
             reference: "",
             specialSign: "",
@@ -1026,6 +1026,199 @@ export function usePartEdit(context: PartEditContext) {
         return result;
     };
 
+    const computeNextAvailableItemIdInList = (
+        idBefore: string | null | undefined,
+        idAfter: string | null | undefined,
+        takenIds: Set<string>
+    ): string => {
+        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+        const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
+        const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
+        const offsets = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
+
+        const tryDecimalSlot = (value: number): string | null => {
+            const s = value === Math.floor(value) ? `${value}` : String(value);
+            return !takenIds.has(s) ? s : null;
+        };
+
+        while (takenIds.has(result)) {
+            const nextNum = (Number(result) || 0) + 1;
+            if (!Number.isNaN(idAfterNum) && nextNum >= idAfterNum) {
+                let fallbackStr: string | null = null;
+                if (!Number.isNaN(idBeforeNum) && idBeforeNum < idAfterNum) {
+                    for (const o of offsets) {
+                        const v = idBeforeNum + o;
+                        if (v < idAfterNum) {
+                            fallbackStr = tryDecimalSlot(v);
+                            if (fallbackStr) break;
+                        }
+                    }
+                }
+                if (!fallbackStr && !Number.isNaN(idAfterNum)) {
+                    for (const o of offsets) {
+                        const v = idAfterNum - o;
+                        if (Number.isNaN(idBeforeNum) || v > idBeforeNum) {
+                            fallbackStr = tryDecimalSlot(v);
+                            if (fallbackStr) break;
+                        }
+                    }
+                }
+                if (!fallbackStr) throw new Error(NO_SPACE_BETWEEN_ITEMS);
+                result = fallbackStr;
+                break;
+            }
+            result = String(nextNum);
+        }
+        return result;
+    };
+
+    const reorderItemsWithinPart = (activeId: string, overId: string) => {
+        if (activeId === overId) return;
+        const oldIndex = allItems.findIndex((i) => i.id === activeId);
+        const newIndex = allItems.findIndex((i) => i.id === overId);
+        if (oldIndex < 0 || newIndex < 0) return;
+
+        const reordered = [...allItems];
+        const [moved] = reordered.splice(oldIndex, 1);
+        reordered.splice(newIndex, 0, moved);
+        const movedOldItemId = getEffectiveItemId(moved);
+        if (!movedOldItemId) return;
+
+        const prev = newIndex > 0 ? reordered[newIndex - 1] : null;
+        const next = newIndex < reordered.length - 1 ? reordered[newIndex + 1] : null;
+        const idBefore = prev ? getItemIdInCurrentContext(prev) : (neighborBounds.prevLastItemId ?? null);
+        const idAfter = next ? getItemIdInCurrentContext(next) : (neighborBounds.nextFirstItemId ?? null);
+
+        const takenIds = new Set<string>(
+            reordered
+                .filter((i) => i.id !== moved.id)
+                .map((i) => getItemIdInCurrentContext(i))
+                .filter((id) => id != null && id !== "")
+        );
+        deletedIdsFromServer.itemIds.forEach((id) => id && takenIds.add(id));
+        pendingDeletes.forEach((p) => p.itemId && takenIds.add(p.itemId));
+
+        let newBaseItemId: string;
+        try {
+            newBaseItemId = computeNextAvailableItemIdInList(
+                idBefore ?? undefined,
+                idAfter ?? undefined,
+                takenIds
+            );
+        } catch (e) {
+            if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
+                snackbar.open({
+                    type: "error",
+                    message: "אין מקום פנוי בין הפריטים להעברה",
+                });
+                return;
+            }
+            throw e;
+        }
+
+        const prevMitId = prev ? getEffectiveMitId(prev) : null;
+        const isPartOfParagraph =
+            prev != null
+                ? window.confirm("האם הפריט שהוזז הוא חלק מהפסקה של הפריט שלפניו במיקום החדש?")
+                : false;
+        const newBaseMitId =
+            isPartOfParagraph && prevMitId != null && String(prevMitId).trim() !== ""
+                ? String(prevMitId)
+                : newBaseItemId;
+
+        setAllItems(reordered);
+        setLocalValues((prevLocal) => ({
+            ...prevLocal,
+            [moved.id]: {
+                ...(prevLocal[moved.id] ?? moved.values ?? {}),
+                itemId: newBaseItemId,
+                mit_id: newBaseMitId,
+                timestamp: Date.now(),
+            },
+        }));
+        setChangedIds((prevChanged) => new Set(prevChanged).add(moved.id));
+
+        // עדכון כל התרגומים המקושרים: linkedItem + itemId (מחושב בנפרד) + mit_id לפי כלל הפסקה
+        const enhancementLocalPatch: Record<string, any> = {};
+        const enhancementChangedPatch = new Set<string>();
+        const enhancementTidPatch: Record<string, string> = {};
+
+        Object.entries(enhancements).forEach(([tid, entities]) => {
+            const related = entities.filter((e: any) => {
+                const link = enhancementLocalValues[e.id]?.linkedItem ?? e.values?.linkedItem;
+                return Array.isArray(link)
+                    ? link.includes(movedOldItemId)
+                    : link === movedOldItemId;
+            });
+            if (related.length === 0) return;
+
+            const remaining = entities.filter((e: any) => !related.some((r: any) => r.id === e.id));
+            const takenEnhIds = new Set<string>(
+                remaining
+                    .map((e: any) => {
+                        const local = enhancementLocalValues[e.id]?.itemId;
+                        if (local != null && String(local).trim() !== "") return String(local);
+                        const from = e.values?.itemId ?? e.id;
+                        return from != null && String(from).trim() !== "" ? String(from) : "";
+                    })
+                    .filter((id: string) => id !== "")
+            );
+            const sortedTaken = [...takenEnhIds].sort((a, b) =>
+                a.localeCompare(b, undefined, { numeric: true })
+            );
+            const nextEnhId =
+                sortedTaken.find((id) => Number(id) > Number(newBaseItemId)) ?? null;
+            let prevEnhId: string | null = newBaseItemId;
+
+            related
+                .sort((a: any, b: any) =>
+                    (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, {
+                        numeric: true,
+                    })
+                )
+                .forEach((enh: any) => {
+                    let newEnhItemId = newBaseItemId;
+                    try {
+                        newEnhItemId = computeNextAvailableItemIdInList(
+                            prevEnhId ?? undefined,
+                            nextEnhId ?? undefined,
+                            takenEnhIds
+                        );
+                    } catch {
+                        newEnhItemId = prevEnhId ?? newBaseItemId;
+                    }
+                    takenEnhIds.add(newEnhItemId);
+                    prevEnhId = newEnhItemId;
+
+                    const oldLink = enhancementLocalValues[enh.id]?.linkedItem ?? enh.values?.linkedItem;
+                    const newLinkedItem = Array.isArray(oldLink)
+                        ? oldLink.map((v: string) => (v === movedOldItemId ? newBaseItemId : v))
+                        : oldLink === movedOldItemId
+                            ? [newBaseItemId]
+                            : oldLink;
+                    enhancementLocalPatch[enh.id] = {
+                        ...(enhancementLocalValues[enh.id] ?? enh.values ?? {}),
+                        linkedItem: newLinkedItem,
+                        itemId: newEnhItemId,
+                        mit_id: newBaseMitId !== newBaseItemId ? newBaseMitId : newEnhItemId,
+                        timestamp: Date.now(),
+                    };
+                    enhancementChangedPatch.add(enh.id);
+                    enhancementTidPatch[enh.id] = tid;
+                });
+        });
+
+        if (Object.keys(enhancementLocalPatch).length > 0) {
+            setEnhancementLocalValues((prevLocal) => ({ ...prevLocal, ...enhancementLocalPatch }));
+            setEnhancementChangedIds((prevChanged) => {
+                const nextChanged = new Set(prevChanged);
+                enhancementChangedPatch.forEach((id) => nextChanged.add(id));
+                return nextChanged;
+            });
+            setEnhancementTranslationIds((prevTid) => ({ ...prevTid, ...enhancementTidPatch }));
+        }
+    };
+
     /**
      * מחשב mit_id לפריט חדש לפי תשובת המשתמש:
      *   המשך פסקה → mit_id = mit_id של הפריט הקודם (ראש הפסקה)
@@ -1084,9 +1277,9 @@ export function usePartEdit(context: PartEditContext) {
             if (form.block !== undefined) newItemValues.block = form.block;
             if (form.firstInPage !== undefined) newItemValues.firstInPage = form.firstInPage;
             if (form.specialDate !== undefined) newItemValues.specialDate = form.specialDate;
-            if (form.cohanim !== undefined) newItemValues.cohanim = form.cohanim;
-            if (form.hazan !== undefined) newItemValues.hazan = form.hazan;
-            if (form.minyan !== undefined) newItemValues.minyan = form.minyan;
+            if (form.cohanim != null) newItemValues.cohanim = form.cohanim;
+            if (form.hazan != null) newItemValues.hazan = form.hazan;
+            if (form.minyan != null) newItemValues.minyan = form.minyan;
             if (form.role !== undefined) newItemValues.role = form.role;
             if (form.reference !== undefined) newItemValues.reference = form.reference;
             if (form.specialSign !== undefined) newItemValues.specialSign = form.specialSign;
@@ -1147,9 +1340,9 @@ export function usePartEdit(context: PartEditContext) {
             if (form.block !== undefined) newItemValues.block = form.block;
             if (form.firstInPage !== undefined) newItemValues.firstInPage = form.firstInPage;
             if (form.specialDate !== undefined) newItemValues.specialDate = form.specialDate;
-            if (form.cohanim !== undefined) newItemValues.cohanim = form.cohanim;
-            if (form.hazan !== undefined) newItemValues.hazan = form.hazan;
-            if (form.minyan !== undefined) newItemValues.minyan = form.minyan;
+            if (form.cohanim != null) newItemValues.cohanim = form.cohanim;
+            if (form.hazan != null) newItemValues.hazan = form.hazan;
+            if (form.minyan != null) newItemValues.minyan = form.minyan;
             if (form.role !== undefined) newItemValues.role = form.role;
             if (form.reference !== undefined) newItemValues.reference = form.reference;
             if (form.specialSign !== undefined) newItemValues.specialSign = form.specialSign;
@@ -1264,14 +1457,13 @@ export function usePartEdit(context: PartEditContext) {
         block: false,
         firstInPage: false,
         specialDate: false,
-        cohanim: false,
-        hazan: false,
-        minyan: false,
+        cohanim: null as boolean | null,
+        hazan: null as boolean | null,
+        minyan: null as boolean | null,
         role: "",
         reference: "",
         specialSign: "",
-        dateSetId: "",
-        /** האם פריט התרגום הוא "תחילת פסקה" – מוצג רק כשפריט הבסיס אינו חלק מפסקה */
+        dateSetId: "100",
         isStartOfParagraph: false,
     });
 
@@ -1460,10 +1652,11 @@ export function usePartEdit(context: PartEditContext) {
         movedItemIds: string[];
         targetPartId: string;
         insertAfterItemId: string | null;
+        paragraphByBaseItemId: Record<string, boolean>;
     }) => {
         if (!selectedGroupId || !selectedPrayerId || !selectedTocId || !currentTranslationData?.translationId) return;
 
-        const { movedItemIds, targetPartId, insertAfterItemId } = params;
+        const { movedItemIds, targetPartId, insertAfterItemId, paragraphByBaseItemId } = params;
         if (movedItemIds.length === 0) return;
 
         setSaving(true);
@@ -1475,6 +1668,7 @@ export function usePartEdit(context: PartEditContext) {
                 sourcePartId: selectedGroupId,
                 targetPartId,
                 insertAfterItemId,
+                paragraphByBaseItemId,
                 translations: currentTocData?.translations ?? [],
             });
 
@@ -1560,7 +1754,7 @@ export function usePartEdit(context: PartEditContext) {
                     role: form.role,
                     reference: form.reference,
                     specialSign: form.specialSign,
-                    dateSetId: form.dateSetId,
+                    dateSetId: form.dateSetId?.trim() || "100",
                     baseItemMitId: baseItemMitId != null && String(baseItemMitId).trim() !== "" ? String(baseItemMitId).trim() : undefined,
                     isStartOfParagraph: !!form.isStartOfParagraph,
                     onAboutToTryDecimals: () => {
@@ -1633,6 +1827,7 @@ export function usePartEdit(context: PartEditContext) {
         handleFinalPublish,
         addNewItemAt,
         addNewInstructionAt,
+        reorderItemsWithinPart,
         lastAddedItemId,
         handleDeleteItem,
         handleRestoreItem,

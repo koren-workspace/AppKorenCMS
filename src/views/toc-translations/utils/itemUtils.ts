@@ -3,13 +3,13 @@
  *
  * - chunkArray: פיצול מערך לחלקים (למשל 30) – נדרש ל-Firestore (array-contains-any מוגבל)
  * - getItemStyle: classNames ל-textarea לפי סוג הפריט (title / instructions / body)
- * - mitIdBetween: מחשב mit_id חדש שימוין "בין" שני ערכים (להכנסת פריט במיקום נתון)
+ * - mitIdBetween: מחשב ערך mit_id חדש בין שני ערכים קיימים
  */
 
 const MIT_ID_GAP = 10;
 
 /**
- * מחשב ערך mit_id שימוין בין idBefore ל-idAfter (מיון numeric כמו ב-partEditService).
+ * מחשב ערך mit_id בין idBefore ל-idAfter.
  * - בין שני ערכים: ממוצע (חצי ביניהם).
  * - רק לפני: idAfter - GAP (הוספה בהתחלה).
  * - רק אחרי: idBefore + GAP (הוספה בסוף).

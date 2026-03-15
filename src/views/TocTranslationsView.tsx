@@ -170,11 +170,10 @@ export function TocTranslationsView() {
                 isBaseTranslation={isBase}
                 lastAddedItemId={partEdit.lastAddedItemId}
                 onOpenDateSetIdForItem={partEdit.openDateSetIdModalForEdit}
-                lastSaveEntries={partEdit.lastSaveEntries}
-                onClearLastSave={partEdit.clearLastSave}
                 allowSplitAndMove={allowAddPart}
                 onSplitPart={partEdit.openSplitPartModal}
                 onMoveItemsToPart={partEdit.openMoveToPartModal}
+                onReorderItems={partEdit.reorderItemsWithinPart}
             />
             <AddItemModal
                 open={partEdit.addItemModalOpen}

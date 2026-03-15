@@ -11,7 +11,7 @@
 
 import { Entity } from "@firecms/cloud";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
-import { chunkArray, computeNextAvailableItemId, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import { chunkArray, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
 
 export { NO_SPACE_BETWEEN_ITEMS };
 
@@ -603,27 +603,19 @@ export async function moveItemsToPart(
             ? (targetItems[insertAfterIdx + 1].values?.itemId ?? null)
             : null;
 
-    const takenBaseItemIds = new Set<string>(
-        targetItems
-            .map((e: any) => e.values?.itemId)
-            .filter((v: string | undefined) => !!v)
-    );
+    const baseOrderedIds = targetItems.map((e: any) => e.values?.itemId ?? "");
+    let baseInsertIdx = insertAfterIdx + 1;
 
     const oldToNewBaseItemId: Record<string, string> = {};
     const oldToNewBaseMitId: Record<string, string> = {};
-    let prevBaseItemId: string | null =
-        insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.itemId ?? null) : null;
     let prevBaseMitId: string | null =
         insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.mit_id ?? null) : null;
 
     for (const item of movedEntities) {
         const oldBaseItemId = item.values?.itemId as string;
-        const newBaseItemId = computeNextAvailableItemId(
-            prevBaseItemId ?? undefined,
-            baseIdAfter ?? undefined,
-            takenBaseItemIds
-        );
-        takenBaseItemIds.add(newBaseItemId);
+        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx);
+        baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
+        baseInsertIdx++;
         oldToNewBaseItemId[oldBaseItemId] = newBaseItemId;
 
         const wantsParagraph = paragraphByBaseItemId[oldBaseItemId] === true;
@@ -633,7 +625,6 @@ export async function moveItemsToPart(
                 : newBaseItemId;
         oldToNewBaseMitId[oldBaseItemId] = newBaseMitId;
 
-        prevBaseItemId = newBaseItemId;
         prevBaseMitId = newBaseMitId;
     }
 
@@ -704,12 +695,6 @@ export async function moveItemsToPart(
             const stableTargetItems = targetItemsForTranslation.filter(
                 (e: any) => !relatedIds.has(e.id)
             );
-            const takenTranslationItemIds = new Set<string>(
-                stableTargetItems
-                    .map((e: any) => e.values?.itemId)
-                    .filter((v: string | undefined) => !!v)
-            );
-
             // קיבוץ לפי פריט בסיס מקורי, כדי לחשב itemId בנפרד לכל תרגום ובהתאם למיקום הבסיס
             const relatedByBaseId = new Map<string, Entity<any>[]>();
             relatedToMove.forEach((item: any) => {
@@ -729,7 +714,7 @@ export async function moveItemsToPart(
             );
 
             const orderedOldBaseIds = movedEntities.map((e: any) => e.values?.itemId as string);
-            const stableTargetIdsSorted = stableTargetItems
+            const translationOrderedIds = stableTargetItems
                 .map((e: any) => e.values?.itemId)
                 .filter((v: string | undefined) => !!v)
                 .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
@@ -742,27 +727,16 @@ export async function moveItemsToPart(
                 const baseIsParagraph =
                     (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
 
-                const prevCandidates = stableTargetIdsSorted.filter(
-                    (id: string) => Number(id) <= Number(newBaseId)
-                );
-                const nextCandidates = stableTargetIdsSorted.filter(
-                    (id: string) => Number(id) > Number(newBaseId)
-                );
-                let prevIdForTranslation: string | null =
-                    prevCandidates.length > 0
-                        ? prevCandidates[prevCandidates.length - 1]
-                        : newBaseId;
-                const nextIdForTranslation: string | null =
-                    nextCandidates.length > 0 ? nextCandidates[0] : null;
+                // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
+                let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
+                if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
+                translationOrderedIds.splice(baseRefPos, 0, newBaseId);
+                let insertPos = baseRefPos + 1;
 
                 for (const item of relatedItems) {
-                    const newTranslationItemId = computeNextAvailableItemId(
-                        prevIdForTranslation ?? undefined,
-                        nextIdForTranslation ?? undefined,
-                        takenTranslationItemIds
-                    );
-                    takenTranslationItemIds.add(newTranslationItemId);
-                    prevIdForTranslation = newTranslationItemId;
+                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos);
+                    translationOrderedIds.splice(insertPos, 0, newTranslationItemId);
+                    insertPos++;
 
                     const updatedLinkedItem = replaceLinkedItemId(
                         item.values?.linkedItem,

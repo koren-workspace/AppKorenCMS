@@ -30,7 +30,7 @@ import {
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
-import { mitIdBetween, computeNextAvailableItemId, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import { mitIdBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
 
@@ -1019,22 +1019,21 @@ export function usePartEdit(context: PartEditContext) {
             if (related.length === 0) return;
 
             const remaining = entities.filter((e: any) => !related.some((r: any) => r.id === e.id));
-            const takenEnhIds = new Set<string>(
-                remaining
-                    .map((e: any) => {
-                        const local = enhancementLocalValues[e.id]?.itemId;
-                        if (local != null && String(local).trim() !== "") return String(local);
-                        const from = e.values?.itemId ?? e.id;
-                        return from != null && String(from).trim() !== "" ? String(from) : "";
-                    })
-                    .filter((id: string) => id !== "")
-            );
-            const sortedTaken = [...takenEnhIds].sort((a, b) =>
-                a.localeCompare(b, undefined, { numeric: true })
-            );
-            const nextEnhId =
-                sortedTaken.find((id) => Number(id) > Number(newBaseItemId)) ?? null;
-            let prevEnhId: string | null = newBaseItemId;
+            const enhOrderedIds = remaining
+                .map((e: any) => {
+                    const local = enhancementLocalValues[e.id]?.itemId;
+                    if (local != null && String(local).trim() !== "") return String(local);
+                    const from = e.values?.itemId ?? e.id;
+                    return from != null && String(from).trim() !== "" ? String(from) : "";
+                })
+                .filter((id: string) => id !== "")
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+            // הכנסת newBaseItemId כנקודת ייחוס — תרגומים ייכנסו מיד אחריו
+            let enhBaseRefPos = enhOrderedIds.findIndex((id) => Number(id) > Number(newBaseItemId));
+            if (enhBaseRefPos < 0) enhBaseRefPos = enhOrderedIds.length;
+            enhOrderedIds.splice(enhBaseRefPos, 0, newBaseItemId);
+            let enhInsertPos = enhBaseRefPos + 1;
 
             related
                 .sort((a: any, b: any) =>
@@ -1045,16 +1044,12 @@ export function usePartEdit(context: PartEditContext) {
                 .forEach((enh: any) => {
                     let newEnhItemId = newBaseItemId;
                     try {
-                        newEnhItemId = computeNextAvailableItemId(
-                            prevEnhId ?? undefined,
-                            nextEnhId ?? undefined,
-                            takenEnhIds
-                        );
+                        newEnhItemId = computeItemIdForInsert(enhOrderedIds, enhInsertPos);
                     } catch {
-                        newEnhItemId = prevEnhId ?? newBaseItemId;
+                        newEnhItemId = enhOrderedIds[enhInsertPos - 1] ?? newBaseItemId;
                     }
-                    takenEnhIds.add(newEnhItemId);
-                    prevEnhId = newEnhItemId;
+                    enhOrderedIds.splice(enhInsertPos, 0, newEnhItemId);
+                    enhInsertPos++;
 
                     const oldLink = enhancementLocalValues[enh.id]?.linkedItem ?? enh.values?.linkedItem;
                     const newLinkedItem = Array.isArray(oldLink)

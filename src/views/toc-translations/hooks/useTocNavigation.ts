@@ -19,6 +19,7 @@ import {
 } from "../services/navigationService";
 import { baseColl, dbUpdateTimeCollection } from "../collections";
 import { appendChangeLog } from "../services/changeLogService";
+import { updatePartMetadataInItems } from "../services/partEditService";
 
 const LOG_PREFIX = "[TocTranslations]";
 
@@ -861,6 +862,105 @@ export function useTocNavigation() {
     };
 
     /**
+     * מעדכן מקטע קיים: שם עברית/אנגלית, dateSetIds, hazan, minyan.
+     * מעדכן את ה-TOC ואת partName/partIdAndName על כל הפריטים במקטע.
+     */
+    const updatePart = async (
+        partId: string,
+        params: {
+            nameHe: string;
+            nameEn: string;
+            dateSetIds: string[];
+            hazan: boolean | null;
+            minyan: boolean | null;
+        }
+    ) => {
+        if (
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !selectedPrayerId ||
+            !currentTocData?.translations?.length
+        )
+            return;
+        const tocId = selectedTocId;
+        const { nameHe, nameEn, dateSetIds, hazan, minyan } = params;
+
+        const getPartForTranslation = (translationId: string) => ({
+            id: partId,
+            name:
+                translationId === `1-${tocId}`
+                    ? nameEn
+                    : nameHe,
+            dateSetIds,
+            hazan,
+            minyan,
+        });
+
+        const updateTranslation = (t: any) => {
+            const partObj = getPartForTranslation(t.translationId ?? "");
+            return {
+                ...t,
+                categories: (t.categories ?? []).map((cat: any) => ({
+                    ...cat,
+                    prayers: (cat.prayers ?? []).map((p: any) =>
+                        p.id === selectedPrayerId
+                            ? {
+                                  ...p,
+                                  parts: (p.parts ?? []).map((pt: any) =>
+                                      pt.id === partId ? partObj : pt
+                                  ),
+                              }
+                            : p
+                    ),
+                })),
+            };
+        };
+
+        const updatedTranslations = currentTocData.translations.map(updateTranslation);
+
+        setIsSaving(true);
+        setSavingMessage("מעדכן מקטע...");
+        try {
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
+                        : t
+                )
+            );
+
+            await updatePartMetadataInItems(dataSource, {
+                selectedPrayerId,
+                partId,
+                translations: updatedTranslations,
+            });
+
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "update_part",
+                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId: selectedPrayerId, partId },
+                details: { partId, nameHe, nameEn },
+                savedToFirestore: true,
+            });
+            snackbar.open({ type: "success", message: "המקטע עודכן" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Update part failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בעדכון המקטע" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
+    /**
      * משנה את סדר המקטעים בתפילה הנבחרת לפי orderedPartIds.
      * מעדכן את כל התרגומים ב-TOC (סדר אחיד בכולם).
      */
@@ -1022,6 +1122,36 @@ export function useTocNavigation() {
         }
     };
 
+    /** מחזיר נתוני מקטע לעריכה: nameHe מהבסיס, nameEn מתרגום 1-{tocId} */
+    const getPartForEdit = (partId: string) => {
+        if (!currentTocData?.translations?.length || !selectedTocId || !selectedPrayerId) return null;
+        const baseTrans = currentTocData.translations.find((t: any) =>
+            String(t?.translationId ?? "").startsWith("0-")
+        );
+        const engTrans = currentTocData.translations.find(
+            (t: any) => t?.translationId === `1-${selectedTocId}`
+        );
+        const getPart = (trans: any) => {
+            for (const cat of trans?.categories ?? []) {
+                const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
+                const part = (prayer?.parts ?? []).find((p: any) => p.id === partId);
+                if (part) return part;
+            }
+            return null;
+        };
+        const basePart = baseTrans ? getPart(baseTrans) : null;
+        const engPart = engTrans ? getPart(engTrans) : null;
+        if (!basePart) return null;
+        return {
+            id: partId,
+            nameHe: basePart.name ?? "",
+            nameEn: engPart?.name ?? basePart.name ?? "",
+            dateSetIds: basePart.dateSetIds ?? ["100"],
+            hazan: basePart.hazan ?? null,
+            minyan: basePart.minyan ?? null,
+        };
+    };
+
     return {
         tocItems,
         selectedTocId,
@@ -1049,7 +1179,9 @@ export function useTocNavigation() {
         addPrayer,
         deletePrayer,
         addPart,
+        updatePart,
         deletePart,
         reorderParts,
+        getPartForEdit,
     };
 }

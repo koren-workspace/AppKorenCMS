@@ -20,6 +20,7 @@ import { AddTranslationModal } from "./toc-translations/components/AddTranslatio
 import { DateSetIdConfigModal } from "./toc-translations/components/DateSetIdConfigModal";
 import { AddItemModal } from "./toc-translations/components/AddItemModal";
 import { AddPartModal } from "./toc-translations/components/AddPartModal";
+import { EditPartModal } from "./toc-translations/components/EditPartModal";
 import { AddPrayerModal } from "./toc-translations/components/AddPrayerModal";
 import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
 import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
@@ -37,6 +38,19 @@ export function TocTranslationsView() {
     const [addPartAfterPartId, setAddPartAfterPartId] = useState<string | null>(null);
     const [addPrayerModalOpen, setAddPrayerModalOpen] = useState(false);
     const [addPrayerAfterPrayerId, setAddPrayerAfterPrayerId] = useState<string | null>(null);
+    const [editPartModalOpen, setEditPartModalOpen] = useState(false);
+    const [editPartId, setEditPartId] = useState<string | null>(null);
+
+    const allowAddPart = isBase;
+    const allowAddInstruction = !isBase;
+    const partEdit = usePartEdit({
+        currentTocData: nav.currentTocData,
+        currentTranslationData: nav.currentTranslationData,
+        selectedPrayerId: nav.selectedPrayerId,
+        selectedTocId: nav.selectedTocId,
+        currentParts: nav.currentParts,
+        addPart: nav.addPart,
+    });
 
     const openAddPartModal = (afterPartId: string | null) => {
         setAddPartAfterPartId(afterPartId);
@@ -63,6 +77,31 @@ export function TocTranslationsView() {
         if (result !== null) setAddPartModalOpen(false);
     };
 
+    const openEditPartModal = (partId: string) => {
+        setEditPartId(partId);
+        setEditPartModalOpen(true);
+    };
+
+    const handleEditPartSubmit = async (params: {
+        nameHe: string;
+        nameEn: string;
+        dateSetIds: string[];
+        hazan: boolean | null;
+        minyan: boolean | null;
+    }) => {
+        if (!editPartId) return;
+        const dateSetIds = params.dateSetIds.length ? params.dateSetIds : ["100"];
+        await nav.updatePart(editPartId, {
+            ...params,
+            dateSetIds,
+        });
+        setEditPartModalOpen(false);
+        setEditPartId(null);
+        if (partEdit.selectedGroupId === editPartId) {
+            await partEdit.fetchItemsWithEnhancements(editPartId);
+        }
+    };
+
     const openAddPrayerModal = (afterPrayerId: string | null) => {
         setAddPrayerAfterPrayerId(afterPrayerId);
         setAddPrayerModalOpen(true);
@@ -75,17 +114,6 @@ export function TocTranslationsView() {
         });
         setAddPrayerModalOpen(false);
     };
-    /** בסיס: מותר להוסיף מקטעים בלבד (ללא הבחנה בין מקטע להוראה). תרגום: מותר להוסיף רק הוראות */
-    const allowAddPart = isBase;
-    const allowAddInstruction = !isBase;
-    const partEdit = usePartEdit({
-        currentTocData: nav.currentTocData,
-        currentTranslationData: nav.currentTranslationData,
-        selectedPrayerId: nav.selectedPrayerId,
-        selectedTocId: nav.selectedTocId,
-        currentParts: nav.currentParts,
-        addPart: nav.addPart,
-    });
 
     const hasUnsaved = partEdit.changedIds.size > 0 || partEdit.enhancementChangedIds.size > 0 || partEdit.pendingDeletes.length > 0;
 
@@ -172,6 +200,7 @@ export function TocTranslationsView() {
                 selectedGroupId={partEdit.selectedGroupId}
                 onSelectPart={withUnsavedCheck(partEdit.fetchItemsWithEnhancements)}
                 onAddPartClick={openAddPartModal}
+                onEditPart={allowAddPart ? openEditPartModal : undefined}
                 onDeletePart={allowAddPart ? nav.deletePart : undefined}
                 onReorderParts={allowAddPart ? nav.reorderParts : undefined}
                 showAddPart={
@@ -283,6 +312,14 @@ export function TocTranslationsView() {
                 open={addPrayerModalOpen}
                 onClose={() => setAddPrayerModalOpen(false)}
                 onSubmit={handleAddPrayerSubmit}
+                saving={nav.isSaving}
+            />
+            {/* מודל עריכת מקטע */}
+            <EditPartModal
+                open={editPartModalOpen}
+                onClose={() => { setEditPartModalOpen(false); setEditPartId(null); }}
+                initialPart={editPartId ? nav.getPartForEdit(editPartId) : null}
+                onSubmit={handleEditPartSubmit}
                 saving={nav.isSaving}
             />
             {/* מודל הוספת מקטע */}

@@ -23,6 +23,14 @@ const EXCEL_PATH = path.resolve(process.cwd(), "docs", "cms-changes.xlsx")
 const SHEET_CHANGES = "שינויים"
 const SHEET_SAVES = "שמירות"
 
+/** עמודות מאפיינים לפריט – כל עמודה = ערך חדש של השדה אחרי השינוי */
+const ITEM_FIELD_COLS = [
+    "content", "type", "titleType", "title",
+    "fontTanach", "noSpace", "block", "firstInPage", "specialDate",
+    "cohanim", "hazan", "minyan",
+    "role", "reference", "specialSign", "dateSetId",
+]
+
 /** כותרות עמודות לכל sheet */
 const HEADERS_SAVES = [
     "save_id", "תאריך_ושעה", "פעולה",
@@ -35,8 +43,9 @@ const HEADERS_CHANGES = [
     "tocId", "translationId", "prayerId", "partId",
     "entityId", "itemId", "mitId",
     "enhancement", "enhancementTranslationId",
-    "שדה", "ערך_לפני", "ערך_אחרי",
-    "נשמר_Firestore", "פורסם_Bagel",
+    ...ITEM_FIELD_COLS,
+    "תיאור",
+    "נשמר_Firestore", "פורסם_Bagel", "הצליח",
 ]
 
 /** ממיר ISO timestamp לפורמט קריא בעברית (ישראל) */
@@ -46,6 +55,14 @@ function toIsraelTime(iso: string): string {
     } catch {
         return iso
     }
+}
+
+/** מחזיר V/X לפי הצלחת הפעולה */
+function getHatzliach(entry: any): string {
+    if (entry.action === "publish_to_bagel") {
+        return entry.publishedToBagel === true ? "V" : entry.publishedToBagel === false ? "X" : ""
+    }
+    return entry.savedToFirestore === true ? "V" : entry.savedToFirestore === false ? "X" : ""
 }
 
 /** מחזיר מחרוזת סיכום קצרה לשמירה */
@@ -117,173 +134,137 @@ function appendEntryToExcel(entry: any): void {
 
     // ── שורות ב"שינויים" ────────────────────────────────────────────────────
     const changeRows: any[][] = []
+    const firestoredStr = entry.savedToFirestore != null ? (entry.savedToFirestore ? "כן" : "לא") : ""
+    const bagelStr = entry.publishedToBagel != null ? (entry.publishedToBagel ? "כן" : "לא") : ""
+    const hatzliach = getHatzliach(entry)
 
-    /** בונה שורה סטנדרטית לגיליון "שינויים" */
-    function makeRow(
-        field: string,
-        before: string,  // ריק בהוספה
-        after: string,   // ריק במחיקה
-        opts?: { entityId?: string; itemId?: string; mitId?: string; isEnhancement?: string; enhTransId?: string }
+    /** בסיס שורה: עמודות הקשר */
+    function baseRow(): any[] {
+        return [entry.id ?? "", dt, entry.action ?? "", ctx.tocId ?? "", ctx.translationId ?? "", ctx.prayerId ?? "", ctx.partId ?? ""]
+    }
+
+    /** שורת תיאור – לפעולות שאינן save_part_items (ללא עמודות שדות) */
+    function makeDescRow(
+        description: string,
+        entityId = "", itemId = "", mitId = "", isEnh = "לא", enhTransId = ""
     ): any[] {
         return [
-            entry.id ?? "",
-            dt,
-            entry.action ?? "",
-            ctx.tocId ?? "",
-            ctx.translationId ?? "",
-            ctx.prayerId ?? "",
-            ctx.partId ?? "",
-            opts?.entityId ?? "",
-            opts?.itemId ?? "",
-            opts?.mitId ?? "",
-            opts?.isEnhancement ?? "לא",
-            opts?.enhTransId ?? "",
-            field,
-            before,   // ערך_לפני – ריק בהוספה
-            after,    // ערך_אחרי – ריק במחיקה
-            entry.savedToFirestore != null ? (entry.savedToFirestore ? "כן" : "לא") : "",
-            entry.publishedToBagel != null ? (entry.publishedToBagel ? "כן" : "לא") : "",
+            ...baseRow(),
+            entityId, itemId, mitId, isEnh, enhTransId,
+            ...ITEM_FIELD_COLS.map(() => ""),
+            description,
+            firestoredStr, bagelStr, hatzliach,
         ]
     }
 
-    // ── save_part_items: שדה שהשתנה – לפני ואחרי ──────────────────────────
+    // ── save_part_items: שורה אחת לפריט, עמודה לכל מאפיין ────────────────
     if (d.fieldChanges?.length) {
         for (const fc of d.fieldChanges) {
+            const fieldMap: Record<string, string> = {}
             for (const c of fc.changes ?? []) {
-                changeRows.push(makeRow(
-                    c.field ?? "",
-                    c.oldValue != null ? String(c.oldValue) : "",   // לפני
-                    c.newValue != null ? String(c.newValue) : "",   // אחרי
-                    {
-                        entityId: fc.entityId,
-                        itemId: fc.itemId,
-                        mitId: fc.mitId,
-                        isEnhancement: fc.isEnhancement ? "כן" : "לא",
-                        enhTransId: fc.enhancementTranslationId,
-                    }
-                ))
+                fieldMap[c.field] = c.newValue != null ? String(c.newValue) : ""
             }
+            changeRows.push([
+                ...baseRow(),
+                fc.entityId ?? "", fc.itemId ?? "", fc.mitId ?? "",
+                fc.isEnhancement ? "כן" : "לא",
+                fc.enhancementTranslationId ?? "",
+                ...ITEM_FIELD_COLS.map(f => fieldMap[f] ?? ""),
+                "",
+                firestoredStr, bagelStr, hatzliach,
+            ])
         }
     }
 
-    // ── delete_part_item: לפני = "קיים", אחרי = ריק ────────────────────────
+    // ── delete_part_item ────────────────────────────────────────────────────
     if (d.deletedItemId) {
-        changeRows.push(makeRow(
-            "פריט",
-            `itemId: ${d.deletedItemId}`,   // לפני – היה קיים
-            "",                              // אחרי – נמחק
-            { entityId: d.deletedEntityId, itemId: d.deletedItemId }
+        changeRows.push(makeDescRow(
+            `מחיקת פריט: itemId=${d.deletedItemId}`,
+            d.deletedEntityId ?? "", d.deletedItemId
         ))
     }
 
-    // ── create_translation_item: לפני = ריק, אחרי = id שנוצר ──────────────
+    // ── create_translation_item ─────────────────────────────────────────────
     if (d.newItemId && entry.action === "create_translation_item") {
-        changeRows.push(makeRow(
-            "פריט_תרגום",
-            "",                             // לפני – ריק (הוספה)
-            `itemId: ${d.newItemId}`,        // אחרי
-            { itemId: d.newItemId, mitId: d.newMitId, isEnhancement: "כן", enhTransId: d.targetTranslationId }
+        changeRows.push(makeDescRow(
+            `itemId: ${d.newItemId}`,
+            "", d.newItemId, d.newMitId ?? "",
+            "כן", d.targetTranslationId ?? ""
         ))
     }
 
-    // ── add_part: לפני = ריק, אחרי = שם המקטע ──────────────────────────────
+    // ── add_part ─────────────────────────────────────────────────────────────
     if (entry.action === "add_part" && d.newPartId) {
-        changeRows.push(makeRow(
-            "מקטע",
-            "",                                          // לפני – ריק (הוספה)
-            d.partName ? `${d.partName} (${d.newPartId})` : d.newPartId   // אחרי
+        changeRows.push(makeDescRow(
+            d.partName ? `${d.partName} (${d.newPartId})` : d.newPartId
         ))
     }
 
-    // ── delete_part: לפני = שם/id, אחרי = ריק ──────────────────────────────
+    // ── delete_part ──────────────────────────────────────────────────────────
     if (entry.action === "delete_part" && d.deletedId) {
-        changeRows.push(makeRow(
-            "מקטע",
-            d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId,  // לפני
-            ""   // אחרי – ריק (מחיקה)
+        changeRows.push(makeDescRow(
+            `מחיקה: ${d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId}`
         ))
     }
 
-    // ── add_prayer: לפני = ריק, אחרי = שם התפילה ────────────────────────────
+    // ── add_prayer ───────────────────────────────────────────────────────────
     if (entry.action === "add_prayer" && d.newPrayerId) {
-        changeRows.push(makeRow(
-            "תפילה",
-            "",
+        changeRows.push(makeDescRow(
             d.prayerName ? `${d.prayerName} (${d.newPrayerId})` : d.newPrayerId
         ))
     }
 
-    // ── delete_prayer: לפני = שם, אחרי = ריק ────────────────────────────────
+    // ── delete_prayer ────────────────────────────────────────────────────────
     if (entry.action === "delete_prayer" && d.deletedId) {
-        changeRows.push(makeRow(
-            "תפילה",
-            d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId,
-            ""
+        changeRows.push(makeDescRow(
+            `מחיקה: ${d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId}`
         ))
     }
 
-    // ── add_category: לפני = ריק, אחרי = שם ────────────────────────────────
+    // ── add_category ─────────────────────────────────────────────────────────
     if (entry.action === "add_category" && d.newCategoryId) {
-        changeRows.push(makeRow(
-            "קטגוריה",
-            "",
+        changeRows.push(makeDescRow(
             d.categoryName ? `${d.categoryName} (${d.newCategoryId})` : d.newCategoryId
         ))
     }
 
-    // ── delete_category: לפני = שם, אחרי = ריק ─────────────────────────────
+    // ── delete_category ──────────────────────────────────────────────────────
     if (entry.action === "delete_category" && d.deletedId) {
-        changeRows.push(makeRow(
-            "קטגוריה",
-            d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId,
-            ""
+        changeRows.push(makeDescRow(
+            `מחיקה: ${d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId}`
         ))
     }
 
-    // ── add_toc: לפני = ריק, אחרי = שם נוסח ────────────────────────────────
+    // ── add_toc ───────────────────────────────────────────────────────────────
     if (entry.action === "add_toc" && d.newTocId) {
-        changeRows.push(makeRow(
-            "נוסח",
-            "",
+        changeRows.push(makeDescRow(
             d.nusachName ? `${d.nusachName} (${d.newTocId})` : d.newTocId
         ))
     }
 
-    // ── delete_toc: לפני = שם, אחרי = ריק ──────────────────────────────────
+    // ── delete_toc ────────────────────────────────────────────────────────────
     if (entry.action === "delete_toc" && d.deletedId) {
-        changeRows.push(makeRow(
-            "נוסח",
-            d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId,
-            ""
+        changeRows.push(makeDescRow(
+            `מחיקה: ${d.deletedName ? `${d.deletedName} (${d.deletedId})` : d.deletedId}`
         ))
     }
 
-    // ── add_translation: לפני = ריק, אחרי = id ──────────────────────────────
+    // ── add_translation ───────────────────────────────────────────────────────
     if (entry.action === "add_translation" && d.newTranslationId) {
-        changeRows.push(makeRow(
-            "תרגום",
-            "",
-            d.newTranslationId
-        ))
+        changeRows.push(makeDescRow(d.newTranslationId))
     }
 
-    // ── delete_translation: לפני = id, אחרי = ריק ───────────────────────────
+    // ── delete_translation ────────────────────────────────────────────────────
     if (entry.action === "delete_translation" && d.deletedId) {
-        changeRows.push(makeRow(
-            "תרגום",
-            d.deletedId,
-            ""
-        ))
+        changeRows.push(makeDescRow(`מחיקה: ${d.deletedId}`))
     }
 
-    // ── move_items_to_part: לכל פריט שורה – לפני = מקטע מקור, אחרי = מקטע יעד
+    // ── move_items_to_part: שורה אחת לכל פריט שהוזז ─────────────────────────
     if (entry.action === "move_items_to_part" && d.movedItemIds?.length) {
         for (const itemId of d.movedItemIds) {
-            changeRows.push(makeRow(
-                "מיקום_פריט",
-                `partId: ${d.fromPartId ?? ""}`,   // לפני
-                `partId: ${d.toPartId ?? ""}`,      // אחרי
-                { itemId }
+            changeRows.push(makeDescRow(
+                `from=${d.fromPartId ?? ""} → to=${d.toPartId ?? ""}`,
+                "", itemId
             ))
         }
     }

@@ -29,3 +29,4 @@ scripts/load_test_stats_*.json
 scripts/load_test_chunk_*.json
 scripts/.chrome-session-*/
 docs/
+!docs/cms-changes.xlsx

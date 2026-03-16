@@ -31,7 +31,9 @@ type PrayerNavigationColumnsProps = {
     currentCategories: any[];
     selectedCategoryName: string | null;
     onSelectCategory: (categoryName: string) => void;
-    onAddCategory?: (categoryName: string, afterCategoryId: string | null) => void;
+    /** נקרא בלחיצה על "הוסף קטגוריה" – פותח מודל להזנת שם עברית + אנגלית. afterCategoryId = null = בסוף הרשימה */
+    onAddCategoryClick?: (afterCategoryId: string | null) => void;
+    onEditCategory?: (categoryId: string) => void;
     onDeleteCategory?: (categoryId: string) => void;
     /** מציג את כפתור "הוסף קטגוריה" רק כשנבחרו נוסח ותרגום */
     showAddCategory?: boolean;
@@ -40,6 +42,8 @@ type PrayerNavigationColumnsProps = {
     onSelectPrayer: (prayerId: string) => void;
     /** נקרא בלחיצה על "הוסף תפילה" – פותח מודל להזנת שם עברית + אנגלית. afterPrayerId = null = בסוף הרשימה */
     onAddPrayerClick?: (afterPrayerId: string | null) => void;
+    /** נקרא בלחיצה על עריכת תפילה – פותח מודל עריכה */
+    onEditPrayer?: (prayerId: string) => void;
     onDeletePrayer?: (prayerId: string) => void;
     /** מציג את כפתור "הוסף תפילה" רק כשנבחרו נוסח, תרגום וקטגוריה */
     showAddPrayer?: boolean;
@@ -145,13 +149,15 @@ export function PrayerNavigationColumns({
     currentCategories,
     selectedCategoryName,
     onSelectCategory,
-    onAddCategory,
+    onAddCategoryClick,
+    onEditCategory,
     onDeleteCategory,
     showAddCategory,
     currentPrayers,
     selectedPrayerId,
     onSelectPrayer,
     onAddPrayerClick,
+    onEditPrayer,
     onDeletePrayer,
     showAddPrayer,
     currentParts,
@@ -191,8 +197,7 @@ export function PrayerNavigationColumns({
     const isDragEnabled = !!onReorderParts && !isSaving && currentParts.length > 1;
 
     const handleAddCategoryAfter = (afterCategoryId: string | null) => {
-        const name = window.prompt("שם הקטגוריה החדשה:");
-        if (name?.trim()) onAddCategory?.(name.trim(), afterCategoryId);
+        onAddCategoryClick?.(afterCategoryId);
     };
 
     const handleDeleteCategory = (e: React.MouseEvent, categoryId: string) => {
@@ -222,7 +227,7 @@ export function PrayerNavigationColumns({
         <>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">3. קטגוריה</h4>
-                {currentCategories.length === 0 && onAddCategory && showAddCategory && (
+                {currentCategories.length === 0 && onAddCategoryClick && showAddCategory && (
                     <button
                         type="button"
                         onClick={() => handleAddCategoryAfter(null)}
@@ -243,6 +248,17 @@ export function PrayerNavigationColumns({
                             >
                                 {category.name}
                             </button>
+                            {onEditCategory && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); onEditCategory(category.id); }}
+                                    disabled={isSaving}
+                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
+                                    title="ערוך קטגוריה"
+                                >
+                                    ✎
+                                </button>
+                            )}
                             {onDeleteCategory && (
                                 <button
                                     type="button"
@@ -255,7 +271,7 @@ export function PrayerNavigationColumns({
                                 </button>
                             )}
                         </div>
-                        {onAddCategory && showAddCategory && (
+                        {onAddCategoryClick && showAddCategory && (
                             <button
                                 type="button"
                                 onClick={() => handleAddCategoryAfter(category.id)}
@@ -292,6 +308,17 @@ export function PrayerNavigationColumns({
                             >
                                 {prayer.name}
                             </button>
+                            {onEditPrayer && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); onEditPrayer(prayer.id); }}
+                                    disabled={isSaving}
+                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
+                                    title="ערוך תפילה"
+                                >
+                                    ✎
+                                </button>
+                            )}
                             {onDeletePrayer && (
                                 <button
                                     type="button"

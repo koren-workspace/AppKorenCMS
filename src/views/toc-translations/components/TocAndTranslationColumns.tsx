@@ -14,6 +14,7 @@ type TocAndTranslationColumnsProps = {
     selectedTocId: string | null;
     onSelectToc: (tocId: string) => void;
     onAddToc?: (nusachName: string) => void;
+    onEditToc?: (tocId: string) => void;
     onDeleteToc?: (tocId: string) => void;
     translations: any[];
     selectedTranslationIndex: number | null;
@@ -30,6 +31,7 @@ export function TocAndTranslationColumns({
     selectedTocId,
     onSelectToc,
     onAddToc,
+    onEditToc,
     onDeleteToc,
     translations,
     selectedTranslationIndex,
@@ -85,6 +87,17 @@ export function TocAndTranslationColumns({
                         >
                             {toc.values?.nusach ?? toc.id}
                         </button>
+                        {onEditToc && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onEditToc(toc.id); }}
+                                disabled={isSaving}
+                                className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
+                                title="ערוך נוסח"
+                            >
+                                ✎
+                            </button>
+                        )}
                         {onDeleteToc && (
                             <button
                                 type="button"

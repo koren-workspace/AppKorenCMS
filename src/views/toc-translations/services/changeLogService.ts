@@ -18,9 +18,13 @@ export type ChangeLogAction =
     | "create_translation_item"  // הוספת פריט תרגום חדש
     | "publish_to_bagel"    // פרסום ל-Bagel
     | "add_toc"             // הוספת נוסח (TOC)
+    | "update_toc"          // עריכת נוסח (שם)
     | "add_translation"     // הוספת תרגום לנוסח
+    | "update_translation"  // עריכת תרגום (תווית)
     | "add_category"        // הוספת קטגוריה
+    | "update_category"      // עריכת קטגוריה (שם)
     | "add_prayer"          // הוספת תפילה
+    | "update_prayer"       // עריכת תפילה (שם)
     | "add_part"            // הוספת מקטע
     | "update_part"         // עריכת מקטע (שם, מאפיינים)
     | "delete_toc"          // מחיקת נוסח
@@ -256,9 +260,13 @@ export function exportChangeLogAsText(filename?: string): void {
         if (e.details?.newItemId) lines.push(`  created: itemId=${e.details.newItemId} mitId=${e.details.newMitId ?? "-"} baseItemId=${e.details.baseItemId ?? "-"} targetTranslationId=${e.details.targetTranslationId ?? "-"}`);
         if (e.details?.selectedTocId) lines.push(`  publish: tocId=${e.details.selectedTocId}`);
         if (e.details?.newTocId) lines.push(`  new TOC: id=${e.details.newTocId} name=${e.details.nusachName ?? "-"}`);
+        if (e.action === "update_toc" && (e.details as any)?.tocId) lines.push(`  updated TOC: id=${(e.details as any).tocId} nusach=${(e.details as any)?.nusach ?? "-"}`);
         if (e.details?.newTranslationId) lines.push(`  new translation: id=${e.details.newTranslationId}`);
+        if (e.action === "update_translation" && (e.details as any)?.translationId) lines.push(`  updated translation: id=${(e.details as any).translationId} label=${(e.details as any)?.label ?? "-"}`);
         if (e.details?.newCategoryId) lines.push(`  new category: id=${e.details.newCategoryId} name=${e.details.categoryName ?? "-"} after=${e.details.afterCategoryId ?? "-"}`);
+        if (e.action === "update_category" && (e.details as any)?.categoryId) lines.push(`  updated category: id=${(e.details as any).categoryId} nameHe=${(e.details as any)?.nameHe ?? "-"} nameEn=${(e.details as any)?.nameEn ?? "-"}`);
         if (e.details?.newPrayerId) lines.push(`  new prayer: id=${e.details.newPrayerId} name=${e.details.prayerName ?? "-"} after=${e.details.afterPrayerId ?? "-"}`);
+        if (e.action === "update_prayer" && (e.details as any)?.prayerId) lines.push(`  updated prayer: id=${(e.details as any).prayerId} nameHe=${(e.details as any)?.nameHe ?? "-"} nameEn=${(e.details as any)?.nameEn ?? "-"}`);
         if (e.details?.newPartId) lines.push(`  new part: id=${e.details.newPartId} name=${e.details.partName ?? "-"} after=${e.details.afterPartId ?? "-"}`);
         if (e.action === "update_part" && (e.details as any)?.partId) lines.push(`  updated part: id=${(e.details as any).partId} nameHe=${(e.details as any)?.nameHe ?? "-"} nameEn=${(e.details as any)?.nameEn ?? "-"}`);
         if (e.details?.fromPartId) lines.push(`  move_items: from=${e.details.fromPartId} to=${e.details.toPartId ?? "-"} items=${(e.details.movedItemIds ?? []).join(", ") || "-"}`);

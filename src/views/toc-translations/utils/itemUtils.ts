@@ -72,7 +72,7 @@ export function computeNextAvailableItemId(
     let result = getRoundedInitialItemId(idBefore, idAfter);
     const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
     const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
-
+    // די מיותר בגלל שלא יכול לקרות מקרה שבו יש  הID החדש תפוסם
     while (takenIds.has(result)) {
         const nextNum = (Number(result) || 0) + 1;
         if (!Number.isNaN(idAfterNum) && nextNum >= idAfterNum) {

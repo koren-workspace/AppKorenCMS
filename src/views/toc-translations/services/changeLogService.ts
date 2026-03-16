@@ -135,6 +135,7 @@ function loadFromStorage(): void {
 }
 
 const CHANGELOG_DEV_ENDPOINT = "/__cms_changelog__";
+const EXCEL_DEV_ENDPOINT = "/__cms_excel__";
 
 function saveToStorage(): void {
     if (typeof localStorage === "undefined") return;
@@ -159,7 +160,20 @@ function trimIfNeeded(): void {
 }
 
 /**
- * מוסיף רשומת לוג אחת ושומר ב-localStorage
+ * שולח entry בודד לשרת Vite לכתיבה ל-Excel (רק במצב dev).
+ * נקרא אחרי כל appendChangeLog – כלומר אחרי כל שמירה, מחיקה, הוספה וכו'.
+ */
+function sendEntryToExcel(entry: ChangeLogEntry): void {
+    if (typeof window === "undefined" || !(import.meta as any).env?.DEV) return;
+    fetch(EXCEL_DEV_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+    }).catch(() => {});
+}
+
+/**
+ * מוסיף רשומת לוג אחת ושומר ב-localStorage + Excel (במצב dev)
  */
 export function appendChangeLog(entry: Omit<ChangeLogEntry, "id" | "timestampIso">): ChangeLogEntry {
     loadFromStorage();
@@ -171,6 +185,7 @@ export function appendChangeLog(entry: Omit<ChangeLogEntry, "id" | "timestampIso
     entries.push(full);
     trimIfNeeded();
     saveToStorage();
+    sendEntryToExcel(full);
     return full;
 }
 

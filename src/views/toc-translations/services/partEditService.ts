@@ -769,6 +769,70 @@ export async function moveItemsToPart(
     }
 }
 
+// ─── Update Part Metadata in Items ────────────────────────────────────────────
+
+export type UpdatePartMetadataParams = {
+    selectedPrayerId: string;
+    partId: string;
+    /** translations array from TOC (כולל categories/prayers/parts לכל תרגום) */
+    translations: any[];
+};
+
+/**
+ * מעדכן partName ו-partIdAndName על כל הפריטים במקטע, בכל התרגומים.
+ * השם לכל תרגום נלקח מעץ ה-TOC של אותו תרגום.
+ */
+export async function updatePartMetadataInItems(
+    dataSource: DataSource,
+    params: UpdatePartMetadataParams
+): Promise<void> {
+    const { selectedPrayerId, partId, translations } = params;
+
+    const getPartName = (trans: any): string => {
+        for (const cat of trans.categories ?? []) {
+            const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
+            if (prayer) {
+                const part = (prayer.parts ?? []).find((pt: any) => pt.id === partId);
+                if (part) return part.name ?? "";
+            }
+        }
+        return "";
+    };
+
+    const now = Date.now();
+
+    for (const trans of translations) {
+        const tid = trans?.translationId as string | undefined;
+        if (!tid) continue;
+
+        const partName = getPartName(trans);
+        const partIdAndName = `${partId} ${partName}`;
+        const path = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+
+        const items = await dataSource.fetchCollection({
+            path,
+            collection: itemsCollection,
+            filter: { partId: ["==", partId] },
+        });
+
+        const toUpdate = items.filter((e: any) => e.values?.deleted !== true);
+        for (const item of toUpdate) {
+            await dataSource.saveEntity({
+                path,
+                entityId: item.id,
+                values: {
+                    ...item.values,
+                    partName,
+                    partIdAndName,
+                    timestamp: now,
+                },
+                status: "existing",
+                collection: itemsCollection,
+            });
+        }
+    }
+}
+
 /**
  * מעדכן את זמן העדכון ב-Firestore (db-update-time) לנוסח הנבחר.
  * החיבור ל-Bagel עצמו מתבצע דרך bagelUpdateTimeService (SDK).

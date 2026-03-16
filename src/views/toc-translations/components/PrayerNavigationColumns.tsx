@@ -48,6 +48,8 @@ type PrayerNavigationColumnsProps = {
     onSelectPart: (partId: string) => void;
     /** נקרא בלחיצה על "הוסף מקטע" – פותח מודל להזנת מאפיינים. afterPartId = null = בסוף הרשימה */
     onAddPartClick?: (afterPartId: string | null) => void;
+    /** נקרא בלחיצה על עריכת מקטע – פותח מודל עריכה */
+    onEditPart?: (partId: string) => void;
     onDeletePart?: (partId: string) => void;
     /** מציג את כפתור "הוסף מקטע" רק כשנבחרו נוסח, תרגום, קטגוריה ותפילה */
     showAddPart?: boolean;
@@ -62,6 +64,7 @@ function SortablePartItem({
     part,
     selectedGroupId,
     onSelectPart,
+    onEditPart,
     onDeletePart,
     isSaving,
     isDragDisabled,
@@ -69,6 +72,7 @@ function SortablePartItem({
     part: any;
     selectedGroupId: string | null;
     onSelectPart: (id: string) => void;
+    onEditPart?: (partId: string) => void;
     onDeletePart?: (e: React.MouseEvent, id: string) => void;
     isSaving: boolean;
     isDragDisabled: boolean;
@@ -111,6 +115,17 @@ function SortablePartItem({
             >
                 {part.name}
             </button>
+            {onEditPart && (
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onEditPart(part.id); }}
+                    disabled={isSaving}
+                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
+                    title="ערוך מקטע"
+                >
+                    ✎
+                </button>
+            )}
             {onDeletePart && (
                 <button
                     type="button"
@@ -143,6 +158,7 @@ export function PrayerNavigationColumns({
     selectedGroupId,
     onSelectPart,
     onAddPartClick,
+    onEditPart,
     onDeletePart,
     showAddPart,
     onReorderParts,
@@ -330,6 +346,7 @@ export function PrayerNavigationColumns({
                                     part={part}
                                     selectedGroupId={selectedGroupId}
                                     onSelectPart={onSelectPart}
+                                    onEditPart={onEditPart}
                                     onDeletePart={onDeletePart ? handleDeletePart : undefined}
                                     isSaving={isSaving}
                                     isDragDisabled={!isDragEnabled}

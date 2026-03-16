@@ -565,15 +565,16 @@ describe("partEditService – moveItemsToPart", () => {
         const relCalls = saveCalls.filter((c: any) => c.path.includes("translations/1-ashkenaz"));
 
         expect(baseCall).toBeTruthy();
-        expect(baseCall.values.itemId).toBe("110");
+        // idBefore=100, idAfter=null (פריט יחיד ביעד) → 100+MIT_ID_GAP=1100
+        expect(baseCall.values.itemId).toBe("1100");
         expect(baseCall.values.mit_id).toBe("100");
 
         expect(relCalls.length).toBe(2);
         relCalls.forEach((c: any) => {
             expect(c.values.partId).toBe("tgt");
-            expect(c.values.linkedItem).toContain("110"); // linkedItem עודכן ל-itemId החדש של הבסיס
+            expect(c.values.linkedItem).toContain("1100"); // linkedItem עודכן ל-itemId החדש של הבסיס
             expect(c.values.mit_id).toBe("100"); // הבסיס חלק מפסקה -> אותו mit_id לתרגומים
-            expect(c.values.itemId).not.toBe("110"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
+            expect(c.values.itemId).not.toBe("1100"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
         });
     });
 });

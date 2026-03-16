@@ -904,9 +904,9 @@ export function usePartEdit(context: PartEditContext) {
 
     /**
      * מחשב itemId לפריט חדש במיקום index. לוקח בחשבון שכנים מהרשימה + פריטי תרגום מקושרים (enhancements).
-     * onAboutToTryDecimals – נקרא פעם אחת לפני ניסיון ערכים עשרוניים (כשאין מקום שלם).
+     * confirmUserWantsDecimalId – נקרא כשאין מקום שלם בין שני מספרים צמודים, שואל האם ליצור מזהה .5.
      */
-    const computeItemIdForIndex = (index: number, onAboutToTryDecimals?: () => void): string => {
+    const computeItemIdForIndex = (index: number, confirmUserWantsDecimalId?: () => boolean): string => {
         const orderedItemIds = allItems.map((i) => getItemIdInCurrentContext(i));
 
         const allEnhancements = Object.values(enhancements).flat() as Entity<any>[];
@@ -937,7 +937,7 @@ export function usePartEdit(context: PartEditContext) {
                 ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
             ],
             linkedIdsPerPosition,
-            onAboutToTryDecimals,
+            confirmUserWantsDecimalId,
         });
     };
 
@@ -1098,12 +1098,11 @@ export function usePartEdit(context: PartEditContext) {
     const doAddNewItemAt = (index: number, dateSetId: string, isContinuation: boolean, form?: AddItemFormValues, defaultType: string = "body"): void | false => {
         let computedItemId: string;
         try {
-            computedItemId = computeItemIdForIndex(index, () => {
-                snackbar.open({
-                    type: "info",
-                    message: "אין מקום פנוי – מחפש מזהה עשרוני בין הפריטים…",
-                });
-            });
+            computedItemId = computeItemIdForIndex(index, () =>
+                window.confirm(
+                    "בין שני פריטים צמודים אין מקום למספר שלם. האם ליצור מזהה עם .5?"
+                )
+            );
         } catch (e) {
             if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
                 snackbar.open({
@@ -1554,12 +1553,10 @@ export function usePartEdit(context: PartEditContext) {
                     dateSetId: form.dateSetId?.trim() || "100",
                     baseItemMitId: baseItemMitId != null && String(baseItemMitId).trim() !== "" ? String(baseItemMitId).trim() : undefined,
                     isStartOfParagraph: !!form.isStartOfParagraph,
-                    onAboutToTryDecimals: () => {
-                        snackbar.open({
-                            type: "info",
-                            message: "אין מקום פנוי – מחפש מזהה עשרוני בין הפריטים…",
-                        });
-                    },
+                    confirmUserWantsDecimalId: () =>
+                        window.confirm(
+                            "בין שני פריטים צמודים אין מקום למספר שלם. האם ליצור מזהה עם .5?"
+                        ),
                 });
                 newItemId = result.newItemId;
                 newMitId = result.newMitId;

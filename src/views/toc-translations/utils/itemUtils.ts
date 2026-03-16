@@ -36,58 +36,55 @@ export function mitIdBetween(
  * מחשב itemId חדש בין idBefore ל-idAfter שלא קיים ב-takenIds.
  *
  * אלגוריתם:
- * 1. mitIdBetween(idBefore, idAfter) → ערך התחלתי (ממוצע / +GAP / -GAP).
+ * 1. ממוצע מעוגל (אין מספרים עשרוניים כברירת מחדל).
  * 2. אם הערך תפוס → ממשיך +1 עד שמוצא פנוי.
- * 3. אם +1 חורג מ-idAfter → מנסה ערכים עשרוניים (0.5, 0.25, 0.75...) בין idBefore ל-idAfter.
- * 4. אם אף ערך עשרוני לא פנוי → זורק NO_SPACE_BETWEEN_ITEMS.
+ * 3. אם +1 חורג מ-idAfter: רק כשמדובר בשני מספרים צמודים (למשל 1 ו-2) – שואל את המשתמש
+ *    האם ליצור מזהה .5. רק אם מאשר – מנסה .5. אם .5 תפוס – זורק NO_SPACE_BETWEEN_ITEMS.
+ * 4. אם לא צמודים או המשתמש לא מאשר – זורק NO_SPACE_BETWEEN_ITEMS.
  *
- * onAboutToTryDecimals – callback שנקרא לפני ניסיון ערכים עשרוניים (להודעת UI).
+ * confirmUserWantsDecimalId – callback שמחזיר true/false. נקרא רק כשיש שני מספרים צמודים.
  */
 export const NO_SPACE_BETWEEN_ITEMS = "NO_SPACE_BETWEEN_ITEMS";
 
-const DECIMAL_OFFSETS = [0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];
+export interface ComputeNextAvailableItemIdOptions {
+    /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
+    confirmUserWantsDecimalId?: () => boolean;
+}
+
+function getRoundedInitialItemId(
+    idBefore: string | null | undefined,
+    idAfter: string | null | undefined
+): string {
+    const raw = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+    const num = Number(raw);
+    if (Number.isNaN(num)) return raw;
+    return String(Math.round(num));
+}
 
 export function computeNextAvailableItemId(
     idBefore: string | null | undefined,
     idAfter: string | null | undefined,
     takenIds: Set<string>,
-    onAboutToTryDecimals?: () => void
+    options?: ComputeNextAvailableItemIdOptions
 ): string {
-    let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+    const confirmUserWantsDecimalId = options?.confirmUserWantsDecimalId;
+
+    let result = getRoundedInitialItemId(idBefore, idAfter);
     const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
     const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
-
-    const tryDecimalSlot = (value: number): string | null => {
-        const s = value === Math.floor(value) ? `${value}` : String(value);
-        return !takenIds.has(s) ? s : null;
-    };
 
     while (takenIds.has(result)) {
         const nextNum = (Number(result) || 0) + 1;
         if (!Number.isNaN(idAfterNum) && nextNum >= idAfterNum) {
-            onAboutToTryDecimals?.();
-            let fallbackStr: string | null = null;
-            if (!Number.isNaN(idBeforeNum) && idBeforeNum < idAfterNum) {
-                for (const o of DECIMAL_OFFSETS) {
-                    const v = idBeforeNum + o;
-                    if (v < idAfterNum) {
-                        fallbackStr = tryDecimalSlot(v);
-                        if (fallbackStr) break;
-                    }
-                }
+            const isConsecutive = !Number.isNaN(idBeforeNum) && idAfterNum - idBeforeNum === 1;
+            if (isConsecutive) {
+                const approved = confirmUserWantsDecimalId?.();
+                if (!approved) throw new Error(NO_SPACE_BETWEEN_ITEMS);
+                const decimalId = `${idBeforeNum + 0.5}`;
+                if (takenIds.has(decimalId)) throw new Error(NO_SPACE_BETWEEN_ITEMS);
+                return decimalId;
             }
-            if (!fallbackStr && !Number.isNaN(idAfterNum)) {
-                for (const o of DECIMAL_OFFSETS) {
-                    const v = idAfterNum - o;
-                    if (Number.isNaN(idBeforeNum) || v > idBeforeNum) {
-                        fallbackStr = tryDecimalSlot(v);
-                        if (fallbackStr) break;
-                    }
-                }
-            }
-            if (!fallbackStr) throw new Error(NO_SPACE_BETWEEN_ITEMS);
-            result = fallbackStr;
-            break;
+            throw new Error(NO_SPACE_BETWEEN_ITEMS);
         }
         result = String(nextNum);
     }
@@ -121,7 +118,8 @@ export interface ComputeItemIdForInsertOptions {
      * שימוש: כשתרגום חייב לקבל itemId >= itemId של פריט הבסיס.
      */
     minIdBefore?: string;
-    onAboutToTryDecimals?: () => void;
+    /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
+    confirmUserWantsDecimalId?: () => boolean;
 }
 
 /**
@@ -143,7 +141,7 @@ export function computeItemIdForInsert(
     insertIndex: number,
     options?: ComputeItemIdForInsertOptions
 ): string {
-    const { neighborBounds, extraTakenIds, linkedIdsPerPosition, minIdBefore, onAboutToTryDecimals } = options ?? {};
+    const { neighborBounds, extraTakenIds, linkedIdsPerPosition, minIdBefore, confirmUserWantsDecimalId } = options ?? {};
 
     let idBefore: string | null = null;
     let idAfter: string | null = null;
@@ -203,7 +201,7 @@ export function computeItemIdForInsert(
         for (const id of extraTakenIds) if (id) takenIds.add(id);
     }
 
-    return computeNextAvailableItemId(idBefore, idAfter, takenIds, onAboutToTryDecimals);
+    return computeNextAvailableItemId(idBefore, idAfter, takenIds, { confirmUserWantsDecimalId });
 }
 
 /**

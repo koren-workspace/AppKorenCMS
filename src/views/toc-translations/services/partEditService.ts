@@ -288,8 +288,8 @@ export type CreateTranslationItemParams = {
     baseItemMitId?: string;
     /** האם פריט התרגום הוא "תחילת פסקה" – רלוונטי רק כשפריט הבסיס אינו חלק מפסקה (itemId === mit_id) */
     isStartOfParagraph?: boolean;
-    /** נקרא פעם אחת לפני ניסיון ערכים עשרוניים (כשאין מקום שלם) */
-    onAboutToTryDecimals?: () => void;
+    /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
+    confirmUserWantsDecimalId?: () => boolean;
 };
 
 /** תוצאה מ-createTranslationItem – מזההים ללוג שינויים */
@@ -326,7 +326,7 @@ export async function createTranslationItem(
         dateSetId,
         baseItemMitId: baseItemMitIdParam,
         isStartOfParagraph,
-        onAboutToTryDecimals,
+        confirmUserWantsDecimalId,
     } = params;
 
     const path = `translations/${targetTranslationId}/prayers/${selectedPrayerId}/items`;
@@ -357,7 +357,7 @@ export async function createTranslationItem(
 
     const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
         minIdBefore: baseItemId,
-        onAboutToTryDecimals,
+        confirmUserWantsDecimalId,
     });
 
     // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום

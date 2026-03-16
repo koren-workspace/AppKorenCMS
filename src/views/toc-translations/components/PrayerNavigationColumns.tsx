@@ -38,14 +38,16 @@ type PrayerNavigationColumnsProps = {
     currentPrayers: any[];
     selectedPrayerId: string | null;
     onSelectPrayer: (prayerId: string) => void;
-    onAddPrayer?: (prayerName: string, afterPrayerId: string | null) => void;
+    /** נקרא בלחיצה על "הוסף תפילה" – פותח מודל להזנת שם עברית + אנגלית. afterPrayerId = null = בסוף הרשימה */
+    onAddPrayerClick?: (afterPrayerId: string | null) => void;
     onDeletePrayer?: (prayerId: string) => void;
     /** מציג את כפתור "הוסף תפילה" רק כשנבחרו נוסח, תרגום וקטגוריה */
     showAddPrayer?: boolean;
     currentParts: any[];
     selectedGroupId: string | null;
     onSelectPart: (partId: string) => void;
-    onAddPart?: (partName: string, afterPartId: string | null) => void;
+    /** נקרא בלחיצה על "הוסף מקטע" – פותח מודל להזנת מאפיינים. afterPartId = null = בסוף הרשימה */
+    onAddPartClick?: (afterPartId: string | null) => void;
     onDeletePart?: (partId: string) => void;
     /** מציג את כפתור "הוסף מקטע" רק כשנבחרו נוסח, תרגום, קטגוריה ותפילה */
     showAddPart?: boolean;
@@ -134,13 +136,13 @@ export function PrayerNavigationColumns({
     currentPrayers,
     selectedPrayerId,
     onSelectPrayer,
-    onAddPrayer,
+    onAddPrayerClick,
     onDeletePrayer,
     showAddPrayer,
     currentParts,
     selectedGroupId,
     onSelectPart,
-    onAddPart,
+    onAddPartClick,
     onDeletePart,
     showAddPart,
     onReorderParts,
@@ -183,8 +185,7 @@ export function PrayerNavigationColumns({
     };
 
     const handleAddPrayerAfter = (afterPrayerId: string | null) => {
-        const name = window.prompt("שם התפילה החדשה:");
-        if (name?.trim()) onAddPrayer?.(name.trim(), afterPrayerId);
+        onAddPrayerClick?.(afterPrayerId);
     };
 
     const handleDeletePrayer = (e: React.MouseEvent, prayerId: string) => {
@@ -193,8 +194,7 @@ export function PrayerNavigationColumns({
     };
 
     const handleAddPartAfter = (afterPartId: string | null) => {
-        const name = window.prompt("שם המקטע החדש:");
-        if (name?.trim()) onAddPart?.(name.trim(), afterPartId);
+        onAddPartClick?.(afterPartId);
     };
 
     const handleDeletePart = (e: React.MouseEvent, partId: string) => {
@@ -255,7 +255,7 @@ export function PrayerNavigationColumns({
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">4. תפילה</h4>
-                {currentPrayers.length === 0 && onAddPrayer && showAddPrayer && (
+                {currentPrayers.length === 0 && onAddPrayerClick && showAddPrayer && (
                     <button
                         type="button"
                         onClick={() => handleAddPrayerAfter(null)}
@@ -288,7 +288,7 @@ export function PrayerNavigationColumns({
                                 </button>
                             )}
                         </div>
-                        {onAddPrayer && showAddPrayer && (
+                        {onAddPrayerClick && showAddPrayer && (
                             <button
                                 type="button"
                                 onClick={() => handleAddPrayerAfter(prayer.id)}
@@ -304,7 +304,7 @@ export function PrayerNavigationColumns({
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
-                {currentParts.length === 0 && onAddPart && showAddPart && (
+                {currentParts.length === 0 && onAddPartClick && showAddPart && (
                     <button
                         type="button"
                         onClick={() => handleAddPartAfter(null)}
@@ -334,7 +334,7 @@ export function PrayerNavigationColumns({
                                     isSaving={isSaving}
                                     isDragDisabled={!isDragEnabled}
                                 />
-                                {onAddPart && showAddPart && !activeDragId && (
+                                {onAddPartClick && showAddPart && !activeDragId && (
                                     <button
                                         type="button"
                                         onClick={() => handleAddPartAfter(part.id)}

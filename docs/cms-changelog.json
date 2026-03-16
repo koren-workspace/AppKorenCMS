@@ -1401,5 +1401,142 @@
     "savedToFirestore": true,
     "id": "chg_1773567147994_v5ugqjl",
     "timestampIso": "2026-03-15T09:32:27.993Z"
+  },
+  {
+    "timestamp": 1773654696369,
+    "action": "create_translation_item",
+    "context": {
+      "tocId": "sefard",
+      "translationId": "1-sefard",
+      "prayerId": "2015010",
+      "partId": "2011030"
+    },
+    "details": {
+      "newItemId": "201002561040",
+      "newMitId": "201002561040",
+      "baseItemId": "201002561030",
+      "targetTranslationId": "1-sefard"
+    },
+    "savedToFirestore": true,
+    "id": "chg_1773654696369_ti36z9l",
+    "timestampIso": "2026-03-16T09:51:36.369Z"
+  },
+  {
+    "timestamp": 1773654971279,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "sefard",
+      "translationId": "0-sefard",
+      "prayerId": "2015010",
+      "partId": "2011030"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "201002611030",
+          "itemId": "201002611030",
+          "mitId": "201002611030",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "content",
+              "oldValue": "״ה׳ בֹּֽקֶר תִּשְְְׁמַע קוֹלִי, בֹּֽקֶר אֶעֱרָָךְְ־לְְךָ וַאֲצַפֶּה״ (תהלים ה, ד).",
+              "newValue": "״ה׳ בֹּֽקֶר תִּשְְְׁמַע קוֹלִי, בֹּֽקֶר אֶעֱרָָךְְ לְְךָ וַאֲצַפֶּה״ (תהלים ה, ד)."
+            },
+            {
+              "field": "type",
+              "oldValue": "smallInstructions",
+              "newValue": "body"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773654971281_23008kp",
+    "timestampIso": "2026-03-16T09:56:11.279Z"
+  },
+  {
+    "timestamp": 1773655368641,
+    "action": "save_part_items",
+    "context": {
+      "tocId": "sefard",
+      "translationId": "0-sefard",
+      "prayerId": "2015010",
+      "partId": "2011080"
+    },
+    "details": {
+      "fieldChanges": [
+        {
+          "entityId": "new_1773655276454",
+          "itemId": "201113011075",
+          "mitId": "201113011075",
+          "isEnhancement": false,
+          "changes": [
+            {
+              "field": "content",
+              "newValue": "תחילת פסוקי דזמרה"
+            },
+            {
+              "field": "type",
+              "newValue": "title"
+            },
+            {
+              "field": "titleType",
+              "newValue": "H1"
+            },
+            {
+              "field": "title",
+              "newValue": ""
+            },
+            {
+              "field": "fontTanach",
+              "newValue": false
+            },
+            {
+              "field": "noSpace",
+              "newValue": false
+            },
+            {
+              "field": "block",
+              "newValue": false
+            },
+            {
+              "field": "firstInPage",
+              "newValue": false
+            },
+            {
+              "field": "specialDate",
+              "newValue": false
+            },
+            {
+              "field": "role",
+              "newValue": ""
+            },
+            {
+              "field": "reference",
+              "newValue": ""
+            },
+            {
+              "field": "specialSign",
+              "newValue": ""
+            },
+            {
+              "field": "dateSetId",
+              "newValue": "100"
+            },
+            {
+              "field": "mit_id",
+              "newValue": "201113011075"
+            }
+          ]
+        }
+      ]
+    },
+    "savedToFirestore": true,
+    "publishedToBagel": false,
+    "id": "chg_1773655368642_sayuzly",
+    "timestampIso": "2026-03-16T10:02:48.641Z"
   }
 ]

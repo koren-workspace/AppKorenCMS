@@ -13,12 +13,14 @@
  *   - הקומפוננטות מקבלות את כל הנתונים ב-props (controlled).
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
 import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
 import { DateSetIdConfigModal } from "./toc-translations/components/DateSetIdConfigModal";
 import { AddItemModal } from "./toc-translations/components/AddItemModal";
+import { AddPartModal } from "./toc-translations/components/AddPartModal";
+import { AddPrayerModal } from "./toc-translations/components/AddPrayerModal";
 import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
 import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
@@ -30,6 +32,49 @@ import { isBaseTranslation } from "./toc-translations/services/navigationService
 export function TocTranslationsView() {
     const nav = useTocNavigation();
     const isBase = isBaseTranslation(nav.currentTranslationData?.translationId);
+
+    const [addPartModalOpen, setAddPartModalOpen] = useState(false);
+    const [addPartAfterPartId, setAddPartAfterPartId] = useState<string | null>(null);
+    const [addPrayerModalOpen, setAddPrayerModalOpen] = useState(false);
+    const [addPrayerAfterPrayerId, setAddPrayerAfterPrayerId] = useState<string | null>(null);
+
+    const openAddPartModal = (afterPartId: string | null) => {
+        setAddPartAfterPartId(afterPartId);
+        setAddPartModalOpen(true);
+    };
+
+    const handleAddPartSubmit = async (params: {
+        nameHe: string;
+        nameEn: string;
+        dateSetIds: string[];
+        hazan: boolean | null;
+        minyan: boolean | null;
+    }) => {
+        const tocId = nav.selectedTocId;
+        if (!tocId) return;
+        const dateSetIds = params.dateSetIds.length ? params.dateSetIds : ["100"];
+        const result = await nav.addPart(params.nameHe, addPartAfterPartId, {
+            nameEn: params.nameEn,
+            tocId,
+            dateSetIds,
+            hazan: params.hazan,
+            minyan: params.minyan,
+        });
+        if (result !== null) setAddPartModalOpen(false);
+    };
+
+    const openAddPrayerModal = (afterPrayerId: string | null) => {
+        setAddPrayerAfterPrayerId(afterPrayerId);
+        setAddPrayerModalOpen(true);
+    };
+
+    const handleAddPrayerSubmit = async (params: { nameHe: string; nameEn: string }) => {
+        await nav.addPrayer(params.nameHe, addPrayerAfterPrayerId, {
+            nameEn: params.nameEn,
+            tocId: nav.selectedTocId ?? undefined,
+        });
+        setAddPrayerModalOpen(false);
+    };
     /** בסיס: מותר להוסיף מקטעים בלבד (ללא הבחנה בין מקטע להוראה). תרגום: מותר להוסיף רק הוראות */
     const allowAddPart = isBase;
     const allowAddInstruction = !isBase;
@@ -115,7 +160,7 @@ export function TocTranslationsView() {
                 currentPrayers={nav.currentPrayers}
                 selectedPrayerId={nav.selectedPrayerId}
                 onSelectPrayer={withUnsavedCheck(nav.onSelectPrayer)}
-                onAddPrayer={nav.addPrayer}
+                onAddPrayerClick={openAddPrayerModal}
                 onDeletePrayer={allowAddPart ? nav.deletePrayer : undefined}
                 showAddPrayer={
                     !!nav.selectedTocId &&
@@ -126,7 +171,7 @@ export function TocTranslationsView() {
                 currentParts={nav.currentParts}
                 selectedGroupId={partEdit.selectedGroupId}
                 onSelectPart={withUnsavedCheck(partEdit.fetchItemsWithEnhancements)}
-                onAddPart={nav.addPart}
+                onAddPartClick={openAddPartModal}
                 onDeletePart={allowAddPart ? nav.deletePart : undefined}
                 onReorderParts={allowAddPart ? nav.reorderParts : undefined}
                 showAddPart={
@@ -232,6 +277,20 @@ export function TocTranslationsView() {
                 onSubmit={partEdit.submitAddTranslation}
                 saving={partEdit.saving}
                 onOpenDateSetIdConfig={partEdit.openDateSetIdModalForAddTranslation}
+            />
+            {/* מודל הוספת תפילה */}
+            <AddPrayerModal
+                open={addPrayerModalOpen}
+                onClose={() => setAddPrayerModalOpen(false)}
+                onSubmit={handleAddPrayerSubmit}
+                saving={nav.isSaving}
+            />
+            {/* מודל הוספת מקטע */}
+            <AddPartModal
+                open={addPartModalOpen}
+                onClose={() => setAddPartModalOpen(false)}
+                onSubmit={handleAddPartSubmit}
+                saving={nav.isSaving}
             />
             {/* מודל פיצול מקטע */}
             <SplitPartModal

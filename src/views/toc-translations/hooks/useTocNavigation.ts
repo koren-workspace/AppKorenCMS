@@ -399,8 +399,13 @@ export function useTocNavigation() {
     /**
      * מוסיף תפילה אחרי תפילה קיימת (או בסוף אם afterPrayerId null). ID מחושב בין המסמכים ב-prayers בנוסח הבסיסי, עם בדיקה שה-ID פנוי.
      * בנוסח הבסיסי מעדכן את כל התרגומים; מסמך Firestore נוצר רק בבסיס.
+     * options.nameEn + options.tocId: בתרגום 1-{tocId} משתמשים בשם האנגלית; בשאר – בעברית.
      */
-    const addPrayer = async (prayerName: string, afterPrayerId: string | null) => {
+    const addPrayer = async (
+        prayerName: string,
+        afterPrayerId: string | null,
+        options?: { nameEn?: string; tocId?: string }
+    ) => {
         const name = prayerName?.trim();
         if (
             !name ||
@@ -461,33 +466,35 @@ export function useTocNavigation() {
         while (existingIds.has(newPrayerId)) {
             newPrayerId = String((Number(newPrayerId) || 0) + 1);
         }
-        const newPrayer = { id: newPrayerId, name, parts: [] as any[] };
-        const insertPrayerAt = (prayerList: any[]) => {
-            if (afterPrayerId == null) return [...prayerList, newPrayer];
+        const getPrayerForTranslation = (translationId: string) => ({
+            id: newPrayerId,
+            name:
+                options?.nameEn && options?.tocId && translationId === `1-${options.tocId}`
+                    ? options.nameEn
+                    : name,
+            parts: [] as any[],
+        });
+        const insertPrayerAt = (prayerList: any[], prayerObj: any) => {
+            if (afterPrayerId == null) return [...prayerList, prayerObj];
             const i = prayerList.findIndex((p: any) => p.id === afterPrayerId);
             const pos = i >= 0 ? i + 1 : prayerList.length;
-            return [...prayerList.slice(0, pos), newPrayer, ...prayerList.slice(pos)];
+            return [...prayerList.slice(0, pos), prayerObj, ...prayerList.slice(pos)];
+        };
+        const updateTranslation = (t: any) => {
+            const prayerObj = getPrayerForTranslation(t.translationId ?? "");
+            return {
+                ...t,
+                categories: (t.categories ?? []).map((c: any) =>
+                    c.name === selectedCategoryName
+                        ? { ...c, prayers: insertPrayerAt(c.prayers ?? [], prayerObj) }
+                        : c
+                ),
+            };
         };
         const updatedTranslations = isBase
-            ? currentTocData.translations.map((t: any) => ({
-                  ...t,
-                  categories: (t.categories ?? []).map((c: any) =>
-                      c.name === selectedCategoryName
-                          ? { ...c, prayers: insertPrayerAt(c.prayers ?? []) }
-                          : c
-                  ),
-              }))
+            ? currentTocData.translations.map(updateTranslation)
             : currentTocData.translations.map((t: any, i: number) =>
-                  i === transIdx
-                      ? {
-                            ...t,
-                            categories: (t.categories ?? []).map((c: any) =>
-                                c.name === selectedCategoryName
-                                    ? { ...c, prayers: insertPrayerAt(c.prayers ?? []) }
-                                    : c
-                            ),
-                        }
-                      : t
+                  i === transIdx ? updateTranslation(t) : t
               );
         const prayerPath = `translations/${currentTranslationData.translationId}/prayers`;
         setIsSaving(true);

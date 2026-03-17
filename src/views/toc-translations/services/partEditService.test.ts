@@ -327,7 +327,7 @@ describe("partEditService – splitPartItems", () => {
         expect(savedIds).toContain("e3");
         expect(savedIds).not.toContain("e1");
 
-        const e2Call = ds.saveEntity.mock.calls.find((c: any) => c[0].entityId === "e2")[0];
+        const e2Call = ds.saveEntity.mock.calls.find((c: any) => c[0].entityId === "e2")![0];
         expect(e2Call.values.partId).toBe("p2");
         expect(e2Call.values.partName).toBe("חדש");
         expect(e2Call.values.partIdAndName).toBe("p2 חדש");

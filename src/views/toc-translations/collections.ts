@@ -6,7 +6,7 @@
  * - baseColl: collection בסיסי לטעינת רשימת הנוסחים (toc)
  */
 
-import { buildCollection } from "@firecms/cloud";
+import { buildCollection } from "@firecms/core";
 
 /** פריטים תחת translations/{translationId}/prayers/{prayerId}/items */
 export const itemsCollection = buildCollection({

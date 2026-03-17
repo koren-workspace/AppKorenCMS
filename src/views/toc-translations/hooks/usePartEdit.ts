@@ -12,11 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import {
-    useDataSource,
-    useSnackbarController,
-    Entity,
-} from "@firecms/cloud";
+import { Entity, useDataSource, useSnackbarController } from "@firecms/core";
 import {
     fetchPartWithEnhancements,
     fetchPartItems,

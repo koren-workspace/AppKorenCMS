@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
-import { Entity } from "@firecms/cloud";
+import { Entity } from "@firecms/core";
 import { getItemStyle } from "../utils/itemUtils";
 import { ITEM_TYPE_OPTIONS, INSTRUCTION_TYPE_OPTIONS, TITLE_TYPE_OPTIONS, ITEM_FIELD_HELP } from "../constants/itemFields";
 

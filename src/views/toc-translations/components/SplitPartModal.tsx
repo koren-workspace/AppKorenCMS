@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { Entity } from "@firecms/cloud";
+import { Entity } from "@firecms/core";
 
 export type SplitPartModalProps = {
     open: boolean;

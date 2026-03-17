@@ -4,7 +4,7 @@
  * משמש "מצוא או צור": אם קיימת רשומה עם אותם מאפיינים – מחזיר את ה־dateSetId שלה; אחרת יוצר רשומה חדשה עם ID הבא.
  */
 
-import { Entity } from "@firecms/cloud";
+import { Entity } from "@firecms/core";
 import { calendarCollection } from "../collections";
 import {
     type CalendarEntryPayload,

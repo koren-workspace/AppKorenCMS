@@ -9,7 +9,7 @@
  * - updateFirestoreTimestamp: מעדכן db-update-time ב-Firestore (Bagel SDK ב-bagelUpdateTimeService)
  */
 
-import { Entity } from "@firecms/cloud";
+import { Entity } from "@firecms/core";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import { chunkArray, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
 

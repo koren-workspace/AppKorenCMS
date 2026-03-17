@@ -27,6 +27,7 @@ export type ChangeLogAction =
     | "update_prayer"       // עריכת תפילה (שם)
     | "add_part"            // הוספת מקטע
     | "update_part"         // עריכת מקטע (שם, מאפיינים)
+    | "reorder_parts"       // שינוי סדר מקטעים
     | "delete_toc"          // מחיקת נוסח
     | "delete_translation"  // מחיקת תרגום
     | "delete_category"     // מחיקת קטגוריה
@@ -97,15 +98,31 @@ export type ChangeLogEntry = {
         /** add_category */
         newCategoryId?: string;
         categoryName?: string;
+        categoryNameEn?: string;
         afterCategoryId?: string | null;
+        /** update_category */
+        categoryId?: string;
+        nameHe?: string;
+        nameEn?: string;
+        /** update_toc */
+        tocId?: string;
+        nusach?: string;
+        /** update_translation */
+        translationId?: string;
+        label?: string;
         /** add_prayer */
         newPrayerId?: string;
         prayerName?: string;
         afterPrayerId?: string | null;
+        /** update_prayer / update_part */
+        prayerId?: string;
+        partId?: string;
         /** add_part */
         newPartId?: string;
         partName?: string;
         afterPartId?: string | null;
+        /** reorder_parts */
+        orderedPartIds?: string[];
         /** move_items_to_part */
         fromPartId?: string;
         toPartId?: string;

@@ -1,5 +1,6 @@
 import React from "react";
-import { FieldHelperText, FieldProps, TextField, useModeController } from "@firecms/cloud";
+import { FieldCaption, FieldProps, useModeController } from "@firecms/core";
+import { TextField } from "@firecms/ui";
 
 interface CustomColorTextFieldProps {
     color: string
@@ -38,10 +39,9 @@ export default function CustomColorTextField({
                     );
                 }}/>
 
-            <FieldHelperText includeDescription={includeDescription}
-                             showError={showError}
-                             error={error}
-                             property={property}/>
+            <FieldCaption error={!!error}>
+                {showError && error ? error : (includeDescription ? property.description : undefined)}
+            </FieldCaption>
         </>
 
     );

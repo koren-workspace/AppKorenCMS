@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { Entity } from "@firecms/cloud";
+import { Entity } from "@firecms/core";
 import { ITEM_TYPE_OPTIONS, TITLE_TYPE_OPTIONS, ITEM_FIELD_HELP } from "../constants/itemFields";
 
 export type TranslationOption = { translationId: string; [k: string]: any };

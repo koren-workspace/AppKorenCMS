@@ -10,7 +10,7 @@
  */
 
 import React from "react";
-import { Entity } from "@firecms/cloud";
+import { Entity } from "@firecms/core";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
 import {

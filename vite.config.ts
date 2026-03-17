@@ -440,7 +440,6 @@ export default defineConfig({
             shared: [
                 "react",
                 "react-dom",
-                "@firecms/cloud",
                 "@firecms/core",
                 "@firecms/firebase",
                 "@firecms/ui",

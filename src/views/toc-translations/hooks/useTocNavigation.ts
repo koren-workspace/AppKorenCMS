@@ -239,9 +239,13 @@ export function useTocNavigation() {
         return `${maxIndex + 1}-${selectedTocId}`;
     };
 
-    /** מוסיף קטגוריה אחרי קטגוריה קיימת (או בסוף אם afterCategoryId null). ID = מקסימום מבין כל הקטגוריות + 10. בנוסח הבסיסי מעדכן את כל התרגומים. */
-    const addCategory = async (categoryName: string, afterCategoryId: string | null) => {
-        const name = categoryName?.trim();
+    /** מוסיף קטגוריה אחרי קטגוריה קיימת (או בסוף אם afterCategoryId null). options.nameEn + tocId: בתרגום 1-{tocId} משתמשים בשם האנגלית. */
+    const addCategory = async (
+        nameHe: string,
+        afterCategoryId: string | null,
+        options?: { nameEn?: string; tocId?: string }
+    ) => {
+        const name = nameHe?.trim();
         if (
             !name ||
             selectedTocId == null ||
@@ -254,25 +258,37 @@ export function useTocNavigation() {
         const trans = currentTocData.translations[idx];
         if (!trans) return;
         const isBase = String(trans.translationId ?? "").startsWith("0-");
+        const tocId = selectedTocId;
+        const getCategoryForTranslation = (translationId: string) => ({
+            id: "",
+            name:
+                options?.nameEn && options?.tocId && translationId === `1-${options.tocId}`
+                    ? options.nameEn.trim()
+                    : name,
+            prayers: [] as any[],
+        });
         const allCategories = trans.categories ?? [];
         const maxId = allCategories.length
             ? Math.max(0, ...allCategories.map((c: any) => Number(c.id) || 0))
             : 0;
         const newCategoryId = String(maxId + 10);
-        const newCategory = { id: newCategoryId, name, prayers: [] as any[] };
-        const insertAt = (cats: any[]) => {
-            if (afterCategoryId == null) return [...cats, newCategory];
+        const insertAt = (cats: any[], t: any) => {
+            const catObj = {
+                ...getCategoryForTranslation(t.translationId ?? ""),
+                id: newCategoryId,
+            };
+            if (afterCategoryId == null) return [...cats, catObj];
             const i = cats.findIndex((c: any) => c.id === afterCategoryId);
             const pos = i >= 0 ? i + 1 : cats.length;
-            return [...cats.slice(0, pos), newCategory, ...cats.slice(pos)];
+            return [...cats.slice(0, pos), catObj, ...cats.slice(pos)];
         };
         const updatedTranslations = isBase
             ? currentTocData.translations.map((t: any) => ({
                   ...t,
-                  categories: insertAt(t.categories ?? []),
+                  categories: insertAt(t.categories ?? [], t),
               }))
             : currentTocData.translations.map((t: any, i: number) =>
-                  i === idx ? { ...t, categories: insertAt(t.categories ?? []) } : t
+                  i === idx ? { ...t, categories: insertAt(t.categories ?? [], t) } : t
               );
         setIsSaving(true);
         setSavingMessage("מוסיף קטגוריה...");
@@ -295,7 +311,7 @@ export function useTocNavigation() {
                 timestamp: Date.now(),
                 action: "add_category",
                 context: { tocId: selectedTocId, translationId: trans?.translationId },
-                details: { newCategoryId, categoryName: name, afterCategoryId: afterCategoryId },
+                details: { newCategoryId, categoryName: name, categoryNameEn: options?.nameEn, afterCategoryId: afterCategoryId },
                 savedToFirestore: true,
             });
             snackbar.open({ type: "success", message: "קטגוריה נוספה" });
@@ -304,6 +320,131 @@ export function useTocNavigation() {
         } catch (err) {
             console.error(`${LOG_PREFIX} Add category failed`, err);
             snackbar.open({ type: "error", message: "שגיאה בהוספת קטגוריה" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
+    /** מחזיר נתוני קטגוריה לעריכה: בבסיס nameHe+nameEn; בתרגום (1-*, 2-*) שם בתרגום הנוכחי */
+    const getCategoryForEdit = (categoryId: string) => {
+        if (!currentTocData?.translations?.length || !selectedTocId) return null;
+        const baseTrans = currentTocData.translations.find((t: any) =>
+            String(t?.translationId ?? "").startsWith("0-")
+        );
+        const engTrans = currentTocData.translations.find(
+            (t: any) => t?.translationId === `1-${selectedTocId}`
+        );
+        const getCat = (trans: any) => (trans?.categories ?? []).find((c: any) => c.id === categoryId);
+        const baseCat = baseTrans ? getCat(baseTrans) : null;
+        const engCat = engTrans ? getCat(engTrans) : null;
+        if (!baseCat) return null;
+        const tid = currentTranslationData?.translationId ?? "";
+        const isBase = String(tid).startsWith("0-");
+        if (isBase) {
+            return {
+                id: categoryId,
+                mode: "base" as const,
+                nameHe: baseCat.name ?? "",
+                nameEn: engCat?.name ?? baseCat.name ?? "",
+            };
+        }
+        const currCat = getCat(currentTranslationData);
+        return {
+            id: categoryId,
+            mode: "translation" as const,
+            name: currCat?.name ?? "",
+        };
+    };
+
+    /**
+     * מעדכן קטגוריה קיימת.
+     * בבסיס (0-*): מעדכן nameHe בבסיס ו-nameEn ב-1-{tocId}.
+     * בתרגום (1-*, 2-*): מעדכן רק את השם בתרגום הנוכחי.
+     */
+    const updateCategory = async (
+        categoryId: string,
+        params: { nameHe?: string; nameEn?: string; name?: string }
+    ) => {
+        if (
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !currentTocData?.translations?.length
+        )
+            return;
+        const tocId = selectedTocId;
+        const tid = currentTranslationData?.translationId ?? "";
+        const isBase = String(tid).startsWith("0-");
+
+        let nameHe: string;
+        let nameEn: string;
+        let targetTranslationId: string | null = null;
+
+        if (isBase && params.nameHe != null && params.nameEn != null) {
+            nameHe = params.nameHe;
+            nameEn = params.nameEn;
+        } else if (!isBase && params.name != null) {
+            targetTranslationId = tid;
+            nameHe = params.name;
+            nameEn = params.name;
+        } else {
+            return;
+        }
+
+        const getCategoryForTranslation = (translationId: string) => {
+            if (targetTranslationId) {
+                return translationId === targetTranslationId ? nameHe : undefined;
+            }
+            return translationId === `1-${tocId}` ? nameEn : nameHe;
+        };
+
+        const updateTranslation = (t: any) => {
+            const newName = getCategoryForTranslation(t.translationId ?? "");
+            if (newName === undefined) return t;
+            return {
+                ...t,
+                categories: (t.categories ?? []).map((c: any) =>
+                    c.id === categoryId ? { ...c, name: newName } : c
+                ),
+            };
+        };
+
+        const updatedTranslations = currentTocData.translations.map(updateTranslation);
+
+        setIsSaving(true);
+        setSavingMessage("מעדכן קטגוריה...");
+        try {
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
+                        : t
+                )
+            );
+            const cat = currentCategories?.find((c: any) => c.id === categoryId);
+            if (cat && selectedCategoryName === cat.name) {
+                const newName = targetTranslationId ? nameHe : (tid === `1-${tocId}` ? nameEn : nameHe);
+                setSelectedCategoryName(newName);
+            }
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "update_category",
+                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, categoryId },
+                details: { categoryId, nameHe, nameEn },
+                savedToFirestore: true,
+            });
+            snackbar.open({ type: "success", message: "הקטגוריה עודכנה" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Update category failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בעדכון הקטגוריה" });
         } finally {
             setIsSaving(false);
             setSavingMessage(null);
@@ -547,6 +688,189 @@ export function useTocNavigation() {
     };
 
     /**
+     * מעדכן תפילה קיימת.
+     * בבסיס (0-*): מעדכן nameHe בבסיס ו-nameEn ב-1-{tocId}.
+     * בתרגום (1-*, 2-*): מעדכן רק את השם בתרגום הנוכחי.
+     */
+    const updatePrayer = async (
+        prayerId: string,
+        params: { nameHe?: string; nameEn?: string; name?: string }
+    ) => {
+        if (
+            !selectedTocId ||
+            selectedTranslationIndex == null ||
+            selectedTranslationIndex < 0 ||
+            !selectedCategoryName ||
+            !currentTocData?.translations?.length
+        )
+            return;
+        const tocId = selectedTocId;
+        const tid = currentTranslationData?.translationId ?? "";
+        const isBase = String(tid).startsWith("0-");
+
+        let nameHe: string;
+        let nameEn: string;
+        let targetTranslationId: string | null = null;
+
+        if (isBase && params.nameHe != null && params.nameEn != null) {
+            nameHe = params.nameHe;
+            nameEn = params.nameEn;
+        } else if (!isBase && params.name != null) {
+            targetTranslationId = tid;
+            nameHe = params.name;
+            nameEn = params.name;
+        } else {
+            return;
+        }
+
+        const selectedCat = currentCategories?.find((c: any) => c.name === selectedCategoryName);
+        const categoryId = selectedCat?.id;
+
+        const getPrayerParts = (t: any): any[] => {
+            const cat = categoryId
+                ? (t?.categories ?? []).find((c: any) => c.id === categoryId)
+                : (t?.categories ?? []).find((c: any) => c.name === selectedCategoryName);
+            const prayer = (cat?.prayers ?? []).find((p: any) => p.id === prayerId);
+            return prayer?.parts ?? [];
+        };
+
+        const getPrayerForTranslation = (translationId: string) => {
+            const useName = targetTranslationId
+                ? translationId === targetTranslationId
+                    ? nameHe
+                    : undefined
+                : translationId === `1-${tocId}`
+                  ? nameEn
+                  : nameHe;
+            return useName !== undefined ? { id: prayerId, name: useName, parts: [] as any[] } : null;
+        };
+
+        const updateTranslation = (t: any) => {
+            const prayerObj = getPrayerForTranslation(t.translationId ?? "");
+            if (prayerObj) {
+                const existingParts = getPrayerParts(t);
+                prayerObj.parts = existingParts;
+            }
+            if (!prayerObj) return t;
+            return {
+                ...t,
+                categories: (t.categories ?? []).map((c: any) =>
+                    (categoryId ? c.id === categoryId : c.name === selectedCategoryName)
+                        ? {
+                              ...c,
+                              prayers: (c.prayers ?? []).map((p: any) =>
+                                  p.id === prayerId ? prayerObj : p
+                              ),
+                          }
+                        : c
+                ),
+            };
+        };
+
+        const updatedTranslations = currentTocData.translations.map(updateTranslation);
+
+        setIsSaving(true);
+        setSavingMessage("מעדכן תפילה...");
+        try {
+            await dataSource.saveEntity({
+                path: "toc",
+                entityId: selectedTocId,
+                values: { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === selectedTocId
+                        ? { ...t, values: { ...t.values, translations: updatedTranslations, timestamp: Date.now() } }
+                        : t
+                )
+            );
+
+            const translationsToUpdate = targetTranslationId
+                ? currentTocData.translations.filter((t: any) => t.translationId === targetTranslationId)
+                : currentTocData.translations;
+
+            for (const t of translationsToUpdate ?? []) {
+                const tId = t?.translationId;
+                if (!tId) continue;
+                const typeName = tId === `1-${tocId}` ? nameEn : nameHe;
+                const prayersPath = `translations/${tId}/prayers`;
+                try {
+                    const prayersList = await dataSource.fetchCollection({
+                        path: prayersPath,
+                        collection: baseColl,
+                    });
+                    const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                    if (prayerEntity) {
+                        const pathToUse = (prayerEntity as any).path ?? prayersPath;
+                        await dataSource.saveEntity({
+                            path: pathToUse,
+                            entityId: prayerEntity.id,
+                            values: { ...prayerEntity.values, type: typeName, timestamp: Date.now() },
+                            status: "existing",
+                            collection: baseColl,
+                        });
+                    }
+                } catch (_) {}
+            }
+
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "update_prayer",
+                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId },
+                details: { prayerId, nameHe, nameEn },
+                savedToFirestore: true,
+            });
+            snackbar.open({ type: "success", message: "התפילה עודכנה" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Update prayer failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בעדכון התפילה" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
+    /** מחזיר נתוני תפילה לעריכה: בבסיס (0-*) nameHe+nameEn; בתרגום (1-*, 2-*) שם בתרגום הנוכחי */
+    const getPrayerForEdit = (prayerId: string) => {
+        if (!currentTocData?.translations?.length || !selectedTocId || !selectedCategoryName) return null;
+        const selectedCat = currentCategories?.find((c: any) => c.name === selectedCategoryName);
+        const categoryId = selectedCat?.id;
+        const baseTrans = currentTocData.translations.find((t: any) =>
+            String(t?.translationId ?? "").startsWith("0-")
+        );
+        const engTrans = currentTocData.translations.find(
+            (t: any) => t?.translationId === `1-${selectedTocId}`
+        );
+        const getPrayer = (trans: any) => {
+            const cat = categoryId
+                ? (trans?.categories ?? []).find((c: any) => c.id === categoryId)
+                : (trans?.categories ?? []).find((c: any) => c.name === selectedCategoryName);
+            return (cat?.prayers ?? []).find((p: any) => p.id === prayerId) ?? null;
+        };
+        const basePrayer = baseTrans ? getPrayer(baseTrans) : null;
+        const engPrayer = engTrans ? getPrayer(engTrans) : null;
+        if (!basePrayer) return null;
+        const tid = currentTranslationData?.translationId ?? "";
+        const isBase = String(tid).startsWith("0-");
+        if (isBase) {
+            return {
+                id: prayerId,
+                mode: "base" as const,
+                nameHe: basePrayer.name ?? "",
+                nameEn: engPrayer?.name ?? basePrayer.name ?? "",
+            };
+        }
+        const currPrayer = getPrayer(currentTranslationData);
+        return {
+            id: prayerId,
+            mode: "translation" as const,
+            name: currPrayer?.name ?? "",
+        };
+    };
+
+    /**
      * מוחק תפילה: רק בנוסח הבסיסי (0-*). מוציא את התפילה מכל התרגומים ב-TOC ומוחק מסמך התפילה (ופריטים) בכל תרגום.
      */
     const deletePrayer = async (prayerId: string) => {
@@ -693,6 +1017,44 @@ export function useTocNavigation() {
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete translation failed`, err);
             snackbar.open({ type: "error", message: "שגיאה במחיקת תרגום" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
+    /** מעדכן את שם התצוגה של הנוסח (nusach) */
+    const updateToc = async (tocId: string, params: { nusach: string }) => {
+        const toc = tocItems.find((t) => t.id === tocId);
+        if (!toc || !params.nusach?.trim()) return;
+        setIsSaving(true);
+        setSavingMessage("מעדכן נוסח...");
+        try {
+            await dataSource.saveEntity({
+                path: toc.path,
+                entityId: toc.id,
+                values: { ...toc.values, nusach: params.nusach.trim(), timestamp: Date.now() },
+                status: "existing",
+                collection: baseColl,
+            });
+            setTocItems((prev) =>
+                prev.map((t) =>
+                    t.id === tocId
+                        ? { ...t, values: { ...t.values, nusach: params.nusach.trim(), timestamp: Date.now() } }
+                        : t
+                )
+            );
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "update_toc",
+                context: { tocId },
+                details: { tocId, nusach: params.nusach },
+                savedToFirestore: true,
+            });
+            snackbar.open({ type: "success", message: "הנוסח עודכן" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Update TOC failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בעדכון הנוסח" });
         } finally {
             setIsSaving(false);
             setSavingMessage(null);
@@ -862,17 +1224,19 @@ export function useTocNavigation() {
     };
 
     /**
-     * מעדכן מקטע קיים: שם עברית/אנגלית, dateSetIds, hazan, minyan.
-     * מעדכן את ה-TOC ואת partName/partIdAndName על כל הפריטים במקטע.
+     * מעדכן מקטע קיים.
+     * בבסיס (0-*): שם עברית/אנגלית, dateSetIds, hazan, minyan – מעדכן את כולם.
+     * בתרגום (1-*, 2-*): מעדכן רק את השם בתרגום הנוכחי.
      */
     const updatePart = async (
         partId: string,
         params: {
-            nameHe: string;
-            nameEn: string;
-            dateSetIds: string[];
-            hazan: boolean | null;
-            minyan: boolean | null;
+            nameHe?: string;
+            nameEn?: string;
+            name?: string;
+            dateSetIds?: string[];
+            hazan?: boolean | null;
+            minyan?: boolean | null;
         }
     ) => {
         if (
@@ -884,21 +1248,62 @@ export function useTocNavigation() {
         )
             return;
         const tocId = selectedTocId;
-        const { nameHe, nameEn, dateSetIds, hazan, minyan } = params;
+        const tid = currentTranslationData?.translationId ?? "";
+        const isBase = String(tid).startsWith("0-");
 
-        const getPartForTranslation = (translationId: string) => ({
-            id: partId,
-            name:
-                translationId === `1-${tocId}`
-                    ? nameEn
-                    : nameHe,
-            dateSetIds,
-            hazan,
-            minyan,
-        });
+        const getExistingPart = (trans: any) => {
+            for (const cat of trans?.categories ?? []) {
+                const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
+                const part = (prayer?.parts ?? []).find((p: any) => p.id === partId);
+                if (part) return part;
+            }
+            return null;
+        };
+
+        let nameHe: string;
+        let nameEn: string;
+        let dateSetIds: string[];
+        let hazan: boolean | null;
+        let minyan: boolean | null;
+        let targetTranslationId: string | null = null;
+
+        if (isBase && params.nameHe != null && params.nameEn != null && params.dateSetIds != null) {
+            nameHe = params.nameHe;
+            nameEn = params.nameEn;
+            dateSetIds = params.dateSetIds;
+            hazan = params.hazan ?? null;
+            minyan = params.minyan ?? null;
+        } else if (!isBase && params.name != null) {
+            targetTranslationId = tid;
+            const currPart = getExistingPart(currentTranslationData);
+            if (!currPart) return;
+            nameHe = params.name;
+            nameEn = params.name;
+            dateSetIds = currPart.dateSetIds ?? ["100"];
+            hazan = currPart.hazan ?? null;
+            minyan = currPart.minyan ?? null;
+        } else {
+            return;
+        }
+
+        const getPartForTranslation = (translationId: string) => {
+            if (targetTranslationId) {
+                return translationId === targetTranslationId
+                    ? { id: partId, name: nameHe, dateSetIds, hazan, minyan }
+                    : null;
+            }
+            return {
+                id: partId,
+                name: translationId === `1-${tocId}` ? nameEn : nameHe,
+                dateSetIds,
+                hazan,
+                minyan,
+            };
+        };
 
         const updateTranslation = (t: any) => {
             const partObj = getPartForTranslation(t.translationId ?? "");
+            if (!partObj) return t;
             return {
                 ...t,
                 categories: (t.categories ?? []).map((cat: any) => ({
@@ -1122,7 +1527,7 @@ export function useTocNavigation() {
         }
     };
 
-    /** מחזיר נתוני מקטע לעריכה: nameHe מהבסיס, nameEn מתרגום 1-{tocId} */
+    /** מחזיר נתוני מקטע לעריכה: בבסיס nameHe+nameEn+מאפיינים; בתרגום (1-*, 2-*) שם בלבד */
     const getPartForEdit = (partId: string) => {
         if (!currentTocData?.translations?.length || !selectedTocId || !selectedPrayerId) return null;
         const baseTrans = currentTocData.translations.find((t: any) =>
@@ -1142,13 +1547,24 @@ export function useTocNavigation() {
         const basePart = baseTrans ? getPart(baseTrans) : null;
         const engPart = engTrans ? getPart(engTrans) : null;
         if (!basePart) return null;
+        const tid = currentTranslationData?.translationId ?? "";
+        const isBase = String(tid).startsWith("0-");
+        if (isBase) {
+            return {
+                id: partId,
+                mode: "base" as const,
+                nameHe: basePart.name ?? "",
+                nameEn: engPart?.name ?? basePart.name ?? "",
+                dateSetIds: basePart.dateSetIds ?? ["100"],
+                hazan: basePart.hazan ?? null,
+                minyan: basePart.minyan ?? null,
+            };
+        }
+        const currPart = getPart(currentTranslationData);
         return {
             id: partId,
-            nameHe: basePart.name ?? "",
-            nameEn: engPart?.name ?? basePart.name ?? "",
-            dateSetIds: basePart.dateSetIds ?? ["100"],
-            hazan: basePart.hazan ?? null,
-            minyan: basePart.minyan ?? null,
+            mode: "translation" as const,
+            name: currPart?.name ?? "",
         };
     };
 
@@ -1170,14 +1586,19 @@ export function useTocNavigation() {
         onSelectCategory,
         onSelectPrayer,
         addToc,
+        updateToc,
         deleteToc,
         addTranslation,
         getSuggestedTranslationId,
         deleteTranslation,
         addCategory,
+        updateCategory,
+        getCategoryForEdit,
         deleteCategory,
         addPrayer,
+        updatePrayer,
         deletePrayer,
+        getPrayerForEdit,
         addPart,
         updatePart,
         deletePart,

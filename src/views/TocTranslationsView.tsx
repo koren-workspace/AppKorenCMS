@@ -22,24 +22,37 @@ import { AddItemModal } from "./toc-translations/components/AddItemModal";
 import { AddPartModal } from "./toc-translations/components/AddPartModal";
 import { EditPartModal } from "./toc-translations/components/EditPartModal";
 import { AddPrayerModal } from "./toc-translations/components/AddPrayerModal";
+import { EditPrayerModal } from "./toc-translations/components/EditPrayerModal";
+import { AddCategoryModal } from "./toc-translations/components/AddCategoryModal";
+import { EditCategoryModal } from "./toc-translations/components/EditCategoryModal";
 import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
 import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
+import { EditTocModal } from "./toc-translations/components/EditTocModal";
 import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBanner";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
-import { isBaseTranslation } from "./toc-translations/services/navigationService";
+import { isBaseTranslation, isTranslationEditable } from "./toc-translations/services/navigationService";
 
 export function TocTranslationsView() {
     const nav = useTocNavigation();
     const isBase = isBaseTranslation(nav.currentTranslationData?.translationId);
+    const canEditNames = isTranslationEditable(nav.currentTranslationData?.translationId);
 
     const [addPartModalOpen, setAddPartModalOpen] = useState(false);
     const [addPartAfterPartId, setAddPartAfterPartId] = useState<string | null>(null);
     const [addPrayerModalOpen, setAddPrayerModalOpen] = useState(false);
     const [addPrayerAfterPrayerId, setAddPrayerAfterPrayerId] = useState<string | null>(null);
+    const [addCategoryModalOpen, setAddCategoryModalOpen] = useState(false);
+    const [addCategoryAfterId, setAddCategoryAfterId] = useState<string | null>(null);
     const [editPartModalOpen, setEditPartModalOpen] = useState(false);
     const [editPartId, setEditPartId] = useState<string | null>(null);
+    const [editPrayerModalOpen, setEditPrayerModalOpen] = useState(false);
+    const [editPrayerId, setEditPrayerId] = useState<string | null>(null);
+    const [editCategoryModalOpen, setEditCategoryModalOpen] = useState(false);
+    const [editCategoryId, setEditCategoryId] = useState<string | null>(null);
+    const [editTocModalOpen, setEditTocModalOpen] = useState(false);
+    const [editTocId, setEditTocId] = useState<string | null>(null);
 
     const allowAddPart = isBase;
     const allowAddInstruction = !isBase;
@@ -83,14 +96,15 @@ export function TocTranslationsView() {
     };
 
     const handleEditPartSubmit = async (params: {
-        nameHe: string;
-        nameEn: string;
-        dateSetIds: string[];
-        hazan: boolean | null;
-        minyan: boolean | null;
+        nameHe?: string;
+        nameEn?: string;
+        name?: string;
+        dateSetIds?: string[];
+        hazan?: boolean | null;
+        minyan?: boolean | null;
     }) => {
         if (!editPartId) return;
-        const dateSetIds = params.dateSetIds.length ? params.dateSetIds : ["100"];
+        const dateSetIds = params.dateSetIds?.length ? params.dateSetIds : ["100"];
         await nav.updatePart(editPartId, {
             ...params,
             dateSetIds,
@@ -98,8 +112,67 @@ export function TocTranslationsView() {
         setEditPartModalOpen(false);
         setEditPartId(null);
         if (partEdit.selectedGroupId === editPartId) {
+            const hasUnsavedInPart =
+                partEdit.changedIds.size > 0 ||
+                partEdit.enhancementChangedIds.size > 0 ||
+                partEdit.pendingDeletes.length > 0;
+            if (
+                hasUnsavedInPart &&
+                !window.confirm("יש שינויים לא שמורים בפריטים. לרענן בכל זאת?\n(השינויים יאבדו)")
+            ) {
+                return;
+            }
             await partEdit.fetchItemsWithEnhancements(editPartId);
         }
+    };
+
+    const openEditPrayerModal = (prayerId: string) => {
+        setEditPrayerId(prayerId);
+        setEditPrayerModalOpen(true);
+    };
+
+    const openEditTocModal = (tocId: string) => {
+        setEditTocId(tocId);
+        setEditTocModalOpen(true);
+    };
+
+    const handleEditTocSubmit = async (params: { nusach: string }) => {
+        if (!editTocId) return;
+        await nav.updateToc(editTocId, params);
+        setEditTocModalOpen(false);
+        setEditTocId(null);
+    };
+
+    const openEditCategoryModal = (categoryId: string) => {
+        setEditCategoryId(categoryId);
+        setEditCategoryModalOpen(true);
+    };
+
+    const handleEditCategorySubmit = async (params: { nameHe?: string; nameEn?: string; name?: string }) => {
+        if (!editCategoryId) return;
+        await nav.updateCategory(editCategoryId, params);
+        setEditCategoryModalOpen(false);
+        setEditCategoryId(null);
+    };
+
+    const handleEditPrayerSubmit = async (params: { nameHe?: string; nameEn?: string; name?: string }) => {
+        if (!editPrayerId) return;
+        await nav.updatePrayer(editPrayerId, params);
+        setEditPrayerModalOpen(false);
+        setEditPrayerId(null);
+    };
+
+    const openAddCategoryModal = (afterCategoryId: string | null) => {
+        setAddCategoryAfterId(afterCategoryId);
+        setAddCategoryModalOpen(true);
+    };
+
+    const handleAddCategorySubmit = async (params: { nameHe: string; nameEn: string }) => {
+        await nav.addCategory(params.nameHe, addCategoryAfterId, {
+            nameEn: params.nameEn,
+            tocId: nav.selectedTocId ?? undefined,
+        });
+        setAddCategoryModalOpen(false);
     };
 
     const openAddPrayerModal = (afterPrayerId: string | null) => {
@@ -168,6 +241,7 @@ export function TocTranslationsView() {
                 selectedTocId={nav.selectedTocId}
                 onSelectToc={withUnsavedCheck(nav.onSelectToc)}
                 onAddToc={nav.addToc}
+                onEditToc={openEditTocModal}
                 onDeleteToc={nav.deleteToc}
                 translations={nav.currentTocData?.translations ?? []}
                 selectedTranslationIndex={nav.selectedTranslationIndex}
@@ -182,13 +256,15 @@ export function TocTranslationsView() {
                 currentCategories={nav.currentCategories}
                 selectedCategoryName={nav.selectedCategoryName}
                 onSelectCategory={nav.onSelectCategory}
-                onAddCategory={nav.addCategory}
+                onAddCategoryClick={openAddCategoryModal}
+                onEditCategory={canEditNames ? openEditCategoryModal : undefined}
                 onDeleteCategory={allowAddPart ? nav.deleteCategory : undefined}
                 showAddCategory={!!nav.selectedTocId && nav.selectedTranslationIndex != null && allowAddPart}
                 currentPrayers={nav.currentPrayers}
                 selectedPrayerId={nav.selectedPrayerId}
                 onSelectPrayer={withUnsavedCheck(nav.onSelectPrayer)}
                 onAddPrayerClick={openAddPrayerModal}
+                onEditPrayer={canEditNames ? openEditPrayerModal : undefined}
                 onDeletePrayer={allowAddPart ? nav.deletePrayer : undefined}
                 showAddPrayer={
                     !!nav.selectedTocId &&
@@ -200,7 +276,7 @@ export function TocTranslationsView() {
                 selectedGroupId={partEdit.selectedGroupId}
                 onSelectPart={withUnsavedCheck(partEdit.fetchItemsWithEnhancements)}
                 onAddPartClick={openAddPartModal}
-                onEditPart={allowAddPart ? openEditPartModal : undefined}
+                onEditPart={canEditNames ? openEditPartModal : undefined}
                 onDeletePart={allowAddPart ? nav.deletePart : undefined}
                 onReorderParts={allowAddPart ? nav.reorderParts : undefined}
                 showAddPart={
@@ -306,6 +382,44 @@ export function TocTranslationsView() {
                 onSubmit={partEdit.submitAddTranslation}
                 saving={partEdit.saving}
                 onOpenDateSetIdConfig={partEdit.openDateSetIdModalForAddTranslation}
+            />
+            {/* מודל עריכת נוסח */}
+            <EditTocModal
+                open={editTocModalOpen}
+                onClose={() => { setEditTocModalOpen(false); setEditTocId(null); }}
+                initialToc={
+                    editTocId
+                        ? {
+                              id: editTocId,
+                              nusach: nav.tocItems.find((t) => t.id === editTocId)?.values?.nusach ?? "",
+                          }
+                        : null
+                }
+                onSubmit={handleEditTocSubmit}
+                saving={nav.isSaving}
+            />
+            {/* מודל הוספת קטגוריה */}
+            <AddCategoryModal
+                open={addCategoryModalOpen}
+                onClose={() => setAddCategoryModalOpen(false)}
+                onSubmit={handleAddCategorySubmit}
+                saving={nav.isSaving}
+            />
+            {/* מודל עריכת קטגוריה */}
+            <EditCategoryModal
+                open={editCategoryModalOpen}
+                onClose={() => { setEditCategoryModalOpen(false); setEditCategoryId(null); }}
+                initialCategory={editCategoryId ? nav.getCategoryForEdit(editCategoryId) : null}
+                onSubmit={handleEditCategorySubmit}
+                saving={nav.isSaving}
+            />
+            {/* מודל עריכת תפילה */}
+            <EditPrayerModal
+                open={editPrayerModalOpen}
+                onClose={() => { setEditPrayerModalOpen(false); setEditPrayerId(null); }}
+                initialPrayer={editPrayerId ? nav.getPrayerForEdit(editPrayerId) : null}
+                onSubmit={handleEditPrayerSubmit}
+                saving={nav.isSaving}
             />
             {/* מודל הוספת תפילה */}
             <AddPrayerModal

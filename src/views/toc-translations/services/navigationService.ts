@@ -13,6 +13,17 @@ export function isBaseTranslation(translationId: string | undefined): boolean {
     return Boolean(translationId?.startsWith?.("0-"));
 }
 
+/**
+ * מחזיר true אם מותר לערוך שמות תפילות ומקטעים בתרגום הזה.
+ * תרגומים (0-*, 1-*, 2-*, ...) – מותר; פירושים (10-*, 11-*, ...) – אסור.
+ */
+export function isTranslationEditable(translationId: string | undefined): boolean {
+    if (!translationId) return false;
+    const prefix = translationId.split("-")[0];
+    const num = parseInt(prefix, 10);
+    return !Number.isNaN(num) && num < 10;
+}
+
 /** מחזיר את רשימת הקטגוריות מתוך אובייקט התרגום */
 export function getPrayerCategoriesFromTranslation(translation: any): any[] {
     if (!translation || !Array.isArray(translation.categories)) return [];

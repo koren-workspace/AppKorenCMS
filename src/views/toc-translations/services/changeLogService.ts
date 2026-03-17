@@ -43,6 +43,11 @@ export type ChangeLogContext = {
     partId?: string | null;
     categoryName?: string | null;
     categoryId?: string | null;
+    /** שמות להצגה באקסל (לצד ה-IDs) */
+    tocName?: string | null;
+    translationName?: string | null;
+    prayerName?: string | null;
+    partName?: string | null;
 };
 
 /** שינוי שדה בודד (לשמירת מקטע) */
@@ -66,6 +71,7 @@ export type ChangeLogEntry = {
             entityId: string;
             itemId?: string;
             mitId?: string;
+            itemContent?: string;
             isEnhancement?: boolean;
             enhancementTranslationId?: string;
             changes: FieldChange[];
@@ -73,10 +79,12 @@ export type ChangeLogEntry = {
         /** delete_part_item: מזהה פריט ונקודות מקושרות */
         deletedItemId?: string;
         deletedEntityId?: string;
+        deletedItemContent?: string;
         relatedTranslationIds?: string[];
         /** create_translation_item: פרטי הפריט שנוצר */
         newItemId?: string;
         newMitId?: string;
+        newItemContent?: string;
         baseItemId?: string;
         targetTranslationId?: string;
         /** publish_to_bagel */

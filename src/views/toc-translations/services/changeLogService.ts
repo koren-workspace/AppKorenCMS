@@ -32,7 +32,8 @@ export type ChangeLogAction =
     | "delete_category"     // מחיקת קטגוריה
     | "delete_prayer"       // מחיקת תפילה
     | "delete_part"         // מחיקת מקטע
-    | "move_items_to_part"; // העברת פריטים בין מקטעים
+    | "move_items_to_part"  // העברת פריטים בין מקטעים
+    | "split_part";         // פיצול מקטע לשני מקטעים
 
 /** הקשר – איפה בוצעה הפעולה */
 export type ChangeLogContext = {

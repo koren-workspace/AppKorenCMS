@@ -141,7 +141,9 @@ const entries: ChangeLogEntry[] = [];
 let loadedFromStorage = false;
 
 function makeId(): string {
-    return `chg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const id = `chg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    console.log("[CMS-ID] makeId (changeLog) => id=", id);
+    return id;
 }
 
 function toIso(ts: number): string {

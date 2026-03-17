@@ -26,7 +26,7 @@ import {
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
-import { mitIdBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
 
@@ -884,7 +884,7 @@ export function usePartEdit(context: PartEditContext) {
             idAfter = neighborBounds.nextFirstMitId;
         }
 
-        let result = mitIdBetween(idBefore ?? undefined, idAfter ?? undefined);
+        let result = idBetween(idBefore ?? undefined, idAfter ?? undefined);
         const takenMitIds = new Set<string>(
             [
                 ...allItems.map((i) => getEffectiveMitId(i)),

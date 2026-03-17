@@ -453,7 +453,7 @@ describe("partEditService – moveItemsToPart", () => {
         expect(call.values.partId).toBe("tgt");
         expect(call.values.partName).toBe("יעד");
         expect(call.values.partIdAndName).toBe("tgt יעד");
-        expect(call.values.itemId).toBe("0"); // mitIdBetween(null, null) -> "0"
+        expect(call.values.itemId).toBe("0"); // idBetween(null, null) -> "0"
         expect(call.values.mit_id).toBe("0");
         expect(typeof call.values.timestamp).toBe("number");
     });

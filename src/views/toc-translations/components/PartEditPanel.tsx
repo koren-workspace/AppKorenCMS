@@ -239,7 +239,7 @@ export function PartEditPanel({
                                                             ? () => onAddNewInstructionAt(index + 1)
                                                             : undefined
                                                     }
-                                                    onAddTranslation={onAddTranslation}
+                                                    onAddTranslation={isBaseTranslation ? onAddTranslation : undefined}
                                                     restrictTypeToInstructions={restrictTypeToInstructions}
                                                     autoFocus={lastAddedItemId === item.id}
                                                     onOpenDateSetIdConfig={onOpenDateSetIdForItem}

@@ -69,6 +69,14 @@ export function AddTranslationModal({
         onLoadRef.current?.(targetTranslationId);
     }, [open, targetTranslationId]);
 
+    /** בפתיחת המודל – אם נבחר תרגום בסיס (0-*) מנקים בחירה, כי אסור להוסיף תרגום לתרגום הבסיס */
+    useEffect(() => {
+        if (open && targetTranslationId && String(targetTranslationId).startsWith("0-")) {
+            onSelectTargetTranslation("");
+            onInsertAfterChange(null);
+        }
+    }, [open]);
+
     if (!open) return null;
 
     const content = (form.content ?? "").toString().trim();
@@ -117,7 +125,7 @@ export function AddTranslationModal({
                         </div>
                     )}
 
-                    {/* בחירת תרגום יעד */}
+                    {/* בחירת תרגום יעד – רק תרגומים משניים (לא 0-נוסח), כי מוסיפים תרגום לפריט שבסיס */}
                     <div>
                         <label className="block text-[10px] text-gray-600 mb-1">הוסף לתרגום</label>
                         <select
@@ -130,12 +138,14 @@ export function AddTranslationModal({
                             className="w-full border border-gray-300 rounded px-2 py-1.5"
                         >
                             <option value="">בחר תרגום</option>
-                            {translations.map((t) => (
-                                <option key={t.translationId} value={t.translationId}>
-                                    {t.translationId}
-                                    {t.translationId === currentTranslationId ? " (נוכחי)" : ""}
-                                </option>
-                            ))}
+                            {translations
+                                .filter((t) => !String(t.translationId ?? "").startsWith("0-"))
+                                .map((t) => (
+                                    <option key={t.translationId} value={t.translationId}>
+                                        {t.translationId}
+                                        {t.translationId === currentTranslationId ? " (נוכחי)" : ""}
+                                    </option>
+                                ))}
                         </select>
                     </div>
 

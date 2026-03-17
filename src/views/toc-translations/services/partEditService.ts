@@ -371,6 +371,7 @@ export async function createTranslationItem(
     } else {
         newMitId = newItemId;
     }
+    console.log("[CMS-ID] createTranslationItem | targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId, "baseItemId=", baseItemId, "afterItemId=", afterItemId, "insertIndex=", insertIndex, "orderedItemIds=", orderedItemIds, "=> newItemId=", newItemId, "newMitId=", newMitId, "baseItemMitId=", baseItemMitId ?? "(none)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
 
     const values: Record<string, any> = {
         content: content ?? "",
@@ -626,6 +627,7 @@ export async function moveItemsToPart(
         oldToNewBaseMitId[oldBaseItemId] = newBaseMitId;
 
         prevBaseMitId = newBaseMitId;
+        console.log("[CMS-ID] moveItemsToPart (base) | oldBaseItemId=", oldBaseItemId, "newBaseItemId=", newBaseItemId, "newBaseMitId=", newBaseMitId, "baseInsertIdx=", baseInsertIdx - 1, "wantsParagraph=", wantsParagraph);
     }
 
     const now = Date.now();
@@ -727,6 +729,8 @@ export async function moveItemsToPart(
                 const baseIsParagraph =
                     (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
 
+                console.log("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "baseIsParagraph=", baseIsParagraph);
+
                 // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
                 let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
                 if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
@@ -746,6 +750,8 @@ export async function moveItemsToPart(
                     const newTranslationMitId = baseIsParagraph
                         ? (oldToNewBaseMitId[oldBaseId] ?? item.values?.mit_id)
                         : newTranslationItemId;
+
+                    console.log("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
 
                     await dataSource.saveEntity({
                         path,

@@ -1146,6 +1146,10 @@ export function usePartEdit(context: PartEditContext) {
             });
         }
         const newEntityId = `new_${Date.now()}`;
+        const resolvedPartName =
+            (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
+            (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
+            "";
         const newItemValues: Record<string, any> = {
             content: form?.content ?? "",
             type: form?.type ?? defaultType,
@@ -1154,6 +1158,10 @@ export function usePartEdit(context: PartEditContext) {
             mit_id: resolveMitIdForNew(index, computedItemId, isContinuation),
             timestamp: Date.now(),
         };
+        if (resolvedPartName) {
+            newItemValues.partName = resolvedPartName;
+            newItemValues.partIdAndName = `${selectedGroupId} ${resolvedPartName}`;
+        }
         if (dateSetId) newItemValues.dateSetId = dateSetId;
         if (form) {
             if (form.titleType !== undefined) newItemValues.titleType = form.titleType;
@@ -1559,12 +1567,29 @@ export function usePartEdit(context: PartEditContext) {
                 });
                 // אחרי השמירה הפריט בשרת עם document id = itemId; הרענון יטען אותו
             }
+
+            // איסוף כל ה-itemIds של enhancements קיימים – מונע כפילות ID כשמוסיפים תרגומים
+            // לכמה תרגומים שונים בזה אחר זה (כל אחד מחשב מ-path ריק ומגיע לאותו ID)
+            const existingEnhancementItemIds: string[] = Object.values(enhancements)
+                .flat()
+                .map((e: any) => {
+                    const local = enhancementLocalValues[e.id]?.itemId;
+                    if (local != null && String(local).trim() !== "") return String(local);
+                    const fromVal = e.values?.itemId ?? e.id;
+                    return fromVal != null && String(fromVal).trim() !== "" ? String(fromVal) : "";
+                })
+                .filter((id) => id !== "");
+
             let newItemId: string;
             let newMitId: string;
             try {
                 const baseItemMitId = addTranslationBaseItem
                     ? (localValues[addTranslationBaseItem.id]?.mit_id ?? addTranslationBaseItem.values?.mit_id ?? undefined)
                     : undefined;
+                const currentPartName =
+                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
+                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
+                    "";
                 const result = await createTranslationItem(dataSource, {
                     targetTranslationId: addTranslationTargetId,
                     selectedPrayerId,
@@ -1589,6 +1614,8 @@ export function usePartEdit(context: PartEditContext) {
                     dateSetId: form.dateSetId?.trim() || "100",
                     baseItemMitId: baseItemMitId != null && String(baseItemMitId).trim() !== "" ? String(baseItemMitId).trim() : undefined,
                     isStartOfParagraph: !!form.isStartOfParagraph,
+                    extraTakenIds: existingEnhancementItemIds,
+                    partName: currentPartName || undefined,
                     confirmUserWantsDecimalId: () =>
                         window.confirm(
                             "בין שני פריטים צמודים אין מקום למספר שלם. האם ליצור מזהה עם .5?"

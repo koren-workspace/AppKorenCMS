@@ -265,6 +265,25 @@ export function computeItemIdForInsert(
         }
     }
 
+    // עדכון idBefore לפי extraTakenIds: כל ID שנמצא בתחום (idBefore, idAfter) – צריך להפוך ל-idBefore
+    // (כדי שה-ID החדש ייצא *אחרי* כל ה-enhancements הקיימים, לא רק לא יהיה זהה להם)
+    if (extraTakenIds && extraTakenIds.length > 0) {
+        const beforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : -Infinity;
+        const afterNum  = idAfter  != null && idAfter  !== "" ? Number(idAfter)  :  Infinity;
+        let maxInZone: number = -Infinity;
+        for (const id of extraTakenIds) {
+            const n = Number(id);
+            if (!Number.isNaN(n) && n > beforeNum && n < afterNum && n > maxInZone) {
+                maxInZone = n;
+            }
+        }
+        if (maxInZone > -Infinity) {
+            const newIdBefore = String(maxInZone);
+            console.log(`${ID_LOG_PREFIX}   extraTakenIds: מעדכן idBefore מ-${idBefore ?? "(ריק)"} ל-${newIdBefore} (MAX של extraTakenIds בתחום (${idBefore ?? "-∞"}, ${idAfter ?? "∞"}))`);
+            idBefore = newIdBefore;
+        }
+    }
+
     // Build takenIds
     const takenIds = new Set<string>();
     for (const id of orderedItemIds) if (id) takenIds.add(id);

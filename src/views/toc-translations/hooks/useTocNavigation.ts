@@ -93,6 +93,20 @@ export function useTocNavigation() {
         [currentCategories, selectedPrayerId]
     );
 
+    /** מוסיף שמות להקשר (לצד IDs) לתיעוד באקסל. override – שמות ידניים (למשל partName לפריט חדש) */
+    const withNames = (ctx: Record<string, any>, override?: Record<string, string | undefined>) => {
+        const t = ctx.tocId ? (tocItems.find((x) => x.id === ctx.tocId)?.values ?? currentTocData) : null;
+        const trans = ctx.translationId && t?.translations ? (t.translations as any[]).find((x: any) => x.translationId === ctx.translationId) : null;
+        const part = ctx.partId ? currentParts?.find((p: any) => p.id === ctx.partId) : null;
+        return {
+            ...ctx,
+            tocName: override?.tocName ?? (ctx.tocId ? (t?.nusach ?? currentTocData?.nusach) : undefined),
+            translationName: override?.translationName ?? (ctx.translationId ? (trans?.label ?? ctx.translationId) : undefined),
+            prayerName: override?.prayerName ?? (ctx.prayerId ? (currentPrayers?.find((p: any) => p.id === ctx.prayerId)?.name) : undefined),
+            partName: override?.partName ?? (part ? (part.nameHe ?? part.name) : undefined),
+        };
+    };
+
     // —— Handlers: בחירה בכל רמה מאפסת את הרמות שמתחתיה ——
     const onSelectToc = (tocId: string) => {
         setSelectedTocId(tocId);
@@ -204,7 +218,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "add_translation",
-                context: { tocId: selectedTocId },
+                context: withNames({ tocId: selectedTocId }),
                 details: { newTranslationId: id },
                 savedToFirestore: true,
             });
@@ -310,7 +324,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "add_category",
-                context: { tocId: selectedTocId, translationId: trans?.translationId },
+                context: withNames({ tocId: selectedTocId, translationId: trans?.translationId }),
                 details: { newCategoryId, categoryName: name, categoryNameEn: options?.nameEn, afterCategoryId: afterCategoryId },
                 savedToFirestore: true,
             });
@@ -437,7 +451,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "update_category",
-                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, categoryId },
+                context: withNames({ tocId: selectedTocId, translationId: currentTranslationData?.translationId, categoryId }),
                 details: { categoryId, nameHe, nameEn },
                 savedToFirestore: true,
             });
@@ -524,7 +538,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "delete_category",
-                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId },
+                context: withNames({ tocId: selectedTocId, translationId: currentTranslationData?.translationId }),
                 details: { deletedId: categoryId, deletedName: categoryToDelete?.name },
                 savedToFirestore: true,
             });
@@ -672,7 +686,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "add_prayer",
-                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, categoryName: selectedCategoryName },
+                context: withNames({ tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId: newPrayerId }),
                 details: { newPrayerId, prayerName: name, afterPrayerId: afterPrayerId },
                 savedToFirestore: true,
             });
@@ -818,7 +832,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "update_prayer",
-                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId },
+                context: withNames({ tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId }),
                 details: { prayerId, nameHe, nameEn },
                 savedToFirestore: true,
             });
@@ -935,7 +949,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "delete_prayer",
-                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId },
+                context: withNames({ tocId: selectedTocId, translationId: currentTranslationData?.translationId }),
                 details: { deletedId: prayerId, deletedName: prayerName },
                 savedToFirestore: true,
             });
@@ -1009,7 +1023,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "delete_translation",
-                context: { tocId: selectedTocId },
+                context: withNames({ tocId: selectedTocId }),
                 details: { deletedId: translationId },
                 savedToFirestore: true,
             });
@@ -1047,7 +1061,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "update_toc",
-                context: { tocId },
+                context: withNames({ tocId }),
                 details: { tocId, nusach: params.nusach },
                 savedToFirestore: true,
             });
@@ -1072,7 +1086,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "delete_toc",
-                context: {},
+                context: withNames({ tocId }),
                 details: { deletedId: tocId, deletedName: (toc.values as any)?.nusach },
                 savedToFirestore: true,
             });
@@ -1207,7 +1221,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "add_part",
-                context: { tocId: selectedTocId, translationId: trans?.translationId, prayerId: selectedPrayerId },
+                context: withNames({ tocId: selectedTocId, translationId: trans?.translationId, prayerId: selectedPrayerId, partId: newPartId }, { partName: name }),
                 details: { newPartId, partName: name, afterPartId: afterPartId },
                 savedToFirestore: true,
             });
@@ -1351,7 +1365,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "update_part",
-                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId: selectedPrayerId, partId },
+                context: withNames({ tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId: selectedPrayerId, partId }, { partName: nameHe }),
                 details: { partId, nameHe, nameEn },
                 savedToFirestore: true,
             });
@@ -1513,7 +1527,7 @@ export function useTocNavigation() {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "delete_part",
-                context: { tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId: selectedPrayerId },
+                context: withNames({ tocId: selectedTocId, translationId: currentTranslationData?.translationId, prayerId: selectedPrayerId, partId }, { partName }),
                 details: { deletedId: partId, deletedName: partName },
                 savedToFirestore: true,
             });

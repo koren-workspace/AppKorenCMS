@@ -26,14 +26,14 @@ const SHEET_SAVES = "שמירות"
 /** כותרות עמודות לכל sheet */
 const HEADERS_SAVES = [
     "save_id", "תאריך_ושעה", "פעולה",
-    "tocId", "translationId", "prayerId", "partId",
+    "tocId", "שם_נוסח", "translationId", "שם_תרגום", "prayerId", "שם_תפילה", "partId", "שם_מקטע",
     "מספר_שינויים", "סיכום",
     "נשמר_Firestore", "פורסם_Bagel",
 ]
 const HEADERS_CHANGES = [
     "save_id", "תאריך_ושעה", "פעולה",
     "נוסח", "תרגום", "קטגוריה", "תפילה", "מקטע", "partId",
-    "itemId", "mit_id",
+    "itemId", "תוכן_פריט", "mit_id",
     "שדה", "לפני", "אחרי",
     "סטטוס",
 ]
@@ -113,9 +113,13 @@ function appendEntryToExcel(entry: any): void {
         dt,
         entry.action ?? "",
         ctx.tocId ?? "",
+        ctx.tocName ?? "",
         ctx.translationId ?? "",
+        ctx.translationName ?? "",
         ctx.prayerId ?? "",
+        ctx.prayerName ?? "",
         ctx.partId ?? "",
+        ctx.partName ?? "",
         changesCount,
         buildSummary(entry),
         entry.savedToFirestore != null ? (entry.savedToFirestore ? "כן" : "לא") : "",
@@ -135,14 +139,14 @@ function appendEntryToExcel(entry: any): void {
     /** בונה שורה אחת לגיליון שינויים */
     function makeRow(opts: {
         nusach?: string; trgum?: string; category?: string; prayer?: string
-        makatav?: string; partId?: string; itemId?: string; mitId?: string
+        makatav?: string; partId?: string; itemId?: string; itemContent?: string; mitId?: string
         sade?: string; lifnei?: string; acharei?: string
     }): any[] {
         return [
             entry.id ?? "", dt, entry.action ?? "",
             opts.nusach  ?? "", opts.trgum    ?? "", opts.category ?? "",
             opts.prayer  ?? "", opts.makatav  ?? "", opts.partId   ?? "",
-            opts.itemId  ?? "", opts.mitId    ?? "",
+            opts.itemId  ?? "", opts.itemContent ?? "", opts.mitId    ?? "",
             opts.sade    ?? "", opts.lifnei   ?? "", opts.acharei  ?? "",
             hatzliach,
         ]
@@ -155,7 +159,7 @@ function appendEntryToExcel(entry: any): void {
                 changeRows.push(makeRow({
                     nusach, trgum, category, prayer,
                     makatav: partIdCtx, partId: partIdCtx,
-                    itemId: fc.itemId ?? "", mitId: fc.mitId ?? "",
+                    itemId: fc.itemId ?? "", itemContent: fc.itemContent ?? "", mitId: fc.mitId ?? "",
                     sade: c.field ?? "",
                     lifnei: c.oldValue != null ? String(c.oldValue) : "",
                     acharei: c.newValue != null ? String(c.newValue) : "",
@@ -169,7 +173,7 @@ function appendEntryToExcel(entry: any): void {
         changeRows.push(makeRow({
             nusach, trgum, category, prayer,
             makatav: partIdCtx, partId: partIdCtx,
-            itemId: d.deletedItemId, mitId: d.deletedEntityId ?? "",
+            itemId: d.deletedItemId, itemContent: d.deletedItemContent ?? "", mitId: d.deletedEntityId ?? "",
             sade: "פריט", lifnei: d.deletedItemId, acharei: "",
         }))
     }
@@ -179,7 +183,7 @@ function appendEntryToExcel(entry: any): void {
         changeRows.push(makeRow({
             nusach, trgum, category, prayer,
             makatav: partIdCtx, partId: partIdCtx,
-            itemId: d.newItemId, mitId: d.newMitId ?? "",
+            itemId: d.newItemId, itemContent: d.newItemContent ?? "", mitId: d.newMitId ?? "",
             sade: "פריט_תרגום", lifnei: "", acharei: d.newItemId,
         }))
     }

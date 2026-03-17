@@ -62,6 +62,7 @@ export function TocTranslationsView() {
         selectedPrayerId: nav.selectedPrayerId,
         selectedTocId: nav.selectedTocId,
         currentParts: nav.currentParts,
+        currentPrayers: nav.currentPrayers,
         addPart: nav.addPart,
     });
 

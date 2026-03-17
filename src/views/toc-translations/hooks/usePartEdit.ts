@@ -42,6 +42,8 @@ export type PartEditContext = {
     selectedTocId: string | null;
     /** מקטעים בתפילה הנוכחית (לחישוב afterPartId בפיצול ולמודל ההעברה) */
     currentParts: any[];
+    /** תפילות בקטגוריה הנוכחית (לשם תפילה בתיעוד) */
+    currentPrayers?: any[];
     /** מוסיף מקטע ב-TOC (מ-useTocNavigation) – מחזיר newPartId */
     addPart: (
         name: string,
@@ -105,6 +107,7 @@ export function usePartEdit(context: PartEditContext) {
         selectedPrayerId,
         selectedTocId,
         currentParts,
+        currentPrayers,
         addPart,
     } = context;
 
@@ -510,10 +513,15 @@ export function usePartEdit(context: PartEditContext) {
                             translationId: currentTranslationData.translationId,
                             prayerId: selectedPrayerId,
                             partId: selectedGroupId,
+                            tocName: currentTocData?.nusach,
+                            translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                            prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
+                            partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                         },
                         details: {
                             deletedItemId: itemId,
                             deletedEntityId: entity.id,
+                            deletedItemContent: (entity.values?.content ?? localValues[entity.id]?.content ?? "").toString().slice(0, 200),
                             relatedTranslationIds: currentTocData.translations
                                 .filter((t: any) => t.translationId !== currentTranslationData.translationId)
                                 .map((t: any) => t.translationId),
@@ -535,10 +543,15 @@ export function usePartEdit(context: PartEditContext) {
                             translationId: currentTranslationData.translationId,
                             prayerId: selectedPrayerId,
                             partId: selectedGroupId,
+                            tocName: currentTocData?.nusach,
+                            translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                            prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
+                            partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                         },
                         details: {
                             deletedItemId: itemId,
                             deletedEntityId: entity.id,
+                            deletedItemContent: (entity.values?.content ?? localValues[entity.id]?.content ?? "").toString().slice(0, 200),
                             relatedTranslationIds: [],
                         },
                         savedToFirestore: true,
@@ -633,20 +646,37 @@ export function usePartEdit(context: PartEditContext) {
                     }
                     row.changes.push({ field: e.field, oldValue: e.oldValue, newValue: e.newValue });
                 }
+                const getItemContent = (entityId: string, isEnh: boolean, enhTid?: string): string => {
+                    if (isEnh) {
+                        const tid = enhTid ?? enhancementTranslationIds[entityId];
+                        const ents = tid ? (enhancements[tid] ?? []) : [];
+                        const ent = ents.find((x: any) => x.id === entityId);
+                        const c = enhancementLocalValues[entityId]?.content ?? ent?.values?.content;
+                        return (c != null ? String(c) : "").slice(0, 200);
+                    }
+                    const c = localValues[entityId]?.content ?? allItems.find((x) => x.id === entityId)?.values?.content;
+                    return (c != null ? String(c) : "").slice(0, 200);
+                };
+                const ctxWithNames = {
+                    tocId: selectedTocId ?? undefined,
+                    translationId: currentTranslationData?.translationId ?? undefined,
+                    prayerId: selectedPrayerId ?? undefined,
+                    partId: selectedGroupId ?? undefined,
+                    tocName: currentTocData?.nusach ?? undefined,
+                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId ?? undefined,
+                    prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name ?? undefined,
+                    partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ?? undefined,
+                };
                 appendChangeLog({
                     timestamp: now,
                     action: "save_part_items",
-                    context: {
-                        tocId: selectedTocId,
-                        translationId: currentTranslationData.translationId,
-                        prayerId: selectedPrayerId,
-                        partId: selectedGroupId,
-                    },
+                    context: ctxWithNames,
                     details: {
                         fieldChanges: Array.from(byEntity.entries()).map(([entityId, row]) => ({
                             entityId,
                             itemId: row.itemId,
                             mitId: row.mitId,
+                            itemContent: getItemContent(entityId, row.isEnhancement, row.enhancementTranslationId),
                             isEnhancement: row.isEnhancement,
                             enhancementTranslationId: row.enhancementTranslationId,
                             changes: row.changes,
@@ -701,7 +731,7 @@ export function usePartEdit(context: PartEditContext) {
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "publish_to_bagel",
-                context: { tocId: selectedTocId },
+                context: { tocId: selectedTocId, tocName: currentTocData?.nusach },
                 details: { selectedTocId },
                 savedToFirestore: true,
                 publishedToBagel: true,
@@ -1396,6 +1426,10 @@ export function usePartEdit(context: PartEditContext) {
                     translationId: currentTranslationData.translationId,
                     prayerId: selectedPrayerId,
                     partId: selectedGroupId,
+                    tocName: currentTocData?.nusach,
+                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                    prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
+                    partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                 },
                 details: {
                     fromPartId: selectedGroupId,
@@ -1478,6 +1512,10 @@ export function usePartEdit(context: PartEditContext) {
                     translationId: currentTranslationData.translationId,
                     prayerId: selectedPrayerId,
                     partId: selectedGroupId,
+                    tocName: currentTocData?.nusach,
+                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                    prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
+                    partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                 },
                 details: {
                     fromPartId: selectedGroupId,
@@ -1578,6 +1616,7 @@ export function usePartEdit(context: PartEditContext) {
                     message: "התרגום נוסף עם מזהה עשרוני בשל צפיפות בין פריטים.",
                 });
             }
+            const newItemContentVal = (form.content ?? addTranslationContent ?? "").toString().trim().slice(0, 200);
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "create_translation_item",
@@ -1586,10 +1625,15 @@ export function usePartEdit(context: PartEditContext) {
                     translationId: addTranslationTargetId,
                     prayerId: selectedPrayerId,
                     partId: selectedGroupId,
+                    tocName: currentTocData?.nusach,
+                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                    prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
+                    partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                 },
                 details: {
                     newItemId,
                     newMitId,
+                    newItemContent: newItemContentVal,
                     baseItemId,
                     targetTranslationId: addTranslationTargetId,
                 },

@@ -282,11 +282,57 @@ function appendEntryToExcel(entry: any): void {
         }
     }
 
+    // ── split_part: פיצול מקטע ────────────────────────────────────────────────
+    if (entry.action === "split_part" && d.fromPartId) {
+        changeRows.push(makeRow({
+            nusach, trgum, category, prayer,
+            makatav: d.partName ?? d.newPartId ?? "", partId: d.fromPartId ?? "",
+            sade: "פיצול_מקטע",
+            lifnei: d.fromPartId ?? "",
+            acharei: `${d.partName ?? ""} (${d.newPartId ?? ""})`,
+        }))
+    }
+
     // ── publish_to_bagel ──────────────────────────────────────────────────────
     if (entry.action === "publish_to_bagel") {
         changeRows.push(makeRow({
             nusach,
             sade: "פרסום", lifnei: "", acharei: "publish_to_bagel",
+        }))
+    }
+
+    // ── update_category ───────────────────────────────────────────────────────
+    if (entry.action === "update_category") {
+        changeRows.push(makeRow({
+            nusach, trgum,
+            category: d.categoryName ?? d.categoryId ?? "",
+            sade: "שם_קטגוריה", lifnei: "", acharei: d.nameHe ?? "",
+        }))
+    }
+
+    // ── update_prayer ─────────────────────────────────────────────────────────
+    if (entry.action === "update_prayer") {
+        changeRows.push(makeRow({
+            nusach, trgum, category,
+            prayer: d.prayerId ?? "",
+            sade: "שם_תפילה", lifnei: "", acharei: d.nameHe ?? "",
+        }))
+    }
+
+    // ── update_part ───────────────────────────────────────────────────────────
+    if (entry.action === "update_part") {
+        changeRows.push(makeRow({
+            nusach, trgum, category, prayer,
+            makatav: d.nameHe ?? d.partId ?? "", partId: d.partId ?? "",
+            sade: "שם_מקטע", lifnei: "", acharei: d.nameHe ?? "",
+        }))
+    }
+
+    // ── update_toc ────────────────────────────────────────────────────────────
+    if (entry.action === "update_toc") {
+        changeRows.push(makeRow({
+            nusach: d.nusach ?? nusach,
+            sade: "שם_נוסח", lifnei: "", acharei: d.nusach ?? "",
         }))
     }
 

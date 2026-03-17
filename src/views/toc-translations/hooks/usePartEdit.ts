@@ -1390,7 +1390,7 @@ export function usePartEdit(context: PartEditContext) {
 
             appendChangeLog({
                 timestamp: Date.now(),
-                action: "move_items_to_part",
+                action: "split_part",
                 context: {
                     tocId: selectedTocId,
                     translationId: currentTranslationData.translationId,
@@ -1400,6 +1400,8 @@ export function usePartEdit(context: PartEditContext) {
                 details: {
                     fromPartId: selectedGroupId,
                     toPartId: newPartId,
+                    partName: newPartNameHe,
+                    newPartId,
                 },
                 savedToFirestore: true,
             });

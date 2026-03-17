@@ -106,6 +106,7 @@ export function AddTranslationModal({
                                         <div className="font-bold text-blue-700 text-[10px]">{tId}</div>
                                         {entries.map((e) => (
                                             <div key={e.id} className="text-[10px] text-gray-600 pr-2 mt-0.5">
+                                                <span className="text-[9px] text-gray-500 font-mono mr-1">ID: {e.id}</span>
                                                 {(e.values?.content ?? "").slice(0, 60)}
                                                 {(e.values?.content?.length ?? 0) > 60 ? "…" : ""}
                                             </div>
@@ -157,6 +158,7 @@ export function AddTranslationModal({
                                     return (
                                         <React.Fragment key={e.id}>
                                             <div className="px-3 py-1.5 bg-gray-50 text-[10px] text-gray-500 border-r-2 border-gray-200">
+                                                <span className="text-[9px] text-gray-400 font-mono mr-1">ID: {e.id}</span>
                                                 {preview}{preview.length >= 50 ? "…" : ""}
                                             </div>
                                             <button

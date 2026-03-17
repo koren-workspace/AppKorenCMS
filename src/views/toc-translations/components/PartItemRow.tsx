@@ -389,6 +389,7 @@ export function PartItemRow({
                                 <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-2">
                                         <span className={`font-bold text-[9px] ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
+                                        <span className="text-[8px] text-gray-500 font-mono" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
                                         {relatedWillBeDeleted && (
                                             <span className="text-[8px] font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
                                         )}

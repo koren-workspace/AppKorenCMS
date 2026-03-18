@@ -290,6 +290,14 @@ export type CreateTranslationItemParams = {
     isStartOfParagraph?: boolean;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
     confirmUserWantsDecimalId?: () => boolean;
+    /**
+     * IDs נוספים שכבר "תפוסים" – למשל itemIds של תרגומים אחרים (enhancements) שנוצרו לאותו פריט בסיס.
+     * מונע כפילות ID כשמוסיפים תרגומים לכמה תרגומים שונים אחד אחרי השני (כל אחד טוען path ריק
+     * ומקבל את אותו ID ללא המידע הזה).
+     */
+    extraTakenIds?: string[];
+    /** שם המקטע – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
+    partName?: string;
 };
 
 /** תוצאה מ-createTranslationItem – מזההים ללוג שינויים */
@@ -327,6 +335,8 @@ export async function createTranslationItem(
         baseItemMitId: baseItemMitIdParam,
         isStartOfParagraph,
         confirmUserWantsDecimalId,
+        extraTakenIds,
+        partName,
     } = params;
 
     const path = `translations/${targetTranslationId}/prayers/${selectedPrayerId}/items`;
@@ -355,9 +365,38 @@ export async function createTranslationItem(
         insertIndex = inAll >= 0 ? inAll + 1 : allItems.length;
     }
 
+    // כשאין פריטים אחרי insertIndex בחלק הנוכחי – אין idAfter, ו-result יהיה baseItemId+1000 ללא גבול עליון.
+    // זה עלול לגרום לפריט לקבל ID גדול מפריטים קיימים בתרגום היעד שבחלקים אחרים.
+    // לכן: אם insertIndex >= orderedItemIds.length, מחפשים את הפריט הכי קרוב לאחר baseItemId
+    // בכל התפילה (ללא פילטר partId) ומשתמשים בו כ-nextFirstItemId.
+    let nextFirstItemId: string | undefined;
+    if (insertIndex >= orderedItemIds.length) {
+        try {
+            const allPrayerItems = await dataSource.fetchCollection({
+                path,
+                collection: itemsCollection,
+            });
+            const laterIds = allPrayerItems
+                .filter((e: any) => e.values?.deleted !== true)
+                .map((e: any) => e.values?.itemId)
+                .filter((id: any) => id != null && id !== "")
+                .map((id: any) => String(id))
+                .filter((id: string) => Number(id) > Number(baseItemId));
+            if (laterIds.length > 0) {
+                laterIds.sort((a: string, b: string) => Number(a) - Number(b));
+                nextFirstItemId = laterIds[0];
+                console.log(`[CMS-ID] createTranslationItem: insertIndex(${insertIndex}) >= orderedItemIds.length(${orderedItemIds.length}) → nextFirstItemId מ-fetch כולל תפילה: ${nextFirstItemId}`);
+            }
+        } catch (_) {
+            // ממשיכים ללא גבול עליון אם ה-fetch נכשל
+        }
+    }
+
     const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
         minIdBefore: baseItemId,
         confirmUserWantsDecimalId,
+        extraTakenIds,
+        neighborBounds: nextFirstItemId ? { nextFirstItemId } : undefined,
     });
 
     // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
@@ -371,6 +410,7 @@ export async function createTranslationItem(
     } else {
         newMitId = newItemId;
     }
+    console.log("[CMS-ID] createTranslationItem | targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId, "baseItemId=", baseItemId, "afterItemId=", afterItemId, "insertIndex=", insertIndex, "orderedItemIds=", orderedItemIds, "=> newItemId=", newItemId, "newMitId=", newMitId, "baseItemMitId=", baseItemMitId ?? "(none)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
 
     const values: Record<string, any> = {
         content: content ?? "",
@@ -381,6 +421,10 @@ export async function createTranslationItem(
         linkedItem: [baseItemId],
         timestamp: Date.now(),
     };
+    if (partName != null && partName !== "") {
+        values.partName = partName;
+        values.partIdAndName = `${partId} ${partName}`;
+    }
     if (titleType !== undefined) values.titleType = titleType;
     if (title !== undefined) values.title = title;
     if (fontTanach !== undefined) values.fontTanach = fontTanach;
@@ -626,6 +670,7 @@ export async function moveItemsToPart(
         oldToNewBaseMitId[oldBaseItemId] = newBaseMitId;
 
         prevBaseMitId = newBaseMitId;
+        console.log("[CMS-ID] moveItemsToPart (base) | oldBaseItemId=", oldBaseItemId, "newBaseItemId=", newBaseItemId, "newBaseMitId=", newBaseMitId, "baseInsertIdx=", baseInsertIdx - 1, "wantsParagraph=", wantsParagraph);
     }
 
     const now = Date.now();
@@ -727,6 +772,8 @@ export async function moveItemsToPart(
                 const baseIsParagraph =
                     (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
 
+                console.log("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "baseIsParagraph=", baseIsParagraph);
+
                 // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
                 let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
                 if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
@@ -746,6 +793,8 @@ export async function moveItemsToPart(
                     const newTranslationMitId = baseIsParagraph
                         ? (oldToNewBaseMitId[oldBaseId] ?? item.values?.mit_id)
                         : newTranslationItemId;
+
+                    console.log("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
 
                     await dataSource.saveEntity({
                         path,

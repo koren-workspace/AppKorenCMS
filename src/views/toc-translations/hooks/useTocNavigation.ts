@@ -38,13 +38,19 @@ function midIdBetween(
 ): string {
     const before = idBefore != null ? Number(idBefore) : NaN;
     const after = idAfter != null ? Number(idAfter) : NaN;
+    let result: string;
     if (!Number.isNaN(before) && !Number.isNaN(after)) {
         const mid = (before + after) / 2;
-        return mid === Math.floor(mid) ? String(Math.floor(mid)) : String(mid);
+        result = mid === Math.floor(mid) ? String(Math.floor(mid)) : String(mid);
+    } else if (!Number.isNaN(before)) {
+        result = String(before + DEFAULT_ID_GAP);
+    } else if (!Number.isNaN(after)) {
+        result = String(after - DEFAULT_ID_GAP);
+    } else {
+        result = "1000000";
     }
-    if (!Number.isNaN(before)) return String(before + DEFAULT_ID_GAP);
-    if (!Number.isNaN(after)) return String(after - DEFAULT_ID_GAP);
-    return "1000000";
+    console.log("[CMS-ID] midIdBetween (prayer) | idBefore=", idBefore ?? "(empty)", "idAfter=", idAfter ?? "(empty)", "=> result=", result);
+    return result;
 }
 
 export function useTocNavigation() {
@@ -282,10 +288,12 @@ export function useTocNavigation() {
             prayers: [] as any[],
         });
         const allCategories = trans.categories ?? [];
+        const categoryIds = allCategories.map((c: any) => c.id).filter(Boolean);
         const maxId = allCategories.length
             ? Math.max(0, ...allCategories.map((c: any) => Number(c.id) || 0))
             : 0;
         const newCategoryId = String(maxId + 10);
+        console.log("[CMS-ID] addCategory | existingCategoryIds=", categoryIds, "maxId=", maxId, "afterCategoryId=", afterCategoryId ?? "(none)", "=> newCategoryId=", newCategoryId);
         const insertAt = (cats: any[], t: any) => {
             const catObj = {
                 ...getCategoryForTranslation(t.translationId ?? ""),
@@ -619,8 +627,12 @@ export function useTocNavigation() {
             if (nextInCollection != null) nextId = nextInCollection;
         }
         let newPrayerId = midIdBetween(afterId ?? null, nextId ?? null);
+        const initialPrayerId = newPrayerId;
         while (existingIds.has(newPrayerId)) {
             newPrayerId = String((Number(newPrayerId) || 0) + 1);
+        }
+        if (initialPrayerId !== newPrayerId) {
+            console.log("[CMS-ID] addPrayer | afterId=", afterId ?? "(none)", "nextId=", nextId ?? "(none)", "existingIds.count=", existingIds.size, "initialPrayerId=", initialPrayerId, "=> newPrayerId=", newPrayerId, "(collision resolved)");
         }
         const getPrayerForTranslation = (translationId: string) => ({
             id: newPrayerId,
@@ -1151,10 +1163,12 @@ export function useTocNavigation() {
             String(t.translationId ?? "").startsWith("0-")
         ) ?? trans;
         const allParts = getParts(baseTrans);
+        const partIds = allParts.map((p: any) => p.id).filter(Boolean);
         const maxId = allParts.length
             ? Math.max(0, ...allParts.map((p: any) => Number(p.id) || 0))
             : 0;
         const newPartId = String(maxId + 10);
+        console.log("[CMS-ID] addPart | selectedPrayerId=", selectedPrayerId, "existingPartIds=", partIds, "maxId=", maxId, "afterPartId=", afterPartId ?? "(none)", "=> newPartId=", newPartId);
 
         // בסיס המקטע החדש עם שדות תצוגה
         const basePart = {

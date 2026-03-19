@@ -189,6 +189,11 @@ export function usePartEdit(context: PartEditContext) {
         titleType: "",
         title: "",
         fontTanach: false,
+        bold: false,
+        centerAlign: false,
+        lineLine: false,
+        red: false,
+        justifyBlock: false,
         noSpace: false,
         block: false,
         firstInPage: false,
@@ -228,6 +233,11 @@ export function usePartEdit(context: PartEditContext) {
             titleType: "",
             title: "",
             fontTanach: false,
+            bold: false,
+            centerAlign: false,
+            lineLine: false,
+            red: false,
+            justifyBlock: false,
             noSpace: false,
             block: false,
             firstInPage: false,
@@ -1167,6 +1177,11 @@ export function usePartEdit(context: PartEditContext) {
             if (form.titleType !== undefined) newItemValues.titleType = form.titleType;
             if (form.title !== undefined) newItemValues.title = form.title;
             if (form.fontTanach !== undefined) newItemValues.fontTanach = form.fontTanach;
+            if (form.bold !== undefined) newItemValues.bold = form.bold;
+            if (form.centerAlign !== undefined) newItemValues.centerAlign = form.centerAlign;
+            if (form.lineLine !== undefined) newItemValues.lineLine = form.lineLine;
+            if (form.red !== undefined) newItemValues.red = form.red;
+            if (form.justifyBlock !== undefined) newItemValues.justifyBlock = form.justifyBlock;
             if (form.noSpace !== undefined) newItemValues.noSpace = form.noSpace;
             if (form.block !== undefined) newItemValues.block = form.block;
             if (form.firstInPage !== undefined) newItemValues.firstInPage = form.firstInPage;
@@ -1283,6 +1298,11 @@ export function usePartEdit(context: PartEditContext) {
         titleType: "",
         title: "",
         fontTanach: false,
+        bold: false,
+        centerAlign: false,
+        lineLine: false,
+        red: false,
+        justifyBlock: false,
         noSpace: false,
         block: false,
         firstInPage: false,
@@ -1601,6 +1621,11 @@ export function usePartEdit(context: PartEditContext) {
                     titleType: form.titleType,
                     title: form.title,
                     fontTanach: form.fontTanach,
+                    bold: form.bold,
+                    centerAlign: form.centerAlign,
+                    lineLine: form.lineLine,
+                    red: form.red,
+                    justifyBlock: form.justifyBlock,
                     noSpace: form.noSpace,
                     block: form.block,
                     firstInPage: form.firstInPage,

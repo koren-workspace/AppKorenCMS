@@ -330,6 +330,7 @@ export function TocTranslationsView() {
                 open={partEdit.addItemModalOpen}
                 onClose={partEdit.closeAddItemModal}
                 isInstruction={partEdit.addItemIsInstruction}
+                isBaseTranslation={isBase}
                 form={partEdit.addItemForm}
                 onFormChange={partEdit.setAddItemFormField}
                 showParagraphQuestion={partEdit.addItemShowParagraphQuestion}

@@ -13,7 +13,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Entity } from "@firecms/core";
 import { getItemStyle } from "../utils/itemUtils";
-import { ITEM_TYPE_OPTIONS, INSTRUCTION_TYPE_OPTIONS, TITLE_TYPE_OPTIONS, ITEM_FIELD_HELP } from "../constants/itemFields";
+import {
+    ITEM_TYPE_OPTIONS,
+    INSTRUCTION_TYPE_OPTIONS,
+    TITLE_TYPE_OPTIONS,
+    ITEM_FIELD_HELP,
+    supportsAttachedMeta,
+    supportsFirstInPage,
+    supportsHebrewBodyOnlyFields,
+    supportsNoSpace,
+} from "../constants/itemFields";
 
 /** פריט מתרגום אחר שמקושר לפריט הנוכחי (לפי linkedItem); tId = מזהה התרגום */
 export type RelatedEntry = { id: string; tId: string; values: any };
@@ -85,6 +94,11 @@ export function PartItemRow({
     const [showProps, setShowProps] = useState(false);
     const [showEnhancementProps, setShowEnhancementProps] = useState<Record<string, boolean>>({});
     const entityId = item.id;
+    const currentType = (localVal.type ?? "body") as string;
+    const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, isBaseTranslation);
+    const showNoSpace = supportsNoSpace(currentType);
+    const showFirstInPage = supportsFirstInPage(currentType);
+    const showAttachedMeta = supportsAttachedMeta(currentType);
     const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -225,38 +239,86 @@ export function PartItemRow({
                                 />
                             </label>
                         )}
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
-                            <input
-                                type="checkbox"
-                                checked={!!localVal.fontTanach}
-                                onChange={(e) => onFieldChange(entityId, "fontTanach", e.target.checked)}
-                            />
-                            <span className="text-gray-600">גופן תנ"ך</span>
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
-                            <input
-                                type="checkbox"
-                                checked={!!localVal.noSpace}
-                                onChange={(e) => onFieldChange(entityId, "noSpace", e.target.checked)}
-                            />
-                            <span className="text-gray-600">ללא רווח</span>
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
-                            <input
-                                type="checkbox"
-                                checked={!!localVal.block}
-                                onChange={(e) => onFieldChange(entityId, "block", e.target.checked)}
-                            />
-                            <span className="text-gray-600">בלוק</span>
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
-                            <input
-                                type="checkbox"
-                                checked={!!localVal.firstInPage}
-                                onChange={(e) => onFieldChange(entityId, "firstInPage", e.target.checked)}
-                            />
-                            <span className="text-gray-600">ראשון בעמוד</span>
-                        </label>
+                        {showHebrewBodyOnly && (
+                            <>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.fontTanach}
+                                        onChange={(e) => onFieldChange(entityId, "fontTanach", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">גופן תנ"ך</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.bold}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.bold}
+                                        onChange={(e) => onFieldChange(entityId, "bold", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">גופן מודגש</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.centerAlign}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.centerAlign}
+                                        onChange={(e) => onFieldChange(entityId, "centerAlign", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">מיושר לאמצע</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.lineLine}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.lineLine}
+                                        onChange={(e) => onFieldChange(entityId, "lineLine", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">שורה שורה</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.red}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.red}
+                                        onChange={(e) => onFieldChange(entityId, "red", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">טקסט אדום</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.justifyBlock}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.justifyBlock}
+                                        onChange={(e) => onFieldChange(entityId, "justifyBlock", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">יישור בלוק</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.block}
+                                        onChange={(e) => onFieldChange(entityId, "block", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">פיסקה</span>
+                                </label>
+                            </>
+                        )}
+                        {showNoSpace && (
+                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
+                                <input
+                                    type="checkbox"
+                                    checked={!!localVal.noSpace}
+                                    onChange={(e) => onFieldChange(entityId, "noSpace", e.target.checked)}
+                                />
+                                <span className="text-gray-600">ללא רווח</span>
+                            </label>
+                        )}
+                        {showFirstInPage && (
+                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
+                                <input
+                                    type="checkbox"
+                                    checked={!!localVal.firstInPage}
+                                    onChange={(e) => onFieldChange(entityId, "firstInPage", e.target.checked)}
+                                />
+                                <span className="text-gray-600">ראשון בעמוד</span>
+                            </label>
+                        )}
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialDate}>
                             <input
                                 type="checkbox"
@@ -301,34 +363,38 @@ export function PartItemRow({
                                 <option value="false">לא</option>
                             </select>
                         </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
-                            <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
-                            <input
-                                type="text"
-                                value={localVal.role ?? ""}
-                                onChange={(e) => onFieldChange(entityId, "role", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                dir="rtl"
-                            />
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.reference}>
-                            <span className="text-gray-600 w-20 shrink-0">reference</span>
-                            <input
-                                type="text"
-                                value={localVal.reference ?? ""}
-                                onChange={(e) => onFieldChange(entityId, "reference", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                            />
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialSign}>
-                            <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
-                            <input
-                                type="text"
-                                value={localVal.specialSign ?? ""}
-                                onChange={(e) => onFieldChange(entityId, "specialSign", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                            />
-                        </label>
+                        {showAttachedMeta && (
+                            <>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
+                                    <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
+                                    <input
+                                        type="text"
+                                        value={localVal.role ?? ""}
+                                        onChange={(e) => onFieldChange(entityId, "role", e.target.value)}
+                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                        dir="rtl"
+                                    />
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.reference}>
+                                    <span className="text-gray-600 w-20 shrink-0">מקורות</span>
+                                    <input
+                                        type="text"
+                                        value={localVal.reference ?? ""}
+                                        onChange={(e) => onFieldChange(entityId, "reference", e.target.value)}
+                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                    />
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialSign}>
+                                    <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
+                                    <input
+                                        type="text"
+                                        value={localVal.specialSign ?? ""}
+                                        onChange={(e) => onFieldChange(entityId, "specialSign", e.target.value)}
+                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                    />
+                                </label>
+                            </>
+                        )}
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.mit_id}>
                             <span className="text-gray-600 w-20 shrink-0">MIT ID</span>
                             <input
@@ -381,6 +447,12 @@ export function PartItemRow({
                         const enhChanged = isEnhancementChanged?.(enh.id) ?? false;
                         const enhShowProps = showEnhancementProps[enh.id] ?? false;
                         const relatedWillBeDeleted = isPendingDelete && isBaseTranslation;
+                        const enhType = (displayVal.type ?? "body") as string;
+                        const enhancementIsBase = String(enh.tId ?? "").startsWith("0-");
+                        const enhShowHebrewBodyOnly = supportsHebrewBodyOnlyFields(enhType, enhancementIsBase);
+                        const enhShowNoSpace = supportsNoSpace(enhType);
+                        const enhShowFirstInPage = supportsFirstInPage(enhType);
+                        const enhShowAttachedMeta = supportsAttachedMeta(enhType);
                         return (
                             <div
                                 key={enh.id}
@@ -449,26 +521,59 @@ export function PartItemRow({
                                                 />
                                             </label>
                                         )}
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
-                                            <input type="checkbox" checked={!!displayVal.fontTanach}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "fontTanach", e.target.checked)} />
-                                            <span className="text-gray-600">גופן תנ"ך</span>
-                                        </label>
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
-                                            <input type="checkbox" checked={!!displayVal.noSpace}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "noSpace", e.target.checked)} />
-                                            <span className="text-gray-600">ללא רווח</span>
-                                        </label>
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
-                                            <input type="checkbox" checked={!!displayVal.block}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "block", e.target.checked)} />
-                                            <span className="text-gray-600">בלוק</span>
-                                        </label>
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
-                                            <input type="checkbox" checked={!!displayVal.firstInPage}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "firstInPage", e.target.checked)} />
-                                            <span className="text-gray-600">ראשון בעמוד</span>
-                                        </label>
+                                        {enhShowHebrewBodyOnly && (
+                                            <>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
+                                                    <input type="checkbox" checked={!!displayVal.fontTanach}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "fontTanach", e.target.checked)} />
+                                                    <span className="text-gray-600">גופן תנ"ך</span>
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.bold}>
+                                                    <input type="checkbox" checked={!!displayVal.bold}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "bold", e.target.checked)} />
+                                                    <span className="text-gray-600">גופן מודגש</span>
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.centerAlign}>
+                                                    <input type="checkbox" checked={!!displayVal.centerAlign}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "centerAlign", e.target.checked)} />
+                                                    <span className="text-gray-600">מיושר לאמצע</span>
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.lineLine}>
+                                                    <input type="checkbox" checked={!!displayVal.lineLine}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "lineLine", e.target.checked)} />
+                                                    <span className="text-gray-600">שורה שורה</span>
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.red}>
+                                                    <input type="checkbox" checked={!!displayVal.red}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "red", e.target.checked)} />
+                                                    <span className="text-gray-600">טקסט אדום</span>
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.justifyBlock}>
+                                                    <input type="checkbox" checked={!!displayVal.justifyBlock}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "justifyBlock", e.target.checked)} />
+                                                    <span className="text-gray-600">יישור בלוק</span>
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
+                                                    <input type="checkbox" checked={!!displayVal.block}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "block", e.target.checked)} />
+                                                    <span className="text-gray-600">פיסקה</span>
+                                                </label>
+                                            </>
+                                        )}
+                                        {enhShowNoSpace && (
+                                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
+                                                <input type="checkbox" checked={!!displayVal.noSpace}
+                                                    onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "noSpace", e.target.checked)} />
+                                                <span className="text-gray-600">ללא רווח</span>
+                                            </label>
+                                        )}
+                                        {enhShowFirstInPage && (
+                                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
+                                                <input type="checkbox" checked={!!displayVal.firstInPage}
+                                                    onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "firstInPage", e.target.checked)} />
+                                                <span className="text-gray-600">ראשון בעמוד</span>
+                                            </label>
+                                        )}
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialDate}>
                                             <input type="checkbox" checked={!!displayVal.specialDate}
                                                 onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "specialDate", e.target.checked)} />
@@ -510,24 +615,28 @@ export function PartItemRow({
                                                 <option value="false">לא</option>
                                             </select>
                                         </label>
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
-                                            <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
-                                            <input type="text" value={displayVal.role ?? ""}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "role", e.target.value)}
-                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0" dir="rtl" />
-                                        </label>
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.reference}>
-                                            <span className="text-gray-600 w-20 shrink-0">reference</span>
-                                            <input type="text" value={displayVal.reference ?? ""}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "reference", e.target.value)}
-                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0" />
-                                        </label>
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialSign}>
-                                            <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
-                                            <input type="text" value={displayVal.specialSign ?? ""}
-                                                onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "specialSign", e.target.value)}
-                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0" />
-                                        </label>
+                                        {enhShowAttachedMeta && (
+                                            <>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
+                                                    <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
+                                                    <input type="text" value={displayVal.role ?? ""}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "role", e.target.value)}
+                                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0" dir="rtl" />
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.reference}>
+                                                    <span className="text-gray-600 w-20 shrink-0">מקורות</span>
+                                                    <input type="text" value={displayVal.reference ?? ""}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "reference", e.target.value)}
+                                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0" />
+                                                </label>
+                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialSign}>
+                                                    <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
+                                                    <input type="text" value={displayVal.specialSign ?? ""}
+                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "specialSign", e.target.value)}
+                                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0" />
+                                                </label>
+                                            </>
+                                        )}
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.dateSetId}>
                                             <span className="text-gray-600 w-20 shrink-0">dateSetId</span>
                                             <input type="text" value={displayVal.dateSetId ?? ""}

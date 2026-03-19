@@ -273,6 +273,11 @@ export type CreateTranslationItemParams = {
     titleType?: string;
     title?: string;
     fontTanach?: boolean;
+    bold?: boolean;
+    centerAlign?: boolean;
+    lineLine?: boolean;
+    red?: boolean;
+    justifyBlock?: boolean;
     noSpace?: boolean;
     block?: boolean;
     firstInPage?: boolean;
@@ -321,6 +326,11 @@ export async function createTranslationItem(
         titleType,
         title,
         fontTanach,
+        bold,
+        centerAlign,
+        lineLine,
+        red,
+        justifyBlock,
         noSpace,
         block,
         firstInPage,
@@ -428,6 +438,11 @@ export async function createTranslationItem(
     if (titleType !== undefined) values.titleType = titleType;
     if (title !== undefined) values.title = title;
     if (fontTanach !== undefined) values.fontTanach = fontTanach;
+    if (bold !== undefined) values.bold = bold;
+    if (centerAlign !== undefined) values.centerAlign = centerAlign;
+    if (lineLine !== undefined) values.lineLine = lineLine;
+    if (red !== undefined) values.red = red;
+    if (justifyBlock !== undefined) values.justifyBlock = justifyBlock;
     if (noSpace !== undefined) values.noSpace = noSpace;
     if (block !== undefined) values.block = block;
     if (firstInPage !== undefined) values.firstInPage = firstInPage;

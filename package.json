@@ -13,7 +13,9 @@
     "stage-test-suite": "node scripts/run-stage-test-suite.mjs",
     "stage-test-suite-1": "node scripts/run-stage-test-suite.mjs 1",
     "stage-test-suite-2": "node scripts/run-stage-test-suite.mjs 2",
-    "stage-revert": "node scripts/revert-stage-test.mjs"
+    "stage-revert": "node scripts/revert-stage-test.mjs",
+    "migrate-1x-item-second-digit": "node scripts/migrate-translation1-item-second-digit.mjs",
+    "migrate-item-ids": "python scripts/migrate_translation_item_ids.py"
   },
   "dependencies": {
     "@bageldb/bagel-db": "^0.4.39",

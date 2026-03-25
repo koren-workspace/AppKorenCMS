@@ -18,6 +18,7 @@ import {
     INSTRUCTION_TYPE_OPTIONS,
     TITLE_TYPE_OPTIONS,
     ITEM_FIELD_HELP,
+    showDiburHamatkhilField,
     supportsAttachedMeta,
     supportsFirstInPage,
     supportsHebrewBodyOnlyFields,
@@ -49,6 +50,8 @@ type PartItemRowProps = {
     onRestore?: (item: Entity<any>, itemId: string) => void;
     /** עריכת פריט בסיס – במחיקה יימחקו גם כל הפריטים המקושרים בכל התרגומים */
     isBaseTranslation?: boolean;
+    /** מזהה התרגום הנוכחי – להצגת דיבור המתחיל רק בתרגומי פירוש (2 ספרות) */
+    currentTranslationId?: string | null;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
     /** מוצג רק בתרגום: הוסף פריט הוראה אחרי שורה זו */
@@ -82,6 +85,7 @@ export function PartItemRow({
     isPendingDelete = false,
     onRestore,
     isBaseTranslation = false,
+    currentTranslationId = null,
     onAddAfter,
     onAddInstructionAfter,
     onAddTranslation,
@@ -227,9 +231,9 @@ export function PartItemRow({
                                 )}
                             </label>
                         )}
-                        {(["title", "commentary"] as const).includes((localVal.type ?? "body") as any) && (
-                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.title}>
-                                <span className="text-gray-600 w-20 shrink-0">כותרת</span>
+                        {showDiburHamatkhilField(localVal.type, currentTranslationId) && (
+                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.titleCommentary}>
+                                <span className="text-gray-600 w-20 shrink-0">דיבור המתחיל</span>
                                 <input
                                     type="text"
                                     value={localVal.title ?? ""}
@@ -509,9 +513,9 @@ export function PartItemRow({
                                                 </select>
                                             </label>
                                         )}
-                                        {(["title", "commentary"] as const).includes((displayVal.type ?? "body") as any) && (
-                                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.title}>
-                                                <span className="text-gray-600 w-20 shrink-0">כותרת</span>
+                                        {showDiburHamatkhilField(displayVal.type, enh.tId) && (
+                                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.titleCommentary}>
+                                                <span className="text-gray-600 w-20 shrink-0">דיבור המתחיל</span>
                                                 <input
                                                     type="text"
                                                     value={displayVal.title ?? ""}

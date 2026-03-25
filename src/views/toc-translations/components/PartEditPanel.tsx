@@ -68,6 +68,8 @@ export type PartEditPanelProps = {
     restrictTypeToInstructions?: boolean;
     /** עריכת נוסח בסיס – במחיקה יימחקו גם כל הפריטים המקושרים בכל התרגומים */
     isBaseTranslation?: boolean;
+    /** מזהה התרגום הנוכחי – להצגת דיבור המתחיל רק בתרגומי פירוש */
+    currentTranslationId?: string | null;
     /** מזהה הפריט שנוסף לאחרונה – להעברת פוקוס לשדה התוכן */
     lastAddedItemId?: string | null;
     /** פותח מודל הגדרת/עריכת dateSetId בלחיצה על השדה במאפיינים */
@@ -130,6 +132,7 @@ export function PartEditPanel({
     onAddTranslation,
     restrictTypeToInstructions = false,
     isBaseTranslation = false,
+    currentTranslationId = null,
     lastAddedItemId = null,
     onOpenDateSetIdForItem,
     allowSplitAndMove = false,
@@ -229,6 +232,7 @@ export function PartEditPanel({
                                                     isPendingDelete={pendingDeleteIds.has(item.id)}
                                                     onRestore={onRestoreItem}
                                                     isBaseTranslation={isBaseTranslation}
+                                                    currentTranslationId={currentTranslationId}
                                                     onAddAfter={
                                                         allowAddPart
                                                             ? () => onAddNewItemAt(index + 1)

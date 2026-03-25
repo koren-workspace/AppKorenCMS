@@ -10,6 +10,7 @@ import {
     ITEM_TYPE_OPTIONS,
     TITLE_TYPE_OPTIONS,
     ITEM_FIELD_HELP,
+    showDiburHamatkhilField,
     supportsAttachedMeta,
     supportsFirstInPage,
     supportsHebrewBodyOnlyFields,
@@ -263,16 +264,18 @@ export function AddTranslationModal({
                                                 </select>
                                             </label>
                                         )}
-                                        <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.title}>
-                                            <span className="text-gray-600 w-20 shrink-0">כותרת</span>
-                                            <input
-                                                type="text"
-                                                value={form.title ?? ""}
-                                                onChange={(e) => onFormFieldChange("title", e.target.value)}
-                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                                dir="rtl"
-                                            />
-                                        </label>
+                                        {showDiburHamatkhilField(form.type, targetTranslationId) && (
+                                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.titleCommentary}>
+                                                <span className="text-gray-600 w-20 shrink-0">דיבור המתחיל</span>
+                                                <input
+                                                    type="text"
+                                                    value={form.title ?? ""}
+                                                    onChange={(e) => onFormFieldChange("title", e.target.value)}
+                                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                                    dir="rtl"
+                                                />
+                                            </label>
+                                        )}
                                     </>
                                 )}
                                 {showHebrewBodyOnly && (

@@ -319,6 +319,7 @@ export function TocTranslationsView() {
                 onAddTranslation={partEdit.openAddTranslation}
                 restrictTypeToInstructions={!isBase}
                 isBaseTranslation={isBase}
+                currentTranslationId={nav.currentTranslationData?.translationId ?? null}
                 lastAddedItemId={partEdit.lastAddedItemId}
                 onOpenDateSetIdForItem={partEdit.openDateSetIdModalForEdit}
                 allowSplitAndMove={allowAddPart}
@@ -331,6 +332,7 @@ export function TocTranslationsView() {
                 onClose={partEdit.closeAddItemModal}
                 isInstruction={partEdit.addItemIsInstruction}
                 isBaseTranslation={isBase}
+                translationId={nav.currentTranslationData?.translationId ?? null}
                 form={partEdit.addItemForm}
                 onFormChange={partEdit.setAddItemFormField}
                 showParagraphQuestion={partEdit.addItemShowParagraphQuestion}

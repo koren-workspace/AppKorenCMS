@@ -6,6 +6,7 @@
  * - idBetween: מחשב ערך mit_id חדש בין שני ערכים קיימים
  * - computeNextAvailableItemId: מחשב itemId חדש פנוי בין שני ערכים, עם decimal fallback
  * - computeItemIdForInsert: פונקציה מרכזית – מחשבת idBefore/idAfter/takenIds מרשימה ממוינת + מיקום
+ *   (ברירת מחדל חדשה: עבודה בתוך מרחב IDs של הרשימה הנוכחית בלבד; linkedIdsPerPosition נשאר לתאימות)
  */
 
 const MIT_ID_GAP = 1000;
@@ -149,12 +150,12 @@ export interface ComputeItemIdForInsertOptions {
      * - idAfter  = MIN של כל ה-IDs (בסיס + מקושרים) *מתחת* למיקום ההוספה
      * - כל ה-IDs המקושרים מתווספים ל-takenIds
      *
-     * כשלא סופק: idBefore/idAfter נלקחים מהשכן הישיר (מתאים ל-reorder).
+     * כשלא סופק: idBefore/idAfter נלקחים מהשכן הישיר (ברירת המחדל אחרי הפרדת טווחי IDs).
      */
     linkedIdsPerPosition?: string[][];
     /**
      * ערך מינימלי ל-idBefore – מבטיח שה-ID החדש יהיה >= minIdBefore.
-     * שימוש: כשתרגום חייב לקבל itemId >= itemId של פריט הבסיס.
+     * שימוש: תאימות/מקרי קצה שבהם עדיין צריך עיגון תחתון קשיח.
      */
     minIdBefore?: string;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
@@ -164,7 +165,7 @@ export interface ComputeItemIdForInsertOptions {
 /**
  * מחשב itemId חדש בהתבסס על רשימה ממוינת של IDs קיימים + מיקום הוספה.
  *
- * מצב פשוט (ללא linkedIdsPerPosition):
+ * מצב פשוט (ללא linkedIdsPerPosition, ברירת מחדל מומלצת):
  *   idBefore/idAfter = השכנים הישירים ב-orderedItemIds.
  *
  * מצב עם תרגומים (linkedIdsPerPosition סופק):

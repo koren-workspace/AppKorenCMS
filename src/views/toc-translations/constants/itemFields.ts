@@ -7,7 +7,9 @@
 export const ITEM_FIELD_HELP: Record<string, string> = {
     type: "סוג הפריט: קובע איך המקטע מוצג באפליקציה (גוף תפילה, כותרת, הוראות, פירוש וכו').",
     titleType: "רמת הכותרת כשהסוג הוא כותרת: H1 הכי בולט, H4 הכי קטן.",
-    title: "כותרת משנה (סוג כותרת) או כותרת פירוש (סוג פירוש) – מוצג באפליקציה בהתאם.",
+    title: "כותרת משנה – מוצג באפליקציה כשהסוג הוא כותרת.",
+    /** רלוונטי רק לפריט בסיווג פירוש: הדיבור המתחיל שמוצג בהדגשה לפני הפירוש. */
+    titleCommentary: "דיבור המתחיל של הפירוש (טייטל): מכיוון שהפירוש מופיע בתחתית המסך, לא תמיד ברור על איזו מילה או משפט הפירוש מתייחס. השדה הזה מוצג בהדגשה לפני הפירוש כדי לציין את המקום בתוכן.",
     fontTanach: "הצגת המקטע בגופן תנ\"ך באפליקציה (רלוונטי לגוף עברית בלבד).",
     bold: "הצגת המקטע בגופן מודגש (רלוונטי לגוף עברית בלבד).",
     centerAlign: "יישור תוכן לאמצע במקום לימין/שמאל (רלוונטי לגוף עברית בלבד).",
@@ -122,4 +124,18 @@ export function supportsFirstInPage(type: string | null | undefined): boolean {
 /** תפקיד/מקורות/סימן מיוחד רלוונטיים רק לתוכן/תרגום (גוף). */
 export function supportsAttachedMeta(type: string | null | undefined): boolean {
     return isBodyLikeType(type);
+}
+
+/** תרגום פירוש = מזהה שמתחיל בשתי ספרות (למשל 10-ashkenaz, 11-...). */
+export function isCommentaryTranslation(translationId: string | null | undefined): boolean {
+    if (!translationId || typeof translationId !== "string") return false;
+    return /^\d{2}-/.test(translationId);
+}
+
+/** האם להציג את שדה דיבור המתחיל: רק בפריט מסוג פירוש ורק בתרגום פירוש (2 ספרות). */
+export function showDiburHamatkhilField(
+    type: string | null | undefined,
+    translationId: string | null | undefined
+): boolean {
+    return (type ?? "body") === "commentary" && isCommentaryTranslation(translationId);
 }

@@ -939,30 +939,18 @@ export function usePartEdit(context: PartEditContext) {
     };
 
     /**
-     * מחשב itemId לפריט חדש במיקום index. לוקח בחשבון שכנים מהרשימה + פריטי תרגום מקושרים (enhancements).
+     * מחשב itemId לפריט חדש במיקום index.
+     * אחרי הפרדת טווחים לפי תרגום אין צורך למזג IDs של כל ה-enhancements מכל התרגומים;
+     * החישוב מתבסס על שכנים ברשימה הנוכחית + neighborBounds + מזהים שנמחקו/בהמתנה למחיקה.
      * confirmUserWantsDecimalId – נקרא כשאין מקום שלם בין שני מספרים צמודים, שואל האם ליצור מזהה .5.
      */
     const computeItemIdForIndex = (index: number, confirmUserWantsDecimalId?: () => boolean): string => {
         const orderedItemIds = allItems.map((i) => getItemIdInCurrentContext(i));
 
-        const allEnhancements = Object.values(enhancements).flat() as Entity<any>[];
-        const linkedIdsPerPosition = allItems.map((item) => {
-            const positionId = getItemIdForPosition(item);
-            if (!positionId) return [];
-            return allEnhancements
-                .filter((e) => {
-                    const link = e.values?.linkedItem;
-                    const baseId = Array.isArray(link) ? link[0] : link;
-                    return baseId === positionId;
-                })
-                .map((e) => (e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")))
-                .filter((id) => id != null && id !== "");
-        });
-
         let nextFirstItemId = neighborBounds.nextFirstItemId;
         if (!nextFirstItemId && baseItems.length > 0 && index >= allItems.length) {
-            const allIds = [...orderedItemIds.filter(Boolean), ...linkedIdsPerPosition.flat()];
-            const maxAbove = allIds.length > 0 ? allIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
+            const baseIds = orderedItemIds.filter(Boolean);
+            const maxAbove = baseIds.length > 0 ? baseIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
             if (maxAbove) nextFirstItemId = getNextBaseItemIdAfter(maxAbove) ?? undefined;
         }
 
@@ -972,7 +960,6 @@ export function usePartEdit(context: PartEditContext) {
                 ...deletedIdsFromServer.itemIds,
                 ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
             ],
-            linkedIdsPerPosition,
             confirmUserWantsDecimalId,
         });
     };
@@ -1588,10 +1575,8 @@ export function usePartEdit(context: PartEditContext) {
                 // אחרי השמירה הפריט בשרת עם document id = itemId; הרענון יטען אותו
             }
 
-            // איסוף כל ה-itemIds של enhancements קיימים – מונע כפילות ID כשמוסיפים תרגומים
-            // לכמה תרגומים שונים בזה אחר זה (כל אחד מחשב מ-path ריק ומגיע לאותו ID)
-            const existingEnhancementItemIds: string[] = Object.values(enhancements)
-                .flat()
+            // אוספים מזהים קיימים של תרגום היעד בלבד.
+            const existingEnhancementItemIds: string[] = (enhancements[addTranslationTargetId] ?? [])
                 .map((e: any) => {
                     const local = enhancementLocalValues[e.id]?.itemId;
                     if (local != null && String(local).trim() !== "") return String(local);

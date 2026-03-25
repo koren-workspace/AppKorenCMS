@@ -375,11 +375,18 @@ export async function createTranslationItem(
         insertIndex = inAll >= 0 ? inAll + 1 : allItems.length;
     }
 
-    // כשאין פריטים אחרי insertIndex בחלק הנוכחי – אין idAfter, ו-result יהיה baseItemId+1000 ללא גבול עליון.
-    // זה עלול לגרום לפריט לקבל ID גדול מפריטים קיימים בתרגום היעד שבחלקים אחרים.
-    // לכן: אם insertIndex >= orderedItemIds.length, מחפשים את הפריט הכי קרוב לאחר baseItemId
-    // בכל התפילה (ללא פילטר partId) ומשתמשים בו כ-nextFirstItemId.
+    // כשאין פריטים אחרי insertIndex בחלק הנוכחי – אין idAfter.
+    // כדי לשמור רצף בין חלקים באותו תרגום, מחפשים את הפריט הקרוב הבא באותה תפילה
+    // ומשתמשים בו כ-nextFirstItemId.
     let nextFirstItemId: string | undefined;
+    const numericLowerBoundCandidates = [
+        ...orderedItemIds.map((id) => Number(id)),
+        ...(extraTakenIds ?? []).map((id) => Number(id)),
+    ].filter((n) => !Number.isNaN(n));
+    const lowerBoundForNextItemId =
+        numericLowerBoundCandidates.length > 0
+            ? Math.max(...numericLowerBoundCandidates)
+            : undefined;
     if (insertIndex >= orderedItemIds.length) {
         try {
             const allPrayerItems = await dataSource.fetchCollection({
@@ -391,7 +398,11 @@ export async function createTranslationItem(
                 .map((e: any) => e.values?.itemId)
                 .filter((id: any) => id != null && id !== "")
                 .map((id: any) => String(id))
-                .filter((id: string) => Number(id) > Number(baseItemId));
+                .filter((id: string) =>
+                    lowerBoundForNextItemId == null
+                        ? true
+                        : Number(id) > lowerBoundForNextItemId
+                );
             if (laterIds.length > 0) {
                 laterIds.sort((a: string, b: string) => Number(a) - Number(b));
                 nextFirstItemId = laterIds[0];
@@ -403,7 +414,6 @@ export async function createTranslationItem(
     }
 
     const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
-        minIdBefore: baseItemId,
         confirmUserWantsDecimalId,
         extraTakenIds,
         neighborBounds: nextFirstItemId ? { nextFirstItemId } : undefined,
@@ -778,6 +788,32 @@ export async function moveItemsToPart(
                 .map((e: any) => e.values?.itemId)
                 .filter((v: string | undefined) => !!v)
                 .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+            const translationItemById = new Map<string, Entity<any>>();
+            stableTargetItems.forEach((e: any) => {
+                const id = e.values?.itemId;
+                if (id != null && id !== "") translationItemById.set(String(id), e);
+            });
+            const getPrimaryLinkedBaseId = (item: Entity<any> | undefined): string | undefined => {
+                const link = item?.values?.linkedItem;
+                if (Array.isArray(link)) return link.find((id: any) => id != null && id !== "");
+                return link != null && link !== "" ? String(link) : undefined;
+            };
+
+            // עוגן התחלתי: אחרי התרגומים שכבר מקושרים לפריט הבסיס "insertAfterItemId" אם קיים.
+            // כך נמנעים מהשוואת Number בין מרחבי IDs שונים (בסיס מול תרגום).
+            let nextInsertPos = 0;
+            if (insertAfterItemId != null && insertAfterItemId !== "") {
+                let lastLinkedPos = -1;
+                for (let i = 0; i < translationOrderedIds.length; i++) {
+                    const id = translationOrderedIds[i];
+                    const entity = translationItemById.get(id);
+                    if (getPrimaryLinkedBaseId(entity) === insertAfterItemId) {
+                        lastLinkedPos = i;
+                    }
+                }
+                nextInsertPos =
+                    lastLinkedPos >= 0 ? lastLinkedPos + 1 : translationOrderedIds.length;
+            }
 
             for (const oldBaseId of orderedOldBaseIds) {
                 const relatedItems = relatedByBaseId.get(oldBaseId) ?? [];
@@ -789,11 +825,8 @@ export async function moveItemsToPart(
 
                 console.log("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "baseIsParagraph=", baseIsParagraph);
 
-                // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
-                let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
-                if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
-                translationOrderedIds.splice(baseRefPos, 0, newBaseId);
-                let insertPos = baseRefPos + 1;
+                // שומרים על רצף ההכנסה לפי סדר ההעברה, בלי להצליב ערכים נומריים בין בסיס לתרגום.
+                let insertPos = nextInsertPos;
 
                 for (const item of relatedItems) {
                     const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos);
@@ -828,6 +861,7 @@ export async function moveItemsToPart(
                         collection: itemsCollection,
                     });
                 }
+                nextInsertPos = insertPos;
             }
         }
     }

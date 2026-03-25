@@ -9,6 +9,7 @@ import {
     INSTRUCTION_TYPE_OPTIONS,
     TITLE_TYPE_OPTIONS,
     ITEM_FIELD_HELP,
+    showDiburHamatkhilField,
     supportsAttachedMeta,
     supportsFirstInPage,
     supportsHebrewBodyOnlyFields,
@@ -72,6 +73,8 @@ export type AddItemModalProps = {
     isInstruction: boolean;
     /** האם התרגום הנוכחי הוא תרגום בסיס (0-*) */
     isBaseTranslation: boolean;
+    /** מזהה התרגום הנוכחי – דיבור המתחיל רק בתרגומי פירוש (2 ספרות) */
+    translationId?: string | null;
     form: AddItemFormValues;
     onFormChange: (field: keyof AddItemFormValues, value: unknown) => void;
     /** להצגת "המשך פסקה" במרכז החלון */
@@ -88,6 +91,7 @@ export function AddItemModal({
     onClose,
     isInstruction,
     isBaseTranslation,
+    translationId = null,
     form,
     onFormChange,
     showParagraphQuestion,
@@ -182,9 +186,9 @@ export function AddItemModal({
                                 </select>
                             </label>
                         )}
-                        {(["title", "commentary"].includes(form.type)) && (
-                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.title}>
-                                <span className="text-gray-600 w-20 shrink-0">כותרת</span>
+                        {showDiburHamatkhilField(form.type, translationId) && (
+                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.titleCommentary}>
+                                <span className="text-gray-600 w-20 shrink-0">דיבור המתחיל</span>
                                 <input
                                     type="text"
                                     value={form.title}

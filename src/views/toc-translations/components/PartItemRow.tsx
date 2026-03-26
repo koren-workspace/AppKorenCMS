@@ -5,7 +5,7 @@
  *   - כרטיס: itemId, MIT, זמן עדכון + textarea לתוכן (עם עיצוב לפי type)
  *   - בלוק מאפיינים (סוג, כותרת, גופן, תפקיד, וכו') – ניתן להרחבה
  *   - בלוק "תרגומים מקושרים": פריטים מתרגומים אחרים שמקושרים ל-itemId (linkedItem) – ניתן לעריכה
- *   - כפתור "הוסף מקטע כאן" / "הוסף הוראה כאן" / "הוסף תרגום לטקסט זה"
+ *   - כפתור "הוסף פריט" / "הוסף הוראה כאן" / "הוסף תרגום לטקסט זה"
  *
  * קומפוננטה תצוגתית – כל הנתונים וה-callbacks ב-props.
  */
@@ -54,6 +54,8 @@ type PartItemRowProps = {
     currentTranslationId?: string | null;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
+    /** מוצג רק בנוסח הבסיסי: הוסף פסקה אחרי שורה זו */
+    onAddParagraphAfter?: () => void;
     /** מוצג רק בתרגום: הוסף פריט הוראה אחרי שורה זו */
     onAddInstructionAfter?: () => void;
     /** פותח מודל הוספת תרגום לפריט הזה */
@@ -87,6 +89,7 @@ export function PartItemRow({
     isBaseTranslation = false,
     currentTranslationId = null,
     onAddAfter,
+    onAddParagraphAfter,
     onAddInstructionAfter,
     onAddTranslation,
     restrictTypeToInstructions = false,
@@ -679,7 +682,16 @@ export function PartItemRow({
                     onClick={onAddAfter}
                     className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
                 >
-                    + הוסף מקטע כאן
+                    + הוסף פריט
+                </button>
+            )}
+            {onAddParagraphAfter && (
+                <button
+                    type="button"
+                    onClick={onAddParagraphAfter}
+                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-colors shadow-sm"
+                >
+                    + הוסף פסקה כאן
                 </button>
             )}
             {onAddInstructionAfter && (

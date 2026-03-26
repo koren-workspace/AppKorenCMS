@@ -6,11 +6,13 @@ import path from "path"
 import fs from "fs"
 import { createRequire } from "module"
 import type * as XLSXTypes from "xlsx"
+import type * as GoogleApisTypes from "googleapis"
 
 // xlsx הוא מודול CJS – createRequire מבטיח טעינה תקינה גם בסביבת ESM
 const _require = createRequire(import.meta.url)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = _require("xlsx") as typeof XLSXTypes
+const { google } = _require("googleapis") as typeof GoogleApisTypes
 
 const CHANGELOG_ENDPOINT = "/__cms_changelog__"
 const DOCS_CHANGELOG_PATH = path.resolve(process.cwd(), "docs", "cms-changelog.json")
@@ -18,6 +20,8 @@ const DOCS_CHANGELOG_PATH = path.resolve(process.cwd(), "docs", "cms-changelog.j
 // ─── Excel Audit Trail ────────────────────────────────────────────────────────
 const EXCEL_ENDPOINT = "/__cms_excel__"
 const EXCEL_PATH = path.resolve(process.cwd(), "docs", "cms-changes.xlsx")
+const SHEETS_ENDPOINT = "/__cms_sheets__"
+const GOOGLE_SERVICE_ACCOUNT_PATH = path.resolve(process.cwd(), ".google-service-account.json")
 
 /** שמות ה-sheets ב-Excel */
 const SHEET_CHANGES = "שינויים"
@@ -347,6 +351,84 @@ function appendEntryToExcel(entry: any): void {
     XLSX.writeFile(wb, EXCEL_PATH)
 }
 
+type SheetsAppendBody = {
+    spreadsheetId?: string
+    sheetName?: string
+    rows?: unknown
+    rowObjects?: unknown
+}
+
+type HeaderRowObject = Record<string, string | number | boolean | null>
+
+async function appendRowsToGoogleSheets(body: SheetsAppendBody): Promise<void> {
+    if (!fs.existsSync(GOOGLE_SERVICE_ACCOUNT_PATH)) {
+        throw new Error(`Missing service account file at ${GOOGLE_SERVICE_ACCOUNT_PATH}`)
+    }
+    const spreadsheetId = body.spreadsheetId || process.env.VITE_GOOGLE_SHEETS_SPREADSHEET_ID
+    const sheetName = body.sheetName || process.env.VITE_GOOGLE_SHEETS_SHEET_NAME
+    if (!spreadsheetId || !sheetName) {
+        throw new Error("Missing spreadsheetId/sheetName in request and env")
+    }
+    const serviceAccountRaw = fs.readFileSync(GOOGLE_SERVICE_ACCOUNT_PATH, "utf8")
+    const serviceAccount = JSON.parse(serviceAccountRaw)
+    const auth = new google.auth.GoogleAuth({
+        credentials: serviceAccount,
+        scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    })
+    const authClient = await auth.getClient()
+    const sheetsApi = google.sheets({ version: "v4", auth: authClient as any })
+    let valuesToAppend: any[][] = []
+
+    if (Array.isArray(body.rowObjects) && body.rowObjects.length > 0) {
+        const rowObjects = body.rowObjects as unknown[]
+        if (!rowObjects.every((row) => row != null && typeof row === "object" && !Array.isArray(row))) {
+            throw new Error("rowObjects חייב להיות מערך של אובייקטים")
+        }
+        const headerRes = await sheetsApi.spreadsheets.values.get({
+            spreadsheetId,
+            range: `${sheetName}!1:1`,
+        })
+        const headers = (headerRes.data.values?.[0] ?? []).map((h) => String(h).trim())
+        if (headers.length === 0) {
+            throw new Error(`No header row found in sheet "${sheetName}"`)
+        }
+        const headerIndex = new Map<string, number>()
+        headers.forEach((h, i) => headerIndex.set(h, i))
+        valuesToAppend = rowObjects.map((obj) => {
+            const typedObj = obj as HeaderRowObject
+            const payloadHeaders = Object.keys(typedObj)
+            const missing = payloadHeaders.filter((h) => !headerIndex.has(h))
+            if (missing.length > 0) {
+                console.warn(`[cms-sheets] missing headers in "${sheetName}" (skipping values): ${missing.join(", ")}`)
+            }
+            const row = new Array(headers.length).fill("")
+            Object.entries(typedObj).forEach(([header, value]) => {
+                const idx = headerIndex.get(header)
+                if (idx == null) return
+                row[idx] = value == null ? "" : value
+            })
+            return row
+        })
+    } else if (Array.isArray(body.rows) && body.rows.length > 0) {
+        const rows = body.rows as unknown[]
+        if (!rows.every((row) => Array.isArray(row))) {
+            throw new Error("rows חייב להיות מערך של מערכים")
+        }
+        valuesToAppend = rows as any[][]
+    } else {
+        throw new Error("rows או rowObjects חייבים להיות מערך לא ריק")
+    }
+
+    await sheetsApi.spreadsheets.values.append({
+        spreadsheetId,
+        range: `${sheetName}!A:ZZ`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: {
+            values: valuesToAppend,
+        },
+    })
+}
+
 /** Vite plugin: מקבל POST /__cms_excel__ עם entry בודד ומוסיף ל-Excel */
 function cmsExcelPlugin() {
     return {
@@ -377,6 +459,34 @@ function cmsExcelPlugin() {
     }
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Vite plugin: מקבל POST /__cms_sheets__ וכותב שורות ל-Google Sheets */
+function cmsSheetsPlugin() {
+    return {
+        name: "cms-google-sheets",
+        configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
+            console.log("[cms-sheets] plugin loaded, listening on", SHEETS_ENDPOINT)
+            server.middlewares.use((req: any, res: any, next: () => void) => {
+                if (req.method !== "POST" || !req.url?.startsWith(SHEETS_ENDPOINT)) return next()
+                const chunks: Buffer[] = []
+                req.on("data", (chunk: Buffer) => chunks.push(chunk))
+                req.on("end", async () => {
+                    try {
+                        const bodyRaw = Buffer.concat(chunks).toString("utf8")
+                        const body = JSON.parse(bodyRaw) as SheetsAppendBody
+                        await appendRowsToGoogleSheets(body)
+                        res.statusCode = 204
+                        res.end()
+                    } catch (err) {
+                        console.error("[cms-sheets] ✗ failed to append rows:", err)
+                        res.statusCode = 500
+                        res.end()
+                    }
+                })
+            })
+        },
+    }
+}
 
 /** במצב dev: POST ל-/__cms_changelog__ שומר את גוף הבקשה ב-docs/cms-changelog.json */
 function cmsChangelogPlugin() {
@@ -430,6 +540,7 @@ export default defineConfig({
     plugins: [
         cmsChangelogPlugin(),
         cmsExcelPlugin(),
+        cmsSheetsPlugin(),
         react(),
         federation({
             name: "remote_app",

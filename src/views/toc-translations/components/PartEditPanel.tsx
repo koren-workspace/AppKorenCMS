@@ -4,7 +4,7 @@
  * מציג:
  *   - PartEditToolbar: כותרת המקטע + כפתורי "שמור מקטע" ו"פרסום"
  *   - במצב טעינה: "טוען..."
- *   - לאחר טעינה: רשימת פריטים (PartItemRow) + כפתור "הוסף בראש המקטע"
+ *   - לאחר טעינה: רשימת פריטים (PartItemRow) + כפתור "הוסף פריט"
  *
  * כל הנתונים והפעולות מגיעים ב-props (controlled) – ה-state נמצא ב-usePartEdit.
  */
@@ -50,6 +50,7 @@ export type PartEditPanelProps = {
     /** עדכון שדה של תרגום מקושר (entityId, translationId, field, value) */
     onEnhancementFieldChange?: (entityId: string, translationId: string, field: string, value: unknown) => void;
     onAddNewItemAt: (index: number) => void;
+    onAddNewParagraphAt?: (index: number) => void;
     /** מוחק מקטע ואת כל התרגומים המקושרים (סימון למחיקה בשמירה) */
     onDeleteItem?: (item: Entity<any>, itemId: string) => void;
     /** פריטים שסומנו למחיקה – מוצגים עם עיצוב "ימוחק בשמירה" וכפתור החזר */
@@ -123,6 +124,7 @@ export function PartEditPanel({
     onFieldChange,
     onEnhancementFieldChange,
     onAddNewItemAt,
+    onAddNewParagraphAt,
     onDeleteItem,
     pendingDeletes = [],
     onRestoreItem,
@@ -173,13 +175,24 @@ export function PartEditPanel({
                     <div className="overflow-auto space-y-4 px-2 pb-10">
                         {/* הוספת פריט בתחילת הרשימה – רק בנוסח הבסיסי (0-*) */}
                         {allowAddPart && (
-                            <button
-                                type="button"
-                                onClick={() => onAddNewItemAt(0)}
-                                className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
-                            >
-                                + הוסף בראש המקטע
-                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => onAddNewItemAt(0)}
+                                    className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
+                                >
+                                    + הוסף פריט
+                                </button>
+                                {onAddNewParagraphAt && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onAddNewParagraphAt(0)}
+                                        className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-colors shadow-sm"
+                                    >
+                                        + הוסף פסקה
+                                    </button>
+                                )}
+                            </div>
                         )}
                         {/* הוספת הוראה – רק בתרגום (לא בבסיס); הוראות לא מקושרות לבסיס */}
                         {allowAddInstruction && onAddNewInstructionAt && (
@@ -236,6 +249,11 @@ export function PartEditPanel({
                                                     onAddAfter={
                                                         allowAddPart
                                                             ? () => onAddNewItemAt(index + 1)
+                                                            : undefined
+                                                    }
+                                                    onAddParagraphAfter={
+                                                        allowAddPart && onAddNewParagraphAt
+                                                            ? () => onAddNewParagraphAt(index + 1)
                                                             : undefined
                                                     }
                                                     onAddInstructionAfter={

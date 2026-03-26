@@ -24,8 +24,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@firebase/auth": "^1.12.0",
     "@firecms/core": "^3.0.0",
-    "@firecms/ui": "^3.0.0",
     "@firecms/firebase": "^3.0.0",
+    "@firecms/ui": "^3.0.0",
     "firebase": "^12.7.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -38,6 +38,7 @@
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "firebase-admin": "^13.0.0",
+    "googleapis": "^171.4.0",
     "npm-run-all": "^4.1.5",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",

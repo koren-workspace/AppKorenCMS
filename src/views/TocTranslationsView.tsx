@@ -19,6 +19,7 @@ import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
 import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
 import { DateSetIdConfigModal } from "./toc-translations/components/DateSetIdConfigModal";
 import { AddItemModal } from "./toc-translations/components/AddItemModal";
+import { AddParagraphModal } from "./toc-translations/components/AddParagraphModal";
 import { AddPartModal } from "./toc-translations/components/AddPartModal";
 import { EditPartModal } from "./toc-translations/components/EditPartModal";
 import { AddPrayerModal } from "./toc-translations/components/AddPrayerModal";
@@ -310,6 +311,7 @@ export function TocTranslationsView() {
                 enhancementLocalValues={partEdit.enhancementLocalValues}
                 enhancementChangedIds={partEdit.enhancementChangedIds}
                 onAddNewItemAt={partEdit.addNewItemAt}
+                onAddNewParagraphAt={partEdit.addNewParagraphAt}
                 onDeleteItem={partEdit.handleDeleteItem}
                 pendingDeletes={partEdit.pendingDeletes}
                 onRestoreItem={partEdit.handleRestoreItem}
@@ -335,10 +337,18 @@ export function TocTranslationsView() {
                 translationId={nav.currentTranslationData?.translationId ?? null}
                 form={partEdit.addItemForm}
                 onFormChange={partEdit.setAddItemFormField}
-                showParagraphQuestion={partEdit.addItemShowParagraphQuestion}
-                prevItemContent={partEdit.addItemPrevItemContent}
                 onConfirm={partEdit.confirmAddItemModal}
                 onOpenDateSetIdConfig={partEdit.openDateSetIdFromAddItemModal}
+                saving={partEdit.saving}
+            />
+            <AddParagraphModal
+                open={partEdit.addParagraphModalOpen}
+                onClose={partEdit.closeAddParagraphModal}
+                isBaseTranslation={isBase}
+                form={partEdit.addParagraphForm}
+                onFormChange={partEdit.setAddParagraphFormField}
+                onConfirm={partEdit.confirmAddParagraphModal}
+                onOpenDateSetIdConfig={partEdit.openDateSetIdFromAddParagraphModal}
                 saving={partEdit.saving}
             />
             <DateSetIdConfigModal
@@ -348,8 +358,6 @@ export function TocTranslationsView() {
                 onSelect={partEdit.onDateSetIdSelected}
                 title={partEdit.dateSetIdModalTitle}
                 initialDateSetId={partEdit.dateSetIdInitialForEdit}
-                showParagraphQuestion={partEdit.showParagraphQuestionInModal}
-                prevItemContent={partEdit.paragraphModalPrevItemContent}
             />
             <AddTranslationModal
                 open={partEdit.addTranslationOpen}

@@ -60,6 +60,8 @@ type PartItemRowProps = {
     onAddInstructionAfter?: () => void;
     /** פותח מודל הוספת תרגום לפריט הזה */
     onAddTranslation?: (item: Entity<any>) => void;
+    /** מנוטרל עד שמירת מקטע (פריט חדש / פסקה ממתינה ל-Sheets) */
+    isAddTranslationBlocked?: boolean;
     /** בתרגום (לא בסיס): במאפיינים סוג ניתן לשינוי רק בין סוגי הוראות */
     restrictTypeToInstructions?: boolean;
     /** העברת פוקוס לשדה התוכן (למקטע שנוסף זה עתה) */
@@ -92,6 +94,7 @@ export function PartItemRow({
     onAddParagraphAfter,
     onAddInstructionAfter,
     onAddTranslation,
+    isAddTranslationBlocked = false,
     restrictTypeToInstructions = false,
     autoFocus = false,
     onOpenDateSetIdConfig,
@@ -668,13 +671,34 @@ export function PartItemRow({
                 </div>
             )}
             {onAddTranslation && (
-                <button
-                    type="button"
-                    onClick={() => onAddTranslation(item)}
-                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 transition-colors shadow-sm"
-                >
-                    + הוסף תרגום לטקסט זה
-                </button>
+                <div className="mt-1.5">
+                    <button
+                        type="button"
+                        disabled={isAddTranslationBlocked}
+                        title={
+                            isAddTranslationBlocked
+                                ? "הוספת תרגום זמינה רק אחרי לחיצה על «שמור מקטע» (בראש אזור המקטע)"
+                                : undefined
+                        }
+                        onClick={() => onAddTranslation!(item)}
+                        className={`w-full py-2 px-3 rounded-lg text-[10px] font-semibold border transition-colors shadow-sm ${
+                            isAddTranslationBlocked
+                                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                : "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300"
+                        }`}
+                    >
+                        + הוסף תרגום לטקסט זה
+                    </button>
+                    {isAddTranslationBlocked && (
+                        <p
+                            className="mt-1.5 text-[10px] text-amber-900/90 text-center leading-snug px-1"
+                            dir="rtl"
+                        >
+                            לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת המקטע</span>
+                            — לחץ <span className="font-semibold">«שמור מקטע»</span> למעלה.
+                        </p>
+                    )}
+                </div>
             )}
             {onAddAfter && (
                 <button

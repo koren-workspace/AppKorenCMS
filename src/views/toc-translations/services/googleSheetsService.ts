@@ -61,7 +61,7 @@ export type SaveParagraphTranslationToSheetsParams = {
 };
 
 function resolveSheetName(params: SaveParagraphToSheetsParams): string {
-    // Preferred: dedicated tab per nusach (tocId)
+    // גיליון לפי נוסח: שם הלשונית = מזהה הנוסח (tocId), למשל sefard | edot_mizrah | ashkenaz
     if (params.tocId && String(params.tocId).trim() !== "") return String(params.tocId).trim();
     // Backward compatibility fallback
     const legacySheetName = (import.meta as any).env?.VITE_GOOGLE_SHEETS_SHEET_NAME;
@@ -97,14 +97,20 @@ function valueOrHash(value: string | null | undefined): string {
 
 type TranslationLanguageRule = {
     prefix: string;
-    label: string;
+    /** הטקסט שנכתב לעמודת "שפה" בגיליון */
+    sheetsLanguageLabel: string;
 };
 
+/**
+ * מזהי תרגום מספריים (0-*, 1-*, …) → ערכי שפה בגיליון.
+ * מזהים בסגנון נוסח (sefard-1, edot_mizrah-1) — ראו getLanguageByTranslationId: ברירת מחדל label = שם הנוסח כמו שם הלשונית.
+ * סדר: קידומות ארוכות לפני קצרות (10 לפני 1).
+ */
 const TRANSLATION_LANGUAGE_RULES: TranslationLanguageRule[] = [
-    { prefix: "0", label: "עברית" },
-    { prefix: "1", label: "אנגלית" },
-    { prefix: "10", label: "הרב זקס עברית" },
-    { prefix: "11", label: "הרב זקס אנגלית" },
+    { prefix: "0", sheetsLanguageLabel: "עברית" },
+    { prefix: "10", sheetsLanguageLabel: "הרב זקס עברית" },
+    { prefix: "11", sheetsLanguageLabel: "הרב זקס אנגלית" },
+    { prefix: "1", sheetsLanguageLabel: "אנגלית" },
 ];
 
 const TYPE_TO_SHEETS_CATEGORY: Record<string, string> = {
@@ -121,17 +127,22 @@ const TYPE_TO_SHEETS_CATEGORY: Record<string, string> = {
     shiratHayam: "שירת הים",
 };
 
+/** מקטע לפני המקף הראשון: 0-ashkenaz→0, sefard-1→sefard, 10-zaks→10 */
 function getTranslationPrefix(translationId: string | null | undefined): string | null {
-    if (!translationId) return null;
-    const match = String(translationId).trim().match(/^(\d+)-/);
-    return match?.[1] ?? null;
+    const s = String(translationId ?? "").trim();
+    const i = s.indexOf("-");
+    if (i <= 0) return null;
+    return s.slice(0, i);
 }
 
 function getLanguageByTranslationId(translationId: string | null | undefined): string {
     const prefix = getTranslationPrefix(translationId);
     if (!prefix) return "";
     const match = TRANSLATION_LANGUAGE_RULES.find((rule) => rule.prefix === prefix);
-    return match?.label ?? "";
+    if (match) return match.sheetsLanguageLabel;
+    // נוסח כשם גיליון: sefard, edot_mizrah, ashkenaz — עמודת "שפה" זהה למזהה הנוסח (כמו tocId / שם הטאב)
+    if (/^[a-z][a-z0-9_]*$/i.test(prefix)) return prefix;
+    return "";
 }
 
 function getCategoryByType(type: string | null | undefined): string {
@@ -247,7 +258,14 @@ export async function saveParagraphTranslationToSheets(
         }),
     });
     if (!res.ok) {
-        throw new Error(`Failed saving paragraph translation to sheets (${res.status})`);
+        let detail = res.statusText;
+        try {
+            const j = (await res.json()) as { message?: string };
+            if (j?.message) detail = j.message;
+        } catch {
+            /* ignore */
+        }
+        throw new Error(`Failed saving paragraph translation to sheets (${res.status}): ${detail}`);
     }
 }
 

@@ -65,6 +65,8 @@ export type PartEditPanelProps = {
     onAddNewInstructionAt?: (index: number) => void;
     /** פותח מודל הוספת תרגום לפריט */
     onAddTranslation?: (item: Entity<any>) => void;
+    /** true = כפתור הוספת תרגום מנוטרל (פריט לא נשמר / פסקה ממתינה לגיליון) */
+    isAddTranslationBlockedForItem?: (item: Entity<any>) => boolean;
     /** בתרגום (לא בסיס): במאפיינים לשנות סוג רק בין סוגי הוראות */
     restrictTypeToInstructions?: boolean;
     /** עריכת נוסח בסיס – במחיקה יימחקו גם כל הפריטים המקושרים בכל התרגומים */
@@ -132,6 +134,7 @@ export function PartEditPanel({
     allowAddInstruction = false,
     onAddNewInstructionAt,
     onAddTranslation,
+    isAddTranslationBlockedForItem,
     restrictTypeToInstructions = false,
     isBaseTranslation = false,
     currentTranslationId = null,
@@ -262,6 +265,11 @@ export function PartEditPanel({
                                                             : undefined
                                                     }
                                                     onAddTranslation={isBaseTranslation ? onAddTranslation : undefined}
+                                                    isAddTranslationBlocked={
+                                                        isBaseTranslation && isAddTranslationBlockedForItem
+                                                            ? isAddTranslationBlockedForItem(item)
+                                                            : false
+                                                    }
                                                     restrictTypeToInstructions={restrictTypeToInstructions}
                                                     autoFocus={lastAddedItemId === item.id}
                                                     onOpenDateSetIdConfig={onOpenDateSetIdForItem}

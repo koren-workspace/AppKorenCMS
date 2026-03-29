@@ -381,7 +381,32 @@ function parseBoolCell(value: unknown): boolean | null {
     return null
 }
 
+/** שורת בסיס (עברית) בגיליון: עברית, או שם הנוסח כמו שם הטאב (sefard וכו') */
+function isSheetsBaseLanguageCell(lang: string, sheetName: string): boolean {
+    const l = String(lang ?? "").trim()
+    const tab = String(sheetName ?? "").trim()
+    if (l === "עברית") return true
+    if (tab !== "" && l === tab) return true
+    return false
+}
+
+/** אינדקס עמודה 0-based (A=0) → אות(ות) A1 */
+function zeroBasedColumnIndexToA1Letter(colZero: number): string {
+    let col = colZero + 1
+    let s = ""
+    while (col > 0) {
+        col--
+        s = String.fromCharCode(65 + (col % 26)) + s
+        col = Math.floor(col / 26)
+    }
+    return s
+}
+
+/** לקוח Sheets אחד לתהליך dev — חוסך קריאת service account + getClient בכל בקשה */
+let cachedSheetsApi: ReturnType<typeof google.sheets> | null = null
+
 async function buildSheetsClient() {
+    if (cachedSheetsApi) return cachedSheetsApi
     if (!fs.existsSync(GOOGLE_SERVICE_ACCOUNT_PATH)) {
         throw new Error(`Missing service account file at ${GOOGLE_SERVICE_ACCOUNT_PATH}`)
     }
@@ -392,7 +417,8 @@ async function buildSheetsClient() {
         scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     })
     const authClient = await auth.getClient()
-    return google.sheets({ version: "v4", auth: authClient as any })
+    cachedSheetsApi = google.sheets({ version: "v4", auth: authClient as any })
+    return cachedSheetsApi
 }
 
 async function getSheetHeaders(
@@ -447,24 +473,30 @@ async function lookupParagraphByItIdOnSheet(
     const startIndex = rows.findIndex((row) => {
         const rowItId = String(row[itIdIdx] ?? "").trim()
         const rowLanguage = String(row[languageIdx] ?? "").trim()
-        return rowItId === itId && rowLanguage === "עברית"
+        return rowItId === itId && isSheetsBaseLanguageCell(rowLanguage, sheetName)
     })
     if (startIndex < 0) return { isParagraph: false, baseSentences: [], baseRowIndices: [] }
 
     const baseSentences: string[] = []
     const baseRowIndices: number[] = []
-    let hasParagraphTrue = false
-    for (let i = startIndex; i < rows.length; i++) {
+    // אחרי הוספת תרגום פסקה השורות אינטרליב: בסיס, תרגום, בסיס… — מדלגים על שורות שאינן בסיס
+    for (let i = startIndex; i < rows.length; ) {
         const row = rows[i] ?? []
         const rowLanguage = String(row[languageIdx] ?? "").trim()
-        if (rowLanguage !== "עברית") break
+        if (!isSheetsBaseLanguageCell(rowLanguage, sheetName)) {
+            i++
+            continue
+        }
         const paragraphVal = parseBoolCell(row[paragraphIdx])
-        if (paragraphVal === true) hasParagraphTrue = true
         baseSentences.push(String(row[textIdx] ?? "").trim())
-        baseRowIndices.push(i + 1) // +1 because data starts at sheet row 2 => zero-based row index
-        if (paragraphVal === false) break
+        baseRowIndices.push(i + 1) // אינדקס שורה בגיליון (0=שורה ראשונה); נתונים מA2 => i+1
+        i++
+        // FALSE או תא ריק ב"פיסקה" — סיום בלוק המשפטים של אותו IT_ID בסיס
+        if (paragraphVal !== true) break
     }
-    return { isParagraph: hasParagraphTrue, baseSentences, baseRowIndices }
+    // פסקה של משפט יחיד: שורה אחת עם פיסקה=FALSE (בלי שום שורה עם TRUE) — עדיין פסקה לתרגום משולב
+    const isParagraph = baseSentences.length > 0
+    return { isParagraph, baseSentences, baseRowIndices }
 }
 
 async function appendRowsToGoogleSheets(body: SheetsAppendBody): Promise<void> {
@@ -591,6 +623,24 @@ async function insertParagraphTranslationRows(body: ParagraphTranslationBody): P
             requestBody: { values: [rowValuesByHeader[i]] },
         })
     }
+
+    // אחרי אינטרליב בסיס↔תרגום, שורת הבסיס האחרונה חייבת פיסקה=TRUE כי אחריה מגיעה שורת התרגום;
+    // אחרת שתי השורות האחרונות בבלוק (בסיס אחרון + תרגום אחרון) יוצאות שתיהן FALSE.
+    const paragraphIdx = headerIndex.get("פיסקה")
+    if (paragraphIdx == null) {
+        throw new Error(`Missing "פיסקה" column in sheet "${sheetName}"`)
+    }
+    const nSentences = lookup.baseRowIndices.length
+    const lastBaseOrigZero = lookup.baseRowIndices[nSentences - 1]!
+    const lastBaseAfterInsertsZero = lastBaseOrigZero + (nSentences - 1)
+    const lastBaseOneBasedRow = lastBaseAfterInsertsZero + 1
+    const colLetter = zeroBasedColumnIndexToA1Letter(paragraphIdx)
+    await sheetsApi.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!${colLetter}${lastBaseOneBasedRow}`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [["TRUE"]] },
+    })
 }
 
 /** Vite plugin: מקבל POST /__cms_excel__ עם entry בודד ומוסיף ל-Excel */
@@ -702,9 +752,11 @@ function cmsSheetsParagraphTranslationPlugin() {
                         res.statusCode = 204
                         res.end()
                     } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err)
                         console.error("[cms-sheets] ✗ paragraph translation insert failed:", err)
                         res.statusCode = 500
-                        res.end()
+                        res.setHeader("Content-Type", "application/json; charset=utf-8")
+                        res.end(JSON.stringify({ message: msg }))
                     }
                 })
             })

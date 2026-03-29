@@ -319,6 +319,7 @@ export function TocTranslationsView() {
                 allowAddInstruction={allowAddInstruction}
                 onAddNewInstructionAt={partEdit.addNewInstructionAt}
                 onAddTranslation={partEdit.openAddTranslation}
+                isAddTranslationBlockedForItem={partEdit.isAddTranslationBlockedForBaseItem}
                 restrictTypeToInstructions={!isBase}
                 isBaseTranslation={isBase}
                 currentTranslationId={nav.currentTranslationData?.translationId ?? null}

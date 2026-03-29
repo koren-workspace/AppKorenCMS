@@ -1489,33 +1489,69 @@ export function usePartEdit(context: PartEditContext) {
         translationMode: "regular",
     });
 
+    /** ישות בסיס לאחר התאמה לפי baseItems (כמו בפתיחת הוספת תרגום) */
+    const resolveCanonicalBaseItemForTranslation = (item: Entity<any>): Entity<any> =>
+        baseItems.find((b) => b.id === item.id) ??
+        (() => {
+            const target = rowItemIdForBaseOrder(item, localValues);
+            return target
+                ? baseItems.find((b) => rowItemIdForBaseOrder(b, localValues) === target)
+                : undefined;
+        })() ??
+        item;
+
+    /**
+     * חסימת "הוסף תרגום" עד שמירת מקטע: פריט new_* לא בשרת, או פסקה בתור ל-Sheets.
+     * מונע פער Firebase / Sheets לפני תרגום (במיוחד תרגום פסקה).
+     */
+    const isAddTranslationBlockedForBaseItem = (item: Entity<any>): boolean => {
+        const canonical = resolveCanonicalBaseItemForTranslation(item);
+        if (canonical.id.startsWith("new_")) return true;
+        const bid =
+            getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues) || "";
+        return pendingParagraphSheetsWrites.some((w) =>
+            matchesPendingParagraphWrite(w, canonical.id, bid)
+        );
+    };
+
     /** פותח מודל הוספת תרגום לפריט בסיס */
     const openAddTranslation = (item: Entity<any>) => {
-        const canonical =
-            baseItems.find((b) => b.id === item.id) ??
-            (() => {
-                const target = rowItemIdForBaseOrder(item, localValues);
-                return target
-                    ? baseItems.find((b) => rowItemIdForBaseOrder(b, localValues) === target)
-                    : undefined;
-            })() ??
-            item;
+        if (isAddTranslationBlockedForBaseItem(item)) {
+            snackbar.open({
+                type: "warning",
+                message:
+                    "הוספת תרגום אפשרית רק אחרי שמירת המקטע. לחץ על «שמור מקטע» בראש המסך — עד אז הפריט (והפסקה, אם יש) לא בשרת/בגיליון.",
+            });
+            return;
+        }
+        const canonical = resolveCanonicalBaseItemForTranslation(item);
+        const baseItemId =
+            getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues);
+        const baseEntityId = canonical.id;
+        /** מיד לפי state (לא ref) – מונע race שבו lookup מהיר מסתיים לפני commit של pending אחרי "הוסף פסקה" */
+        const pendingFromState = mergeParagraphLookupWithPending(
+            { isParagraph: false, baseSentences: [] },
+            pendingParagraphSheetsWrites,
+            baseEntityId,
+            baseItemId || ""
+        );
+
         setAddTranslationBaseItem(canonical);
         setAddTranslationOpen(true);
         setAddTranslationTargetId(null);
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
-        setAddTranslationForm(defaultAddTranslationForm());
-        setAddTranslationBaseIsParagraph(false);
+        setAddTranslationForm({
+            ...defaultAddTranslationForm(),
+            translationMode: pendingFromState.isParagraph ? "paragraph" : "regular",
+        });
+        setAddTranslationBaseIsParagraph(pendingFromState.isParagraph);
         setAddTranslationParagraphLookupLoading(true);
-        const baseItemId =
-            getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues);
         if (!baseItemId) {
             setAddTranslationParagraphLookupLoading(false);
             return;
         }
-        const baseEntityId = canonical.id;
         lookupParagraphByItId({ tocId: selectedTocId, itId: baseItemId })
             .then((lookupFromSheets) => {
                 const merged = mergeParagraphLookupWithPending(
@@ -1814,6 +1850,14 @@ export function usePartEdit(context: PartEditContext) {
         const form = addTranslationForm;
         const translationContent = (form.content ?? addTranslationContent ?? "").toString().trim();
         if (!translationContent) return;
+        if (isAddTranslationBlockedForBaseItem(addTranslationBaseItem)) {
+            snackbar.open({
+                type: "warning",
+                message:
+                    "המקטע השתנה ועדיין לא נשמר. לחץ «שמור מקטע» ואז נסה שוב להוסיף תרגום.",
+            });
+            return;
+        }
         setSaving(true);
         try {
             let lookup: ParagraphLookupResult = {
@@ -2085,6 +2129,7 @@ export function usePartEdit(context: PartEditContext) {
         addTranslationBaseIsParagraph,
         addTranslationParagraphLookupLoading,
         openAddTranslation,
+        isAddTranslationBlockedForBaseItem,
         closeAddTranslation,
         setAddTranslationTargetId,
         setAddTranslationInsertAfterId,

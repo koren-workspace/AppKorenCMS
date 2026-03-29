@@ -2,7 +2,7 @@
  * PartEditPanel – אזור העריכה הראשי במסך
  *
  * מציג:
- *   - PartEditToolbar: כותרת המקטע + כפתורי "שמור מקטע" ו"פרסום"
+ *   - PartEditToolbar: כותרת המקטע + כפתורי "שמור מקטע" ו"פרסום לבייגל" (לפי נוסח)
  *   - במצב טעינה: "טוען..."
  *   - לאחר טעינה: רשימת פריטים (PartItemRow) + כפתור "הוסף פריט"
  *
@@ -30,6 +30,8 @@ import { CSS } from "@dnd-kit/utilities";
 
 export type PartEditPanelProps = {
     selectedGroupId: string | null;
+    /** שם הנוסח הנבחר — מוצג ליד פרסום לבייגל (הפרסום לפי נוסח, לא לפי מקטע) */
+    publishNusachLabel?: string | null;
     saving: boolean;
     changedIds: Set<string>;
     /** יש שינויים בתרגומים המקושרים (להצגת כפתור שמירה) */
@@ -111,6 +113,7 @@ function SortableItemRow({
 
 export function PartEditPanel({
     selectedGroupId,
+    publishNusachLabel,
     saving,
     changedIds,
     enhancementChangedIds = new Set(),
@@ -161,6 +164,7 @@ export function PartEditPanel({
         <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
             <PartEditToolbar
                 selectedGroupId={selectedGroupId}
+                publishNusachLabel={publishNusachLabel}
                 saving={saving}
                 hasChanges={hasAnyChanges}
                 onSaveGroup={onSaveGroup}

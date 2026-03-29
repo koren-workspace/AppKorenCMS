@@ -292,6 +292,7 @@ export function TocTranslationsView() {
             {/* אזור העריכה: toolbar + רשימת פריטים (לאחר טעינה) */}
             <PartEditPanel
                 selectedGroupId={partEdit.selectedGroupId}
+                publishNusachLabel={nav.currentTocData?.nusach ?? nav.selectedTocId}
                 saving={partEdit.saving}
                 changedIds={partEdit.changedIds}
                 pendingDeletesCount={partEdit.pendingDeletes.length}

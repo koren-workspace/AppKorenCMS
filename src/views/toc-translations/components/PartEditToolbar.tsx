@@ -3,7 +3,7 @@
  *
  * מציג את שם המקטע הנבחר + שני כפתורים:
  *   - "שמור מקטע": שומר שינויים ל-Firestore (מושבת אם אין שינויים או במצב saving)
- *   - "פרסום (Publish)": מעדכן timestamp וקורא ל-Bagel לסנכרון האפליקציה
+ *   - כפתור "פרסום {נוסח} לבייגל": מעדכן timestamp לנוסח הנבחר — סנכרון האפליקציה לפי נוסח, לא לפי מקטע בודד
  *
  * אם אין מקטע נבחר – לא מציג כלום (return null).
  */
@@ -12,6 +12,8 @@ import React from "react";
 
 export type PartEditToolbarProps = {
     selectedGroupId: string | null;
+    /** שם הנוסח הנבחר (להבהרה: פרסום לבייגל חל על כל הנוסח, לא רק על המקטע) */
+    publishNusachLabel?: string | null;
     saving: boolean;
     hasChanges: boolean;
     onSaveGroup: () => void;
@@ -24,6 +26,7 @@ export type PartEditToolbarProps = {
 
 export function PartEditToolbar({
     selectedGroupId,
+    publishNusachLabel,
     saving,
     hasChanges,
     onSaveGroup,
@@ -33,6 +36,15 @@ export function PartEditToolbar({
     onMoveItemsToPart,
 }: PartEditToolbarProps) {
     if (!selectedGroupId) return null;
+
+    const trimmedNusach = publishNusachLabel?.trim() ?? "";
+    const hasNusachLabel = trimmedNusach.length > 0;
+    const publishTitle = hasNusachLabel
+        ? `מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל. האפליקציה מסנכרנת את כל התרגומים של נוסח זה — לא רק את המקטע הפתוח.`
+        : "מסמן שהנוסח הנבחר התעדכן בבייגל; האפליקציה מסנכרנת לפי נוסח (לא לפי מקטע בודד).";
+    const publishButtonLabel = hasNusachLabel
+        ? `פרסום ${trimmedNusach} לבייגל`
+        : "פרסום לבייגל";
 
     return (
         <div className="mb-3 pb-2 border-b shrink-0">
@@ -73,9 +85,10 @@ export function PartEditToolbar({
                         type="button"
                         onClick={onFinalPublish}
                         disabled={saving}
-                        className="px-4 py-1.5 bg-blue-800 text-white rounded font-bold border-2 border-blue-400"
+                        className="px-3 py-1.5 bg-blue-800 text-white rounded font-bold border-2 border-blue-400 text-[10px] max-w-[min(100%,14rem)] truncate sm:max-w-[18rem]"
+                        title={publishTitle}
                     >
-                        🚀 פרסום (Publish)
+                        🚀 {publishButtonLabel}
                     </button>
                 </div>
             </div>

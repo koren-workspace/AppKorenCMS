@@ -829,9 +829,14 @@ export function usePartEdit(context: PartEditContext) {
             const publishTimestamp = Date.now();
             await updateFirestoreTimestamp(dataSource, selectedTocId, publishTimestamp);
             await updateBagelTimestamp(selectedTocId, publishTimestamp);
+            const nusach = currentTocData?.nusach?.trim();
+            const scope =
+                nusach && nusach.length > 0
+                    ? `הנוסח «${nusach}» סומן כמעודכן בבייגל — האפליקציה תסנכרן את כל התרגומים של נוסח זה.`
+                    : "הנוסח הנבחר סומן כמעודכן בבייגל — האפליקציה תסנכרן את הנתונים.";
             snackbar.open({
                 type: "success",
-                message: "השינויים פורסמו בהצלחה לאפליקציה!",
+                message: scope,
             });
             appendChangeLog({
                 timestamp: Date.now(),

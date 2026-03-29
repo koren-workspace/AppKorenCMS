@@ -16,6 +16,7 @@ import {
     supportsHebrewBodyOnlyFields,
     supportsNoSpace,
 } from "../constants/itemFields";
+import { splitParagraphSentences } from "../services/googleSheetsService";
 
 export type TranslationOption = { translationId: string; [k: string]: any };
 
@@ -42,6 +43,8 @@ export type AddTranslationModalProps = {
     /** טופס מלא: content + type, titleType, title, וכל המאפיינים */
     form: Record<string, any>;
     onFormFieldChange: (field: string, value: unknown) => void;
+    baseIsParagraphFromSheets?: boolean;
+    paragraphLookupLoading?: boolean;
     onSubmit: () => void;
     saving: boolean;
     /** פותח מודל להגדרת סט תאריכים (מצוא או צור) – התוצאה מוזנת ל־form.dateSetId */
@@ -65,6 +68,8 @@ export function AddTranslationModal({
     onInsertAfterChange,
     form,
     onFormFieldChange,
+    baseIsParagraphFromSheets = false,
+    paragraphLookupLoading = false,
     onSubmit,
     saving,
     onOpenDateSetIdConfig,
@@ -89,7 +94,11 @@ export function AddTranslationModal({
     if (!open) return null;
 
     const content = (form.content ?? "").toString().trim();
-    const canSubmit = targetTranslationId && content.length > 0;
+    const isParagraphMode = form.translationMode === "paragraph";
+    const paragraphSentences = splitParagraphSentences(form.content ?? "");
+    const canSubmit =
+        !!targetTranslationId &&
+        (isParagraphMode ? paragraphSentences.length > 0 : content.length > 0);
     const currentType = (form.type ?? "body") as string;
     const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, false);
     const showNoSpace = supportsNoSpace(currentType);
@@ -215,6 +224,37 @@ export function AddTranslationModal({
 
                     {/* תוכן */}
                     <div>
+                        <div className="mb-2 p-2 border border-gray-200 rounded bg-gray-50">
+                            <div className="flex items-center gap-2 text-[11px] text-gray-700 mb-1">
+                                <span className="font-semibold">מצב תרגום</span>
+                                {paragraphLookupLoading && (
+                                    <span className="text-[10px] text-gray-500">בודק פסקה ב-Sheets...</span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px]">
+                                <label className="flex items-center gap-1">
+                                    <input
+                                        type="radio"
+                                        name="translationMode"
+                                        checked={!isParagraphMode}
+                                        onChange={() => onFormFieldChange("translationMode", "regular")}
+                                    />
+                                    <span>תרגום רגיל</span>
+                                </label>
+                                <label className="flex items-center gap-1">
+                                    <input
+                                        type="radio"
+                                        name="translationMode"
+                                        checked={isParagraphMode}
+                                        onChange={() => onFormFieldChange("translationMode", "paragraph")}
+                                    />
+                                    <span>תרגום פסקה</span>
+                                </label>
+                            </div>
+                            <div className="text-[10px] text-gray-600 mt-1">
+                                זיהוי מה-Sheets: {baseIsParagraphFromSheets ? "פריט בסיס מסומן כפסקה" : "פריט בסיס לא מסומן כפסקה"}
+                            </div>
+                        </div>
                         <label className="block text-[10px] text-gray-600 mb-1">תוכן התרגום</label>
                         <textarea
                             value={form.content ?? ""}
@@ -223,6 +263,25 @@ export function AddTranslationModal({
                             dir="rtl"
                             placeholder="הזן את התרגום"
                         />
+                        {isParagraphMode && (
+                            <div className="mt-2 border border-gray-200 rounded p-2 bg-gray-50">
+                                <div className="text-[10px] text-gray-600 mb-1">
+                                    תצוגת משפטים לפסקה ({paragraphSentences.length})
+                                </div>
+                                <div className="space-y-1 max-h-28 overflow-auto text-[10px]">
+                                    {paragraphSentences.length === 0 ? (
+                                        <div className="text-gray-400">אין משפטים (פיצול לפי שורות)</div>
+                                    ) : (
+                                        paragraphSentences.map((sentence, index) => (
+                                            <div key={`${index}_${sentence.slice(0, 10)}`} className="px-2 py-1 rounded bg-white border border-gray-200">
+                                                <span className="text-gray-500 ml-1">{index + 1}.</span>
+                                                <span>{sentence}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* מאפיינים (כמו בפריט רגיל) */}

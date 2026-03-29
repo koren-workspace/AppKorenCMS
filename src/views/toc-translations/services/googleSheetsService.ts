@@ -1,4 +1,6 @@
 const SHEETS_DEV_ENDPOINT = "/__cms_sheets__";
+const SHEETS_LOOKUP_ENDPOINT = "/__cms_sheets_lookup__";
+const SHEETS_PARAGRAPH_TRANSLATION_ENDPOINT = "/__cms_sheets_paragraph_translation__";
 export type SheetRowByHeader = Record<string, string | number | boolean | null>;
 
 export type SaveParagraphToSheetsParams = {
@@ -23,10 +25,55 @@ export type SaveParagraphToSheetsParams = {
     sheetName?: string;
 };
 
+export type LookupParagraphByItIdParams = {
+    tocId?: string | null;
+    spreadsheetId?: string;
+    sheetName?: string;
+    itId: string;
+};
+
+export type ParagraphLookupResult = {
+    isParagraph: boolean;
+    baseSentences: string[];
+};
+
+export type SaveParagraphTranslationToSheetsParams = {
+    tocId?: string | null;
+    translationId?: string | null;
+    partIdAndName: string;
+    partId: string;
+    partName: string;
+    itemId: string;
+    mitId: string;
+    baseItId: string;
+    type?: string | null;
+    specialSign?: string;
+    role?: string;
+    sentences: string[];
+    hazan?: boolean | null;
+    cohanim?: boolean | null;
+    minyan?: boolean | null;
+    dateSetId?: string;
+    timestamp?: number;
+    deleted?: boolean;
+    spreadsheetId?: string;
+    sheetName?: string;
+};
+
 function resolveSheetName(params: SaveParagraphToSheetsParams): string {
     // Preferred: dedicated tab per nusach (tocId)
     if (params.tocId && String(params.tocId).trim() !== "") return String(params.tocId).trim();
     // Backward compatibility fallback
+    const legacySheetName = (import.meta as any).env?.VITE_GOOGLE_SHEETS_SHEET_NAME;
+    if (legacySheetName && String(legacySheetName).trim() !== "") return String(legacySheetName).trim();
+    throw new Error("Missing sheetName: expected tocId (nusach tab) or VITE_GOOGLE_SHEETS_SHEET_NAME fallback");
+}
+
+function resolveSheetNameByToc(tocId?: string | null, explicitSheetName?: string): string {
+    if (explicitSheetName && String(explicitSheetName).trim() !== "") {
+        return String(explicitSheetName).trim();
+    }
+    if (tocId && String(tocId).trim() !== "") return String(tocId).trim();
     const legacySheetName = (import.meta as any).env?.VITE_GOOGLE_SHEETS_SHEET_NAME;
     if (legacySheetName && String(legacySheetName).trim() !== "") return String(legacySheetName).trim();
     throw new Error("Missing sheetName: expected tocId (nusach tab) or VITE_GOOGLE_SHEETS_SHEET_NAME fallback");
@@ -97,6 +144,111 @@ export function splitParagraphSentences(text: string): string[] {
         .split(/\r?\n/g)
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
+}
+
+export async function lookupParagraphByItId(
+    params: LookupParagraphByItIdParams
+): Promise<ParagraphLookupResult> {
+    if (!(import.meta as any).env?.DEV) return { isParagraph: false, baseSentences: [] };
+    const spreadsheetId =
+        params.spreadsheetId ?? (import.meta as any).env?.VITE_GOOGLE_SHEETS_SPREADSHEET_ID;
+    const resolvedSheetName =
+        resolveSheetNameByToc(params.tocId, params.sheetName);
+    if (!spreadsheetId || !resolvedSheetName) {
+        throw new Error("Missing Google Sheets config (spreadsheetId/sheetName)");
+    }
+    const itId = String(params.itId ?? "").trim();
+    if (!itId) return { isParagraph: false, baseSentences: [] };
+    const res = await fetch(SHEETS_LOOKUP_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            spreadsheetId,
+            sheetName: resolvedSheetName,
+            itId,
+        }),
+    });
+    if (!res.ok) {
+        throw new Error(`Failed looking up paragraph by IT_ID (${res.status})`);
+    }
+    const json = (await res.json()) as ParagraphLookupResult;
+    return {
+        isParagraph: json?.isParagraph === true,
+        baseSentences: Array.isArray(json?.baseSentences) ? json.baseSentences : [],
+    };
+}
+
+export async function saveParagraphTranslationToSheets(
+    params: SaveParagraphTranslationToSheetsParams
+): Promise<void> {
+    if (!(import.meta as any).env?.DEV) return;
+    const {
+        partIdAndName,
+        partId,
+        partName,
+        itemId,
+        mitId,
+        baseItId,
+        translationId = null,
+        type = null,
+        specialSign = "",
+        role = "",
+        sentences,
+        hazan = null,
+        cohanim = null,
+        minyan = null,
+        dateSetId = "",
+        timestamp = Date.now(),
+        deleted = false,
+        spreadsheetId = (import.meta as any).env?.VITE_GOOGLE_SHEETS_SPREADSHEET_ID,
+        sheetName,
+    } = params;
+    const resolvedSheetName =
+        resolveSheetNameByToc(params.tocId, sheetName);
+    if (!spreadsheetId || !resolvedSheetName) {
+        throw new Error("Missing Google Sheets config (spreadsheetId/sheetName)");
+    }
+    if (!Array.isArray(sentences) || sentences.length === 0) {
+        throw new Error("Cannot save empty paragraph translation sentences");
+    }
+    const language = getLanguageByTranslationId(translationId);
+    const category = getCategoryByType(type);
+    const yachid = toYachidFromMinyan(minyan);
+    const rowObjects: SheetRowByHeader[] = sentences.map((sentence, index) => {
+        const isLast = index === sentences.length - 1;
+        return {
+            "חלק תפילה": partIdAndName ?? "",
+            ID: partId ?? "",
+            "שם": partName ?? "",
+            IT_ID: index === 0 ? itemId : "",
+            MIT_ID: mitId ?? "",
+            "סימון": valueOrHash(specialSign),
+            "תפקיד": valueOrHash(role),
+            "טקסט": sentence,
+            "חזן": valueOrHash(boolToCellValue(hazan)),
+            "כהן": valueOrHash(boolToCellValue(cohanim)),
+            "יחיד": valueOrHash(boolToCellValue(yachid)),
+            "מצב": dateSetId ?? "",
+            "שפה": language,
+            "סיווג": category,
+            "עדכון": timestamp,
+            "מחוק": boolToCellValue(deleted),
+            "פיסקה": boolToCellValue(!isLast),
+        };
+    });
+    const res = await fetch(SHEETS_PARAGRAPH_TRANSLATION_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            spreadsheetId,
+            sheetName: resolvedSheetName,
+            baseItId,
+            rowObjects,
+        }),
+    });
+    if (!res.ok) {
+        throw new Error(`Failed saving paragraph translation to sheets (${res.status})`);
+    }
 }
 
 export async function saveParagraphToSheets(params: SaveParagraphToSheetsParams): Promise<void> {

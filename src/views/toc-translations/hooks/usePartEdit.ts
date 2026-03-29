@@ -11,7 +11,7 @@
  * (הקשר הניווט הנוכחי – נדרש לבניית paths ולטעינה).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Entity, useDataSource, useSnackbarController } from "@firecms/core";
 import {
     fetchPartWithEnhancements,
@@ -30,7 +30,14 @@ import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../ut
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
 import { defaultAddParagraphForm, type AddParagraphFormValues } from "../components/AddParagraphModal";
-import { saveParagraphToSheets, splitParagraphSentences, type SaveParagraphToSheetsParams } from "../services/googleSheetsService";
+import {
+    lookupParagraphByItId,
+    saveParagraphToSheets,
+    saveParagraphTranslationToSheets,
+    splitParagraphSentences,
+    type ParagraphLookupResult,
+    type SaveParagraphToSheetsParams,
+} from "../services/googleSheetsService";
 
 /** הקשר הניווט – מועבר מ-useTocNavigation כדי לדעת איזה תרגום/תפילה נבחרו */
 export type PartEditContext = {
@@ -62,6 +69,60 @@ type PendingParagraphSheetsWrite = {
     entityId: string;
     payload: SaveParagraphToSheetsParams;
 };
+
+function matchesPendingParagraphWrite(
+    w: PendingParagraphSheetsWrite,
+    baseEntityId: string,
+    baseItemId: string
+): boolean {
+    if (w.entityId === baseEntityId) return true;
+    const pid = String(w.payload.itemId ?? "").trim();
+    const bid = String(baseItemId ?? "").trim();
+    return Boolean(pid && bid && pid === bid);
+}
+
+/** מיזוג תוצאת Sheets עם פסקה שעדיין בתור ל-Sheets (עד "שמור מקטע") – ללא כתיבה מוקדמת לגיליון */
+function mergeParagraphLookupWithPending(
+    sheetsLookup: ParagraphLookupResult,
+    pendingWrites: PendingParagraphSheetsWrite[],
+    baseEntityId: string,
+    baseItemId: string
+): ParagraphLookupResult {
+    const pending = pendingWrites.find((w) =>
+        matchesPendingParagraphWrite(w, baseEntityId, baseItemId)
+    );
+    const sentences = pending?.payload?.sentences;
+    if (Array.isArray(sentences) && sentences.length > 0) {
+        return { isParagraph: true, baseSentences: [...sentences] };
+    }
+    return sheetsLookup;
+}
+
+/**
+ * itemId לשורת בסיס לסידור מקטע / אינדקס שורה: ערך itemId מהתא או מהמסמך;
+ * אם התא ריק ומזהה המסמך מספרי בלבד – משתמשים ב-id (כמו בפריטי בסיס ב-Firestore).
+ */
+function rowItemIdForBaseOrder(b: Entity<any>, localValues: Record<string, any>): string {
+    const raw = localValues[b.id]?.itemId ?? b.values?.itemId;
+    const v = raw != null && String(raw).trim() !== "" ? String(raw).trim() : "";
+    if (v) return v;
+    const d = String(b.id ?? "");
+    return /^\d+$/.test(d) ? d : "";
+}
+
+/** סידור שורות בסיס לחישוב מיקום (כמו fetchPartItems): לפי itemId מספרי. */
+function compareBaseEntitiesByItemId(
+    a: Entity<any>,
+    b: Entity<any>,
+    localValues: Record<string, any>
+): number {
+    const ia = rowItemIdForBaseOrder(a, localValues);
+    const ib = rowItemIdForBaseOrder(b, localValues);
+    if (!ia && !ib) return 0;
+    if (!ia) return 1;
+    if (!ib) return -1;
+    return ia.localeCompare(ib, undefined, { numeric: true });
+}
 
 /** רשומת שינוי ביומן – נוצרת בשמירה ומתעדת ערך לפני/אחרי עם סטטוס */
 export type ChangeLogEntry = {
@@ -162,6 +223,10 @@ export function usePartEdit(context: PartEditContext) {
     const [addParagraphModalOpen, setAddParagraphModalOpen] = useState(false);
     const [addParagraphForm, setAddParagraphForm] = useState<AddParagraphFormValues>(defaultAddParagraphForm());
     const [pendingParagraphSheetsWrites, setPendingParagraphSheetsWrites] = useState<PendingParagraphSheetsWrite[]>([]);
+    /** לקריאה בעת השלמת lookup אסינכרוני – state ב-closure עלול להיות מיושן */
+    const pendingParagraphSheetsWritesRef = useRef<PendingParagraphSheetsWrite[]>([]);
+    pendingParagraphSheetsWritesRef.current = pendingParagraphSheetsWrites;
+
     /** כשפותחים מודל dateSetId מתוך הוספת פריט – שומרים את סוג ההוספה (part/instruction) */
     const [addItemDateSetIdSource, setAddItemDateSetIdSource] = useState<"part" | "instruction" | null>(null);
 
@@ -192,6 +257,8 @@ export function usePartEdit(context: PartEditContext) {
     const [addTranslationInsertAfterId, setAddTranslationInsertAfterId] = useState<string | null>(null);
     const [addTranslationContent, setAddTranslationContent] = useState("");
     const [addTranslationTargetLinkedItems, setAddTranslationTargetLinkedItems] = useState<Entity<any>[]>([]);
+    const [addTranslationBaseIsParagraph, setAddTranslationBaseIsParagraph] = useState<boolean>(false);
+    const [addTranslationParagraphLookupLoading, setAddTranslationParagraphLookupLoading] = useState<boolean>(false);
     /** טופס מלא לפריט התרגום החדש (תוכן + כל המאפיינים כמו בפריט רגיל) */
     const [addTranslationForm, setAddTranslationForm] = useState<Record<string, any>>({
         content: "",
@@ -237,6 +304,8 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
+        setAddTranslationBaseIsParagraph(false);
+        setAddTranslationParagraphLookupLoading(false);
         setAddTranslationForm({
             content: "",
             type: "body",
@@ -259,6 +328,7 @@ export function usePartEdit(context: PartEditContext) {
             reference: "",
             specialSign: "",
             dateSetId: "",
+            translationMode: "regular",
         });
         setPendingDeletes([]);
         setAddItemModalOpen(false);
@@ -368,7 +438,10 @@ export function usePartEdit(context: PartEditContext) {
                       })()
                     : result.sorted;
             setAllItems(mergedAllItems);
-            setBaseItems(result.baseItems ?? []);
+            // בנוסח בסיס fetchPartWithEnhancements לא ממלא baseItems — שורות הבסיס הן mergedAllItems; נדרש לסידור/עוגן בהוספת תרגום
+            setBaseItems(
+                isBaseTranslation(translationId) ? mergedAllItems : (result.baseItems ?? [])
+            );
             setEnhancements(result.enhancementsMap);
             setNeighborBounds(bounds);
             setSelectedGroupId(partId);
@@ -1413,17 +1486,66 @@ export function usePartEdit(context: PartEditContext) {
         specialSign: "",
         dateSetId: "100",
         isStartOfParagraph: false,
+        translationMode: "regular",
     });
 
     /** פותח מודל הוספת תרגום לפריט בסיס */
     const openAddTranslation = (item: Entity<any>) => {
-        setAddTranslationBaseItem(item);
+        const canonical =
+            baseItems.find((b) => b.id === item.id) ??
+            (() => {
+                const target = rowItemIdForBaseOrder(item, localValues);
+                return target
+                    ? baseItems.find((b) => rowItemIdForBaseOrder(b, localValues) === target)
+                    : undefined;
+            })() ??
+            item;
+        setAddTranslationBaseItem(canonical);
         setAddTranslationOpen(true);
         setAddTranslationTargetId(null);
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
         setAddTranslationForm(defaultAddTranslationForm());
+        setAddTranslationBaseIsParagraph(false);
+        setAddTranslationParagraphLookupLoading(true);
+        const baseItemId =
+            getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues);
+        if (!baseItemId) {
+            setAddTranslationParagraphLookupLoading(false);
+            return;
+        }
+        const baseEntityId = canonical.id;
+        lookupParagraphByItId({ tocId: selectedTocId, itId: baseItemId })
+            .then((lookupFromSheets) => {
+                const merged = mergeParagraphLookupWithPending(
+                    lookupFromSheets ?? { isParagraph: false, baseSentences: [] },
+                    pendingParagraphSheetsWritesRef.current,
+                    baseEntityId,
+                    baseItemId
+                );
+                const isParagraph = merged.isParagraph === true;
+                setAddTranslationBaseIsParagraph(isParagraph);
+                setAddTranslationForm((prev) => ({
+                    ...prev,
+                    translationMode: isParagraph ? "paragraph" : "regular",
+                }));
+            })
+            .catch(() => {
+                const merged = mergeParagraphLookupWithPending(
+                    { isParagraph: false, baseSentences: [] },
+                    pendingParagraphSheetsWritesRef.current,
+                    baseEntityId,
+                    baseItemId
+                );
+                const isParagraph = merged.isParagraph === true;
+                setAddTranslationBaseIsParagraph(isParagraph);
+                setAddTranslationForm((prev) => ({
+                    ...prev,
+                    translationMode: isParagraph ? "paragraph" : "regular",
+                }));
+            })
+            .finally(() => setAddTranslationParagraphLookupLoading(false));
     };
 
     const closeAddTranslation = () => {
@@ -1433,6 +1555,8 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
+        setAddTranslationBaseIsParagraph(false);
+        setAddTranslationParagraphLookupLoading(false);
         setAddTranslationForm(defaultAddTranslationForm());
     };
 
@@ -1443,8 +1567,12 @@ export function usePartEdit(context: PartEditContext) {
     /** טוען רק את הפריטים בתרגום היעד שמקושרים לפריט הבסיס הנוכחי – להצגת מיקום (בין אלה בוחרים איפה להוסיף). */
     const loadTargetPartItemsForAddTranslation = async (translationId: string) => {
         if (!selectedPrayerId || !selectedGroupId || !addTranslationBaseItem) return;
-        const baseItemId = getEffectiveItemId(addTranslationBaseItem);
-        if (!baseItemId) return;
+        const idNorm = (v: unknown) =>
+            v != null && String(v).trim() !== "" ? String(v).trim() : "";
+        const baseItemIdNorm =
+            idNorm(getEffectiveItemId(addTranslationBaseItem)) ||
+            rowItemIdForBaseOrder(addTranslationBaseItem, localValues);
+        if (!baseItemIdNorm) return;
         try {
             const partItems = await fetchPartItems(
                 dataSource,
@@ -1452,28 +1580,38 @@ export function usePartEdit(context: PartEditContext) {
                 selectedPrayerId,
                 selectedGroupId
             );
-            const linkedToThisBase = partItems.filter((e: Entity<any>) => {
+            const itemLinksToBaseId = (e: Entity<any>, baseId: string) => {
                 const link = e.values?.linkedItem;
-                const linkedId = Array.isArray(link) ? link[0] : link;
-                return linkedId === baseItemId;
-            });
+                if (Array.isArray(link)) return link.some((x: unknown) => idNorm(x) === baseId);
+                return idNorm(link) === baseId;
+            };
+            const linkedToThisBase = partItems.filter((e) => itemLinksToBaseId(e, baseItemIdNorm));
             setAddTranslationTargetLinkedItems(linkedToThisBase);
-            // ברירת מחדל: הוסף אחרי הפריט שמקושר לפריט הבסיס הקודם (אם קיים ברשימה), אחרת בהתחלה
-            const baseIndex = baseItems.findIndex(
-                (b) => (localValues[b.id]?.itemId ?? b.values?.itemId) === baseItemId
-            );
-            if (baseIndex > 0) {
-                const prevBaseItemId = localValues[baseItems[baseIndex - 1].id]?.itemId ?? baseItems[baseIndex - 1].values?.itemId;
-                const insertAfter = partItems.find((e: any) => {
-                    const link = e.values?.linkedItem;
-                    return Array.isArray(link) ? link.includes(prevBaseItemId) : link === prevBaseItemId;
-                });
-                const afterId = insertAfter?.values?.itemId ?? insertAfter?.id;
-                const inFilteredList = linkedToThisBase.some((e: Entity<any>) => (e.values?.itemId ?? e.id) === afterId);
-                setAddTranslationInsertAfterId(inFilteredList ? afterId : null);
-            } else {
-                setAddTranslationInsertAfterId(null);
+            // ברירת מחדל: סריקה אחורה על שורות בסיס — עוגן אחרי התרגום האחרון ש-linkedItem שלו = itemId של שורת בסיס קודמת
+            const rowIds = baseItems.map((b) => rowItemIdForBaseOrder(b, localValues));
+            let baseRowIdx = baseItems.findIndex((b) => b.id === addTranslationBaseItem.id);
+            if (baseRowIdx < 0) {
+                const target = rowItemIdForBaseOrder(addTranslationBaseItem, localValues);
+                if (target) {
+                    baseRowIdx = baseItems.findIndex(
+                        (b) => rowItemIdForBaseOrder(b, localValues) === target
+                    );
+                }
             }
+            let insertAfter: string | null = null;
+            if (baseRowIdx > 0) {
+                for (let j = baseRowIdx - 1; j >= 0; j--) {
+                    const prevBaseItemId = rowIds[j];
+                    if (!prevBaseItemId) continue;
+                    const linkedToPrev = partItems.filter((e) => itemLinksToBaseId(e, prevBaseItemId));
+                    if (linkedToPrev.length > 0) {
+                        const anchor = linkedToPrev[linkedToPrev.length - 1];
+                        insertAfter = idNorm(anchor?.values?.itemId ?? anchor?.id) || null;
+                        if (insertAfter) break;
+                    }
+                }
+            }
+            setAddTranslationInsertAfterId(insertAfter);
         } catch (err) {
             console.error(`${LOG_PREFIX} Load target part items failed`, err);
             setAddTranslationTargetLinkedItems([]);
@@ -1669,32 +1807,77 @@ export function usePartEdit(context: PartEditContext) {
             !currentTocData?.translations?.some((t: any) => t.translationId === addTranslationTargetId)
         )
             return;
-        const baseItemId = getEffectiveItemId(addTranslationBaseItem);
+        const baseItemId =
+            getEffectiveItemId(addTranslationBaseItem) ||
+            rowItemIdForBaseOrder(addTranslationBaseItem, localValues);
         if (!baseItemId) return;
         const form = addTranslationForm;
+        const translationContent = (form.content ?? addTranslationContent ?? "").toString().trim();
+        if (!translationContent) return;
         setSaving(true);
         try {
-            // אם הפריט הבסיס עדיין לא נשמר (new_xxx) – שומרים אותו קודם כדי שהתרגום יתקשר לפריט קיים בשרת
+            let lookup: ParagraphLookupResult = {
+                isParagraph: false,
+                baseSentences: [],
+            };
+            try {
+                lookup = await lookupParagraphByItId({
+                    tocId: selectedTocId,
+                    itId: baseItemId,
+                });
+            } catch (lookupErr) {
+                console.error(`${LOG_PREFIX} Paragraph lookup failed`, lookupErr);
+            }
+            lookup = mergeParagraphLookupWithPending(
+                lookup,
+                pendingParagraphSheetsWritesRef.current,
+                addTranslationBaseItem.id,
+                baseItemId
+            );
+            const requestedParagraph = form.translationMode === "paragraph";
+            const paragraphSentences = splitParagraphSentences(translationContent);
+            const useParagraphFlow = requestedParagraph && lookup.isParagraph;
+            if (requestedParagraph && !lookup.isParagraph) {
+                snackbar.open({
+                    type: "warning",
+                    message: "הפריט לא מסומן כפסקה ב-Sheets, ממשיך כתרגום רגיל",
+                });
+            }
+            let continueWithoutSheets = false;
+            if (useParagraphFlow) {
+                if (paragraphSentences.length === 0) {
+                    snackbar.open({ type: "error", message: "יש להזין לפחות משפט תרגום אחד" });
+                    return;
+                }
+                if (lookup.baseSentences.length !== paragraphSentences.length) {
+                    const shouldContinue = window.confirm(
+                        `מספר המשפטים בתרגום (${paragraphSentences.length}) לא תואם לבסיס (${lookup.baseSentences.length}). להמשיך ולשמור ל-Firebase בלבד?`
+                    );
+                    if (!shouldContinue) return;
+                    continueWithoutSheets = true;
+                }
+            }
+            // אם הפריט הבסיס עדיין לא נשמר (new_xxx) – שומרים אותו קודם לנוסח הבסיס (0-*) כדי שהתרגום יתקשר לפריט קיים בשרת.
+            // לא משתמשים ב-currentTranslationData כשעורכים תרגום (1-*) — אחרת השמירה הייתה הולכת לנתיב הלא נכון.
             const baseIsNew = addTranslationBaseItem.id.startsWith("new_");
-            if (baseIsNew && changedIds.has(addTranslationBaseItem.id)) {
-                const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
+            if (baseIsNew) {
+                const baseTid = (currentTocData?.translations ?? []).find((t: any) =>
+                    String(t?.translationId ?? "").startsWith("0-")
+                )?.translationId;
+                if (!baseTid) {
+                    snackbar.open({
+                        type: "error",
+                        message: "לא נמצא נוסח בסיס (0-) לשמירת פריט הבסיס לפני התרגום.",
+                    });
+                    return;
+                }
+                const basePath = `translations/${baseTid}/prayers/${selectedPrayerId}/items`;
                 await savePartItems(dataSource, {
-                    path,
-                    changedIds: Array.from(changedIds),
+                    path: basePath,
+                    changedIds: [addTranslationBaseItem.id],
                     localValues,
                 });
-                // אחרי השמירה הפריט בשרת עם document id = itemId; הרענון יטען אותו
             }
-
-            // אוספים מזהים קיימים של תרגום היעד בלבד.
-            const existingEnhancementItemIds: string[] = (enhancements[addTranslationTargetId] ?? [])
-                .map((e: any) => {
-                    const local = enhancementLocalValues[e.id]?.itemId;
-                    if (local != null && String(local).trim() !== "") return String(local);
-                    const fromVal = e.values?.itemId ?? e.id;
-                    return fromVal != null && String(fromVal).trim() !== "" ? String(fromVal) : "";
-                })
-                .filter((id) => id !== "");
 
             let newItemId: string;
             let newMitId: string;
@@ -1706,13 +1889,42 @@ export function usePartEdit(context: PartEditContext) {
                     (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
                     (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
                     "";
+                const idNormSubmit = (v: unknown) =>
+                    v != null && String(v).trim() !== "" ? String(v).trim() : "";
+                // בעריכת תרגום baseItems מגיע מהשרת — שורת בסיס new_* שלא נשמרה ב"שמור מקטע" לא מופיעה שם; ממזגים את הישות לסידור לפי itemId.
+                let baseEntitiesForPartOrder: Entity<any>[] = [...baseItems];
+                if (
+                    !baseEntitiesForPartOrder.some((b) => b.id === addTranslationBaseItem.id) &&
+                    addTranslationBaseItem.id.startsWith("new_")
+                ) {
+                    baseEntitiesForPartOrder = [...baseEntitiesForPartOrder, addTranslationBaseItem].sort(
+                        (a, b) => compareBaseEntitiesByItemId(a, b, localValues)
+                    );
+                }
+                const baseItemIdsInPartOrder = baseEntitiesForPartOrder.map((b) =>
+                    rowItemIdForBaseOrder(b, localValues)
+                );
+                let currentBaseRowIndex = baseEntitiesForPartOrder.findIndex(
+                    (b) => b.id === addTranslationBaseItem.id
+                );
+                if (currentBaseRowIndex < 0) {
+                    const target = rowItemIdForBaseOrder(addTranslationBaseItem, localValues);
+                    if (target) {
+                        currentBaseRowIndex = baseEntitiesForPartOrder.findIndex(
+                            (b) => rowItemIdForBaseOrder(b, localValues) === target
+                        );
+                    }
+                }
                 const result = await createTranslationItem(dataSource, {
                     targetTranslationId: addTranslationTargetId,
                     selectedPrayerId,
                     partId: selectedGroupId,
+                    translations: currentTocData?.translations ?? [],
                     baseItemId,
                     afterItemId: addTranslationInsertAfterId,
-                    content: (form.content ?? addTranslationContent ?? "").toString().trim(),
+                    baseItemIdsInPartOrder,
+                    currentBaseRowIndex,
+                    content: translationContent,
                     type: form.type ?? "body",
                     titleType: form.titleType,
                     title: form.title,
@@ -1735,7 +1947,6 @@ export function usePartEdit(context: PartEditContext) {
                     dateSetId: form.dateSetId?.trim() || "100",
                     baseItemMitId: baseItemMitId != null && String(baseItemMitId).trim() !== "" ? String(baseItemMitId).trim() : undefined,
                     isStartOfParagraph: !!form.isStartOfParagraph,
-                    extraTakenIds: existingEnhancementItemIds,
                     partName: currentPartName || undefined,
                     confirmUserWantsDecimalId: () =>
                         window.confirm(
@@ -1759,6 +1970,40 @@ export function usePartEdit(context: PartEditContext) {
                     type: "info",
                     message: "התרגום נוסף עם מזהה עשרוני בשל צפיפות בין פריטים.",
                 });
+            }
+            if (useParagraphFlow && !continueWithoutSheets) {
+                try {
+                    const partName =
+                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
+                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
+                        "";
+                    await saveParagraphTranslationToSheets({
+                        tocId: selectedTocId,
+                        translationId: addTranslationTargetId,
+                        partIdAndName: partName ? `${selectedGroupId} ${partName}` : selectedGroupId,
+                        partId: selectedGroupId,
+                        partName,
+                        itemId: newItemId,
+                        mitId: newMitId,
+                        baseItId: baseItemId,
+                        type: form.type,
+                        specialSign: form.specialSign,
+                        role: form.role,
+                        sentences: paragraphSentences,
+                        hazan: form.hazan,
+                        cohanim: form.cohanim,
+                        minyan: form.minyan,
+                        dateSetId: form.dateSetId?.trim() || "100",
+                        timestamp: Date.now(),
+                        deleted: false,
+                    });
+                } catch (err) {
+                    console.error(`${LOG_PREFIX} Save paragraph translation to sheets failed`, err);
+                    const shouldContinue = window.confirm(
+                        "נכשלה הכתיבה ל-Sheets עבור תרגום פסקה. הפריט נשמר ב-Firebase. להמשיך?"
+                    );
+                    if (!shouldContinue) return;
+                }
             }
             const newItemContentVal = (form.content ?? addTranslationContent ?? "").toString().trim().slice(0, 200);
             appendChangeLog({
@@ -1837,6 +2082,8 @@ export function usePartEdit(context: PartEditContext) {
         addTranslationInsertAfterId,
         addTranslationContent,
         addTranslationTargetLinkedItems,
+        addTranslationBaseIsParagraph,
+        addTranslationParagraphLookupLoading,
         openAddTranslation,
         closeAddTranslation,
         setAddTranslationTargetId,

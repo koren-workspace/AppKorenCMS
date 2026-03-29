@@ -391,6 +391,8 @@ export function TocTranslationsView() {
                 onInsertAfterChange={partEdit.setAddTranslationInsertAfterId}
                 form={partEdit.addTranslationForm}
                 onFormFieldChange={partEdit.setAddTranslationFormField}
+                baseIsParagraphFromSheets={partEdit.addTranslationBaseIsParagraph}
+                paragraphLookupLoading={partEdit.addTranslationParagraphLookupLoading}
                 onSubmit={partEdit.submitAddTranslation}
                 saving={partEdit.saving}
                 onOpenDateSetIdConfig={partEdit.openDateSetIdModalForAddTranslation}

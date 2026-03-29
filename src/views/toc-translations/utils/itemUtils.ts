@@ -158,6 +158,11 @@ export interface ComputeItemIdForInsertOptions {
      * שימוש: תאימות/מקרי קצה שבהם עדיין צריך עיגון תחתון קשיח.
      */
     minIdBefore?: string;
+    /**
+     * סימטריה לסריקה אחורה על בסיס: מינימום itemId מבין תרגומי שורת הבסיס הבאה (במקטע) שיש לה תרגומים.
+     * מחמיר את idAfter: idAfter_effective = MIN(numeric)(idAfter מהשכן/גבול, ערך זה), רק אם הערך > idBefore.
+     */
+    nextBaseLinkedMinItemId?: string;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
     confirmUserWantsDecimalId?: () => boolean;
 }
@@ -181,7 +186,14 @@ export function computeItemIdForInsert(
     insertIndex: number,
     options?: ComputeItemIdForInsertOptions
 ): string {
-    const { neighborBounds, extraTakenIds, linkedIdsPerPosition, minIdBefore, confirmUserWantsDecimalId } = options ?? {};
+    const {
+        neighborBounds,
+        extraTakenIds,
+        linkedIdsPerPosition,
+        minIdBefore,
+        nextBaseLinkedMinItemId,
+        confirmUserWantsDecimalId,
+    } = options ?? {};
 
     console.log(`${ID_LOG_PREFIX} ═══ computeItemIdForInsert (כניסה) ═══`);
     console.log(`${ID_LOG_PREFIX}   קלט: orderedItemIds=${JSON.stringify(orderedItemIds)} (אורך ${orderedItemIds.length}) insertIndex=${insertIndex}`);
@@ -262,6 +274,26 @@ export function computeItemIdForInsert(
             if (!Number.isNaN(afterNum) && afterNum <= minNum) {
                 console.log(`${ID_LOG_PREFIX}   אילוץ minIdBefore: idAfter=${idAfter} <= minIdBefore → מאפסים idAfter`);
                 idAfter = null;
+            }
+        }
+    }
+
+    // גבול עליון סימטרי: מינימום תרגומי שורת הבסיס הבאה (כשסופק) — מחמיר את idAfter
+    if (nextBaseLinkedMinItemId != null && nextBaseLinkedMinItemId !== "") {
+        const capNum = Number(nextBaseLinkedMinItemId);
+        if (!Number.isNaN(capNum)) {
+            const beforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
+            if (Number.isNaN(beforeNum) || capNum > beforeNum) {
+                if (idAfter == null || idAfter === "") {
+                    idAfter = nextBaseLinkedMinItemId;
+                    idAfterSource = `nextBaseLinkedMinItemId (אין שכן מתחת): ${idAfter}`;
+                } else {
+                    const afterNum = Number(idAfter);
+                    if (!Number.isNaN(afterNum) && capNum < afterNum) {
+                        idAfter = nextBaseLinkedMinItemId;
+                        idAfterSource = `MIN(שכן מתחת, nextBaseLinkedMinItemId) → ${idAfter}`;
+                    }
+                }
             }
         }
     }

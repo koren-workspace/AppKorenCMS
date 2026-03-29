@@ -261,13 +261,82 @@ export async function fetchPartItems(
     );
 }
 
+/** רשימת מקטעים לתפילה מתוך מבנה ה-TOC (כמו ב-usePartEdit.getPartsFromToc) */
+export function getPartsForPrayerInTranslation(
+    translations: any[],
+    translationId: string,
+    prayerId: string
+): any[] {
+    const trans = (translations ?? []).find((t: any) => t.translationId === translationId);
+    if (!trans) return [];
+    for (const cat of trans.categories ?? []) {
+        const prayer = (cat.prayers ?? []).find((p: any) => p.id === prayerId);
+        if (prayer) return prayer.parts ?? [];
+    }
+    return [];
+}
+
+/**
+ * itemId של הפריט האחרון במקטע הקודם והראשון במקטע הבא – אותו תרגום (כמו neighborBounds בטעינת מקטע).
+ */
+export async function fetchNeighborItemIdBoundsForPart(
+    dataSource: DataSource,
+    params: {
+        translationId: string;
+        selectedPrayerId: string;
+        partId: string;
+        translations: any[];
+    }
+): Promise<{ prevLastItemId?: string; nextFirstItemId?: string }> {
+    const { translationId, selectedPrayerId, partId, translations } = params;
+    const parts = getPartsForPrayerInTranslation(translations, translationId, selectedPrayerId);
+    const partIdx = parts.findIndex((p: any) => p.id === partId);
+    const prevPartId: string | null =
+        partIdx > 0 ? (parts[partIdx - 1]?.id as string) ?? null : null;
+    const nextPartId: string | null =
+        partIdx >= 0 && partIdx < parts.length - 1
+            ? (parts[partIdx + 1]?.id as string) ?? null
+            : null;
+
+    const [prevItems, nextItems] = await Promise.all([
+        prevPartId
+            ? fetchPartItems(dataSource, translationId, selectedPrayerId, prevPartId)
+            : Promise.resolve([] as Entity<any>[]),
+        nextPartId
+            ? fetchPartItems(dataSource, translationId, selectedPrayerId, nextPartId)
+            : Promise.resolve([] as Entity<any>[]),
+    ]);
+
+    const bounds: { prevLastItemId?: string; nextFirstItemId?: string } = {};
+    if (prevItems.length > 0) {
+        const last = prevItems[prevItems.length - 1] as any;
+        const id = last.values?.itemId;
+        if (id != null && String(id).trim() !== "") bounds.prevLastItemId = String(id);
+    }
+    if (nextItems.length > 0) {
+        const first = nextItems[0] as any;
+        const id = first.values?.itemId;
+        if (id != null && String(id).trim() !== "") bounds.nextFirstItemId = String(id);
+    }
+    return bounds;
+}
+
 /** פרמטרים ליצירת פריט תרגום חדש (מקושר לפריט בסיס) */
 export type CreateTranslationItemParams = {
     targetTranslationId: string;
     selectedPrayerId: string;
     partId: string;
+    /** רשימת התרגומים מה-TOC – לחישוב מקטע קודם/הבא לאותו תרגום יעד */
+    translations: any[];
     baseItemId: string;
     afterItemId: string | null;
+    /**
+     * סדר itemId לכל שורת בסיס במקטע — באורך זהה ל-baseItems (מחרוזת ריקה אם חסר).
+     * סריקה לאחור: לכל שורה קודמת מחפשים תרגומים ש-linkedItem מצביע על itemId של אותה שורה.
+     */
+    baseItemIdsInPartOrder?: string[];
+    /** אינדקס שורת הבסיס ב-baseItems (לפי entity.id) */
+    currentBaseRowIndex?: number;
     content: string;
     type?: string;
     titleType?: string;
@@ -295,12 +364,6 @@ export type CreateTranslationItemParams = {
     isStartOfParagraph?: boolean;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
     confirmUserWantsDecimalId?: () => boolean;
-    /**
-     * IDs נוספים שכבר "תפוסים" – למשל itemIds של תרגומים אחרים (enhancements) שנוצרו לאותו פריט בסיס.
-     * מונע כפילות ID כשמוסיפים תרגומים לכמה תרגומים שונים אחד אחרי השני (כל אחד טוען path ריק
-     * ומקבל את אותו ID ללא המידע הזה).
-     */
-    extraTakenIds?: string[];
     /** שם המקטע – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
     partName?: string;
 };
@@ -321,6 +384,8 @@ export async function createTranslationItem(
         partId,
         baseItemId,
         afterItemId,
+        baseItemIdsInPartOrder,
+        currentBaseRowIndex,
         content,
         type = "body",
         titleType,
@@ -345,49 +410,151 @@ export async function createTranslationItem(
         baseItemMitId: baseItemMitIdParam,
         isStartOfParagraph,
         confirmUserWantsDecimalId,
-        extraTakenIds,
+        translations,
         partName,
     } = params;
 
     const path = `translations/${targetTranslationId}/prayers/${selectedPrayerId}/items`;
-    const allItems = await fetchPartItems(
-        dataSource,
-        targetTranslationId,
-        selectedPrayerId,
-        partId
+    const [partEntities, neighborItemBounds] = await Promise.all([
+        dataSource.fetchCollection({
+            path,
+            collection: itemsCollection,
+            filter: { partId: ["==", partId] },
+        }),
+        fetchNeighborItemIdBoundsForPart(dataSource, {
+            translationId: targetTranslationId,
+            selectedPrayerId,
+            partId,
+            translations,
+        }),
+    ]);
+
+    const deletedItemIds: string[] = partEntities
+        .filter((e: any) => e.values?.deleted === true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
+
+    const allItems = partEntities
+        .filter((e: any) => e.values?.deleted !== true)
+        .sort((a: any, b: any) =>
+            (a.values?.itemId || "").localeCompare(b.values?.itemId || "", undefined, {
+                numeric: true,
+            })
+        );
+    const orderedItemIds = allItems.map((e: any) =>
+        e.values?.itemId != null && e.values?.itemId !== "" ? String(e.values.itemId) : ""
     );
-    const orderedItemIds = allItems.map((e: any) => e.values?.itemId ?? "");
+
+    const idNorm = (v: unknown) =>
+        v != null && String(v).trim() !== "" ? String(v).trim() : "";
+    const baseKey = idNorm(baseItemId);
+    let afterKey =
+        afterItemId != null && String(afterItemId).trim() !== ""
+            ? String(afterItemId).trim()
+            : null;
+
+    /** linkedItem מתייחס ל-itemId של פריט הבסיס (מערך או ערך בודד). */
+    const linksToBaseItemId = (e: any, baseItemIdStr: string) => {
+        if (!baseItemIdStr) return false;
+        const link = e.values?.linkedItem;
+        if (Array.isArray(link)) return link.some((x: unknown) => idNorm(x) === baseItemIdStr);
+        return idNorm(link) === baseItemIdStr;
+    };
+
+    const rawItemRow = (baseItemIdsInPartOrder ?? []).map((x) => idNorm(x));
+
+    const curBaseIdx =
+        typeof currentBaseRowIndex === "number" && currentBaseRowIndex >= 0
+            ? currentBaseRowIndex
+            : rawItemRow.findIndex((id) => id === baseKey);
+
+    /**
+     * אין afterItemId: עוגן = מקסימום itemId מבין כל פריטי התרגום במקטע שמקושרים לשורת בסיס כלשהי
+     * עם אינדקס < curBaseIdx (לא רק "השורה הקרובה ביותר עם תרגום") — כדי שלא ייבחר עוגן נמוך
+     * כשיש שורת בסיס קודמת עם תרגום בעל itemId גבוה יותר (מיון גלובלי vs סדר שורות).
+     */
+    const tryAnchorFromPriorBaseRows = (): void => {
+        if (afterKey != null && afterKey !== "") return;
+        if (curBaseIdx < 1) return;
+        let best: string | null = null;
+        let bestNum = -Infinity;
+        for (let j = 0; j < curBaseIdx; j++) {
+            const prevBaseItemId = rawItemRow[j];
+            if (!prevBaseItemId) continue;
+            const linkedToPrev = allItems.filter((e: any) => linksToBaseItemId(e, prevBaseItemId));
+            for (const ent of linkedToPrev) {
+                const id = idNorm(ent.values?.itemId ?? ent.id);
+                if (id === "") continue;
+                const n = Number(id);
+                if (!Number.isNaN(n) && n > bestNum) {
+                    bestNum = n;
+                    best = id;
+                }
+            }
+        }
+        if (best != null) afterKey = best;
+    };
+
+    tryAnchorFromPriorBaseRows();
+
+    /** סימטריה לסריקה אחורה: מינימום itemId בין תרגומי שורת הבסיס הבאה (לפי סדר שורות) שיש לה תרגומים — כבסיס ל-idAfter. */
+    const nextBaseLinkedMinForInsert = ((): string | undefined => {
+        if (curBaseIdx < 0) return undefined;
+        for (let j = curBaseIdx + 1; j < rawItemRow.length; j++) {
+            const nextBaseItemId = rawItemRow[j];
+            if (!nextBaseItemId) continue;
+            const linkedToNext = allItems.filter((e: any) => linksToBaseItemId(e, nextBaseItemId));
+            if (linkedToNext.length > 0) {
+                const firstNext = linkedToNext[0];
+                const id = idNorm(firstNext.values?.itemId ?? firstNext.id);
+                return id !== "" ? id : undefined;
+            }
+        }
+        return undefined;
+    })();
 
     let insertIndex: number;
-    if (afterItemId == null || afterItemId === "") {
-        const linkedToBase = allItems.filter((e: any) => {
-            const link = e.values?.linkedItem;
-            return Array.isArray(link) ? link.includes(baseItemId) : link === baseItemId;
-        });
+    if (afterKey == null) {
+        const linkedToBase = allItems.filter((e: any) => linksToBaseItemId(e, baseKey));
         if (linkedToBase.length > 0) {
-            const firstLinkedIdx = allItems.findIndex((e: any) => e.id === linkedToBase[0].id);
-            insertIndex = firstLinkedIdx >= 0 ? firstLinkedIdx : 0;
+            // allItems ממוין לפי itemId — האחרון הוא המקסימום; מוסיפים אחרי כל התרגומים לבסיס הזה, לא לפני הראשון
+            const lastLinked = linkedToBase[linkedToBase.length - 1];
+            const lastIdx = allItems.findIndex((e: any) => e.id === lastLinked.id);
+            insertIndex = lastIdx >= 0 ? lastIdx + 1 : allItems.length;
         } else {
             insertIndex = 0;
         }
     } else {
-        const inAll = allItems.findIndex((e: any) => e.values?.itemId === afterItemId);
+        let inAll = allItems.findIndex(
+            (e: any) => idNorm(e.values?.itemId ?? e.id) === afterKey
+        );
+        if (inAll < 0) {
+            afterKey = null;
+            tryAnchorFromPriorBaseRows();
+            if (afterKey != null && afterKey !== "") {
+                inAll = allItems.findIndex(
+                    (e: any) => idNorm(e.values?.itemId ?? e.id) === afterKey
+                );
+            }
+        }
         insertIndex = inAll >= 0 ? inAll + 1 : allItems.length;
     }
 
-    // כשאין פריטים אחרי insertIndex בחלק הנוכחי – אין idAfter.
-    // כדי לשמור רצף בין חלקים באותו תרגום, מחפשים את הפריט הקרוב הבא באותה תפילה
-    // ומשתמשים בו כ-nextFirstItemId.
-    let nextFirstItemId: string | undefined;
+    // כמו בבסיס: קודם גבול ממקטע הבא באותו תרגום; אם אין (אין מקטע הבא / ריק) – תורן ל-fetch כל התפילה
+    let nextFirstFromPrayer: string | undefined;
     const numericLowerBoundCandidates = [
         ...orderedItemIds.map((id) => Number(id)),
-        ...(extraTakenIds ?? []).map((id) => Number(id)),
+        ...deletedItemIds.map((id) => Number(id)),
     ].filter((n) => !Number.isNaN(n));
     const lowerBoundForNextItemId =
         numericLowerBoundCandidates.length > 0
             ? Math.max(...numericLowerBoundCandidates)
             : undefined;
-    if (insertIndex >= orderedItemIds.length) {
+    if (
+        insertIndex >= orderedItemIds.length &&
+        neighborItemBounds.nextFirstItemId == null
+    ) {
         try {
             const allPrayerItems = await dataSource.fetchCollection({
                 path,
@@ -405,23 +572,35 @@ export async function createTranslationItem(
                 );
             if (laterIds.length > 0) {
                 laterIds.sort((a: string, b: string) => Number(a) - Number(b));
-                nextFirstItemId = laterIds[0];
-                console.log(`[CMS-ID] createTranslationItem: insertIndex(${insertIndex}) >= orderedItemIds.length(${orderedItemIds.length}) → nextFirstItemId מ-fetch כולל תפילה: ${nextFirstItemId}`);
+                nextFirstFromPrayer = laterIds[0];
+                console.log(
+                    `[CMS-ID] createTranslationItem: insertIndex(${insertIndex}) >= orderedItemIds.length(${orderedItemIds.length}) → nextFirstItemId מ-fetch כולל תפילה: ${nextFirstFromPrayer}`
+                );
             }
         } catch (_) {
             // ממשיכים ללא גבול עליון אם ה-fetch נכשל
         }
     }
 
+    const neighborBoundsForInsert = {
+        prevLastItemId: neighborItemBounds.prevLastItemId,
+        nextFirstItemId:
+            neighborItemBounds.nextFirstItemId ?? nextFirstFromPrayer ?? undefined,
+    };
+
     const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
         confirmUserWantsDecimalId,
-        extraTakenIds,
-        neighborBounds: nextFirstItemId ? { nextFirstItemId } : undefined,
+        extraTakenIds: deletedItemIds,
+        neighborBounds: neighborBoundsForInsert,
+        ...(nextBaseLinkedMinForInsert != null
+            ? { nextBaseLinkedMinItemId: nextBaseLinkedMinForInsert }
+            : {}),
     });
 
     // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
     const baseItemMitId = baseItemMitIdParam != null && String(baseItemMitIdParam).trim() !== "" ? String(baseItemMitIdParam).trim() : null;
-    const baseIsPartOfParagraph = baseItemMitId != null && baseItemId !== baseItemMitId;
+    const baseIsPartOfParagraph =
+        baseItemMitId != null && baseKey !== idNorm(baseItemMitId);
     let newMitId: string;
     if (baseIsPartOfParagraph) {
         newMitId = baseItemMitId;
@@ -438,7 +617,7 @@ export async function createTranslationItem(
         partId,
         itemId: newItemId,
         mit_id: newMitId,
-        linkedItem: [baseItemId],
+        linkedItem: [baseKey || String(baseItemId)],
         timestamp: Date.now(),
     };
     if (partName != null && partName !== "") {

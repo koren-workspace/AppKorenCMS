@@ -21,6 +21,8 @@ const DOCS_CHANGELOG_PATH = path.resolve(process.cwd(), "docs", "cms-changelog.j
 const EXCEL_ENDPOINT = "/__cms_excel__"
 const EXCEL_PATH = path.resolve(process.cwd(), "docs", "cms-changes.xlsx")
 const SHEETS_ENDPOINT = "/__cms_sheets__"
+const SHEETS_LOOKUP_ENDPOINT = "/__cms_sheets_lookup__"
+const SHEETS_PARAGRAPH_TRANSLATION_ENDPOINT = "/__cms_sheets_paragraph_translation__"
 const GOOGLE_SERVICE_ACCOUNT_PATH = path.resolve(process.cwd(), ".google-service-account.json")
 
 /** שמות ה-sheets ב-Excel */
@@ -360,14 +362,28 @@ type SheetsAppendBody = {
 
 type HeaderRowObject = Record<string, string | number | boolean | null>
 
-async function appendRowsToGoogleSheets(body: SheetsAppendBody): Promise<void> {
+type SheetHeaders = {
+    headers: string[]
+    headerIndex: Map<string, number>
+}
+
+type ParagraphLookupResult = {
+    isParagraph: boolean
+    baseSentences: string[]
+    baseRowIndices: number[]
+}
+
+function parseBoolCell(value: unknown): boolean | null {
+    if (value == null) return null
+    const normalized = String(value).trim().toUpperCase()
+    if (normalized === "TRUE") return true
+    if (normalized === "FALSE") return false
+    return null
+}
+
+async function buildSheetsClient() {
     if (!fs.existsSync(GOOGLE_SERVICE_ACCOUNT_PATH)) {
         throw new Error(`Missing service account file at ${GOOGLE_SERVICE_ACCOUNT_PATH}`)
-    }
-    const spreadsheetId = body.spreadsheetId || process.env.VITE_GOOGLE_SHEETS_SPREADSHEET_ID
-    const sheetName = body.sheetName || process.env.VITE_GOOGLE_SHEETS_SHEET_NAME
-    if (!spreadsheetId || !sheetName) {
-        throw new Error("Missing spreadsheetId/sheetName in request and env")
     }
     const serviceAccountRaw = fs.readFileSync(GOOGLE_SERVICE_ACCOUNT_PATH, "utf8")
     const serviceAccount = JSON.parse(serviceAccountRaw)
@@ -376,7 +392,88 @@ async function appendRowsToGoogleSheets(body: SheetsAppendBody): Promise<void> {
         scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     })
     const authClient = await auth.getClient()
-    const sheetsApi = google.sheets({ version: "v4", auth: authClient as any })
+    return google.sheets({ version: "v4", auth: authClient as any })
+}
+
+async function getSheetHeaders(
+    sheetsApi: ReturnType<typeof google.sheets>,
+    spreadsheetId: string,
+    sheetName: string
+): Promise<SheetHeaders> {
+    const headerRes = await sheetsApi.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!1:1`,
+    })
+    const headers = (headerRes.data.values?.[0] ?? []).map((h) => String(h).trim())
+    if (headers.length === 0) throw new Error(`No header row found in sheet "${sheetName}"`)
+    const headerIndex = new Map<string, number>()
+    headers.forEach((h, i) => headerIndex.set(h, i))
+    return { headers, headerIndex }
+}
+
+async function getSheetIdByName(
+    sheetsApi: ReturnType<typeof google.sheets>,
+    spreadsheetId: string,
+    sheetName: string
+): Promise<number> {
+    const meta = await sheetsApi.spreadsheets.get({ spreadsheetId })
+    const match = (meta.data.sheets ?? []).find(
+        (s) => String(s.properties?.title ?? "").trim() === sheetName
+    )
+    const sheetId = match?.properties?.sheetId
+    if (sheetId == null) throw new Error(`Sheet "${sheetName}" not found in spreadsheet`)
+    return sheetId
+}
+
+async function lookupParagraphByItIdOnSheet(
+    sheetsApi: ReturnType<typeof google.sheets>,
+    spreadsheetId: string,
+    sheetName: string,
+    itId: string
+): Promise<ParagraphLookupResult> {
+    const { headerIndex } = await getSheetHeaders(sheetsApi, spreadsheetId, sheetName)
+    const itIdIdx = headerIndex.get("IT_ID")
+    const languageIdx = headerIndex.get("שפה")
+    const paragraphIdx = headerIndex.get("פיסקה")
+    const textIdx = headerIndex.get("טקסט")
+    if (itIdIdx == null || languageIdx == null || paragraphIdx == null || textIdx == null) {
+        throw new Error(`Missing required headers for paragraph lookup in "${sheetName}"`)
+    }
+    const dataRes = await sheetsApi.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A2:ZZ`,
+    })
+    const rows = dataRes.data.values ?? []
+    const startIndex = rows.findIndex((row) => {
+        const rowItId = String(row[itIdIdx] ?? "").trim()
+        const rowLanguage = String(row[languageIdx] ?? "").trim()
+        return rowItId === itId && rowLanguage === "עברית"
+    })
+    if (startIndex < 0) return { isParagraph: false, baseSentences: [], baseRowIndices: [] }
+
+    const baseSentences: string[] = []
+    const baseRowIndices: number[] = []
+    let hasParagraphTrue = false
+    for (let i = startIndex; i < rows.length; i++) {
+        const row = rows[i] ?? []
+        const rowLanguage = String(row[languageIdx] ?? "").trim()
+        if (rowLanguage !== "עברית") break
+        const paragraphVal = parseBoolCell(row[paragraphIdx])
+        if (paragraphVal === true) hasParagraphTrue = true
+        baseSentences.push(String(row[textIdx] ?? "").trim())
+        baseRowIndices.push(i + 1) // +1 because data starts at sheet row 2 => zero-based row index
+        if (paragraphVal === false) break
+    }
+    return { isParagraph: hasParagraphTrue, baseSentences, baseRowIndices }
+}
+
+async function appendRowsToGoogleSheets(body: SheetsAppendBody): Promise<void> {
+    const sheetsApi = await buildSheetsClient()
+    const spreadsheetId = body.spreadsheetId || process.env.VITE_GOOGLE_SHEETS_SPREADSHEET_ID
+    const sheetName = body.sheetName || process.env.VITE_GOOGLE_SHEETS_SHEET_NAME
+    if (!spreadsheetId || !sheetName) {
+        throw new Error("Missing spreadsheetId/sheetName in request and env")
+    }
     let valuesToAppend: any[][] = []
 
     if (Array.isArray(body.rowObjects) && body.rowObjects.length > 0) {
@@ -429,6 +526,73 @@ async function appendRowsToGoogleSheets(body: SheetsAppendBody): Promise<void> {
     })
 }
 
+type ParagraphTranslationBody = {
+    spreadsheetId?: string
+    sheetName?: string
+    baseItId?: string
+    rowObjects?: HeaderRowObject[]
+}
+
+async function insertParagraphTranslationRows(body: ParagraphTranslationBody): Promise<void> {
+    const sheetsApi = await buildSheetsClient()
+    const spreadsheetId = body.spreadsheetId || process.env.VITE_GOOGLE_SHEETS_SPREADSHEET_ID
+    const sheetName = body.sheetName || process.env.VITE_GOOGLE_SHEETS_SHEET_NAME
+    const baseItId = String(body.baseItId ?? "").trim()
+    const rowObjects = Array.isArray(body.rowObjects) ? body.rowObjects : []
+    if (!spreadsheetId || !sheetName) throw new Error("Missing spreadsheetId/sheetName in request and env")
+    if (!baseItId) throw new Error("Missing baseItId")
+    if (rowObjects.length === 0) throw new Error("rowObjects חייב להיות מערך לא ריק")
+
+    const lookup = await lookupParagraphByItIdOnSheet(sheetsApi, spreadsheetId, sheetName, baseItId)
+    if (!lookup.isParagraph) throw new Error(`Base IT_ID ${baseItId} is not marked as paragraph`)
+    if (lookup.baseRowIndices.length !== rowObjects.length) {
+        throw new Error(
+            `Sentence count mismatch for IT_ID ${baseItId}: base=${lookup.baseRowIndices.length}, translation=${rowObjects.length}`
+        )
+    }
+    const sheetId = await getSheetIdByName(sheetsApi, spreadsheetId, sheetName)
+    const { headers, headerIndex } = await getSheetHeaders(sheetsApi, spreadsheetId, sheetName)
+    const rowValuesByHeader = rowObjects.map((obj) => {
+        const row = new Array(headers.length).fill("")
+        Object.entries(obj).forEach(([header, value]) => {
+            const idx = headerIndex.get(header)
+            if (idx == null) return
+            row[idx] = value == null ? "" : value
+        })
+        return row
+    })
+
+    // Insert from bottom to top so previously inserted rows do not shift target indexes.
+    for (let i = lookup.baseRowIndices.length - 1; i >= 0; i--) {
+        const baseZeroIndex = lookup.baseRowIndices[i]
+        await sheetsApi.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+                requests: [
+                    {
+                        insertDimension: {
+                            range: {
+                                sheetId,
+                                dimension: "ROWS",
+                                startIndex: baseZeroIndex + 1,
+                                endIndex: baseZeroIndex + 2,
+                            },
+                            inheritFromBefore: true,
+                        },
+                    },
+                ],
+            },
+        })
+        const rowNumber = baseZeroIndex + 2
+        await sheetsApi.spreadsheets.values.update({
+            spreadsheetId,
+            range: `${sheetName}!A${rowNumber}:ZZ${rowNumber}`,
+            valueInputOption: "USER_ENTERED",
+            requestBody: { values: [rowValuesByHeader[i]] },
+        })
+    }
+}
+
 /** Vite plugin: מקבל POST /__cms_excel__ עם entry בודד ומוסיף ל-Excel */
 function cmsExcelPlugin() {
     return {
@@ -479,6 +643,66 @@ function cmsSheetsPlugin() {
                         res.end()
                     } catch (err) {
                         console.error("[cms-sheets] ✗ failed to append rows:", err)
+                        res.statusCode = 500
+                        res.end()
+                    }
+                })
+            })
+        },
+    }
+}
+
+function cmsSheetsLookupPlugin() {
+    return {
+        name: "cms-google-sheets-lookup",
+        configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
+            console.log("[cms-sheets] lookup plugin loaded, listening on", SHEETS_LOOKUP_ENDPOINT)
+            server.middlewares.use((req: any, res: any, next: () => void) => {
+                if (req.method !== "POST" || !req.url?.startsWith(SHEETS_LOOKUP_ENDPOINT)) return next()
+                const chunks: Buffer[] = []
+                req.on("data", (chunk: Buffer) => chunks.push(chunk))
+                req.on("end", async () => {
+                    try {
+                        const bodyRaw = Buffer.concat(chunks).toString("utf8")
+                        const body = JSON.parse(bodyRaw) as { spreadsheetId?: string; sheetName?: string; itId?: string }
+                        const spreadsheetId = body.spreadsheetId || process.env.VITE_GOOGLE_SHEETS_SPREADSHEET_ID
+                        const sheetName = body.sheetName || process.env.VITE_GOOGLE_SHEETS_SHEET_NAME
+                        const itId = String(body.itId ?? "").trim()
+                        if (!spreadsheetId || !sheetName || !itId) throw new Error("Missing spreadsheetId/sheetName/itId")
+                        const sheetsApi = await buildSheetsClient()
+                        const lookup = await lookupParagraphByItIdOnSheet(sheetsApi, spreadsheetId, sheetName, itId)
+                        res.statusCode = 200
+                        res.setHeader("Content-Type", "application/json; charset=utf-8")
+                        res.end(JSON.stringify({ isParagraph: lookup.isParagraph, baseSentences: lookup.baseSentences }))
+                    } catch (err) {
+                        console.error("[cms-sheets] ✗ lookup failed:", err)
+                        res.statusCode = 500
+                        res.end()
+                    }
+                })
+            })
+        },
+    }
+}
+
+function cmsSheetsParagraphTranslationPlugin() {
+    return {
+        name: "cms-google-sheets-paragraph-translation",
+        configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
+            console.log("[cms-sheets] paragraph translation plugin loaded, listening on", SHEETS_PARAGRAPH_TRANSLATION_ENDPOINT)
+            server.middlewares.use((req: any, res: any, next: () => void) => {
+                if (req.method !== "POST" || !req.url?.startsWith(SHEETS_PARAGRAPH_TRANSLATION_ENDPOINT)) return next()
+                const chunks: Buffer[] = []
+                req.on("data", (chunk: Buffer) => chunks.push(chunk))
+                req.on("end", async () => {
+                    try {
+                        const bodyRaw = Buffer.concat(chunks).toString("utf8")
+                        const body = JSON.parse(bodyRaw) as ParagraphTranslationBody
+                        await insertParagraphTranslationRows(body)
+                        res.statusCode = 204
+                        res.end()
+                    } catch (err) {
+                        console.error("[cms-sheets] ✗ paragraph translation insert failed:", err)
                         res.statusCode = 500
                         res.end()
                     }
@@ -541,6 +765,8 @@ export default defineConfig({
         cmsChangelogPlugin(),
         cmsExcelPlugin(),
         cmsSheetsPlugin(),
+        cmsSheetsLookupPlugin(),
+        cmsSheetsParagraphTranslationPlugin(),
         react(),
         federation({
             name: "remote_app",

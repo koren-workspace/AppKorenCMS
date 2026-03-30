@@ -43,8 +43,8 @@ export function PartEditToolbar({
         ? `מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל. האפליקציה מסנכרנת את כל התרגומים של נוסח זה — לא רק את המקטע הפתוח.`
         : "מסמן שהנוסח הנבחר התעדכן בבייגל; האפליקציה מסנכרנת לפי נוסח (לא לפי מקטע בודד).";
     const publishButtonLabel = hasNusachLabel
-        ? `פרסום ${trimmedNusach} לבייגל`
-        : "פרסום לבייגל";
+        ? `פרסום ${trimmedNusach} לאפליקציה`
+        : "פרסום לאפליקציה";
 
     return (
         <div className="mb-3 pb-2 border-b shrink-0">

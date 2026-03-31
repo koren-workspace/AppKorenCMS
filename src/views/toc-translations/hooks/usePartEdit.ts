@@ -39,6 +39,7 @@ import {
     type ParagraphLookupResult,
     type SaveParagraphToSheetsParams,
 } from "../services/googleSheetsService";
+import { cmsSimpleBaseIntervalEnabled } from "../utils/debugFlags";
 
 /** הקשר הניווט – מועבר מ-useTocNavigation כדי לדעת איזה תרגום/תפילה נבחרו */
 export type PartEditContext = {
@@ -1084,10 +1085,11 @@ export function usePartEdit(context: PartEditContext) {
     const computeItemIdForIndex = (index: number, confirmUserWantsDecimalId?: () => boolean): string => {
         const orderedItemIds = allItems.map((i) => getItemIdInCurrentContext(i));
         const allEnhancements = Object.values(enhancements).flat() as Entity<any>[];
-        const linkedIdsPerPosition = allItems.map((item) => {
-            const positionId = getItemIdForPosition(item);
-            if (!positionId) return [];
-            return allEnhancements
+        const simpleBaseIntervalEnabled = cmsSimpleBaseIntervalEnabled();
+        // מסלול פשוט: מספיק "חלון" של שורת הבסיס שמעל נקודת ההכנסה (base + linked),
+        // בהנחה שהאינווריאנט B_i < linked(B_i) < B_{i+1} נשמר.
+        const getLinkedIdsForPositionId = (positionId: string): string[] =>
+            allEnhancements
                 .filter((e) => {
                     const link = e.values?.linkedItem;
                     const baseId = Array.isArray(link) ? link[0] : link;
@@ -1095,12 +1097,53 @@ export function usePartEdit(context: PartEditContext) {
                 })
                 .map((e) => (e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")))
                 .filter((id) => id != null && id !== "");
+
+        const linkedIdsPerPosition = allItems.map((item, itemIndex) => {
+            if (baseItems.length === 0 || !simpleBaseIntervalEnabled) {
+                const positionId = getItemIdForPosition(item);
+                if (!positionId) return [];
+                return getLinkedIdsForPositionId(positionId);
+            }
+            if (itemIndex !== index - 1) return [];
+            const prevPositionId = getItemIdForPosition(item);
+            if (!prevPositionId) return [];
+            return getLinkedIdsForPositionId(prevPositionId);
         });
+        // הערות/פריטים לא-מקושרים (ללא linkedItem) עדיין תופסים מקום על ציר ה-IDs.
+        // לכן מכניסים אותם כ-gap blockers כדי שלא יוקצה ID "דרכם".
+        const unlinkedEnhancementIds =
+            baseItems.length > 0
+                ? allEnhancements
+                      .filter((e) => {
+                          const link = e.values?.linkedItem;
+                          if (Array.isArray(link)) return link.length === 0;
+                          return link == null || String(link).trim() === "";
+                      })
+                      .map((e) =>
+                          e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")
+                      )
+                      .filter((id) => id != null && id !== "")
+                : [];
 
         let nextFirstItemId = neighborBounds.nextFirstItemId;
         if (!nextFirstItemId && baseItems.length > 0 && index >= allItems.length) {
-            const allIds = [...orderedItemIds.filter(Boolean), ...linkedIdsPerPosition.flat()];
-            const maxAbove = allIds.length > 0 ? allIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
+            const allIds = simpleBaseIntervalEnabled
+                ? (() => {
+                      const lastIndex = allItems.length - 1;
+                      if (lastIndex < 0) return [] as string[];
+                      return [
+                          orderedItemIds[lastIndex],
+                          ...linkedIdsPerPosition[lastIndex],
+                          ...unlinkedEnhancementIds,
+                      ].filter(Boolean);
+                  })()
+                : [
+                      ...orderedItemIds.filter(Boolean),
+                      ...linkedIdsPerPosition.flat(),
+                      ...unlinkedEnhancementIds,
+                  ];
+            const maxAbove =
+                allIds.length > 0 ? allIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
             if (maxAbove) nextFirstItemId = getNextBaseItemIdAfter(maxAbove) ?? undefined;
         }
 
@@ -1109,6 +1152,7 @@ export function usePartEdit(context: PartEditContext) {
             extraTakenIds: [
                 ...deletedIdsFromServer.itemIds,
                 ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
+                ...unlinkedEnhancementIds,
             ],
             confirmUserWantsDecimalId,
             linkedIdsPerPosition,

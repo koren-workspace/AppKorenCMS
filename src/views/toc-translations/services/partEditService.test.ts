@@ -22,6 +22,7 @@ import {
     deletePartItemAndRelatedTranslations,
     splitPartItems,
     moveItemsToPart,
+    createTranslationItem,
     type DeletePartItemParams,
     type SplitPartItemsParams,
     type MoveItemsToPartParams,
@@ -715,5 +716,52 @@ describe("partEditService – moveItemsToPart", () => {
             "moveItemsToPart: no matching source items found for movedItemIds"
         );
         expect(ds.saveEntity).not.toHaveBeenCalled();
+    });
+});
+
+describe("partEditService – createTranslationItem", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it("caps new translation item below next base id (B_{i+1})", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const fetchCollection = vi.fn().mockImplementation(({ filter }: any) => {
+            if (filter?.partId?.[1] === "part-a") {
+                return Promise.resolve([
+                    {
+                        id: "150",
+                        values: { itemId: "150", linkedItem: ["100"] },
+                    },
+                    {
+                        id: "250",
+                        values: { itemId: "250", linkedItem: ["200"] },
+                    },
+                ]);
+            }
+            return Promise.resolve([]);
+        });
+        const dataSource = {
+            fetchCollection,
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await createTranslationItem(dataSource as any, {
+            targetTranslationId: "0-sefard",
+            selectedPrayerId: "p1",
+            partId: "part-a",
+            baseItemId: "100",
+            afterItemId: null,
+            baseItemIdsInPartOrder: ["100", "200"],
+            currentBaseRowIndex: 0,
+            translations: [],
+            content: "new",
+            minIdBefore: "100",
+        });
+
+        expect(Number(result.newItemId)).toBeGreaterThan(150);
+        expect(Number(result.newItemId)).toBeLessThan(200);
+        expect(saveEntity).toHaveBeenCalledTimes(1);
     });
 });

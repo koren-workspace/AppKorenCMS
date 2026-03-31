@@ -563,6 +563,21 @@ export async function createTranslationItem(
         }
         return undefined;
     })();
+    const nextBaseItemIdForInsert = ((): string | undefined => {
+        if (curBaseIdx < 0) return undefined;
+        for (let j = curBaseIdx + 1; j < rawItemRow.length; j++) {
+            const nextBaseItemId = rawItemRow[j];
+            if (nextBaseItemId) return nextBaseItemId;
+        }
+        return undefined;
+    })();
+    const nextUpperCapForInsert = ((): string | undefined => {
+        const linkedCap = nextBaseLinkedMinForInsert;
+        const baseCap = nextBaseItemIdForInsert;
+        if (!linkedCap) return baseCap;
+        if (!baseCap) return linkedCap;
+        return Number(baseCap) <= Number(linkedCap) ? baseCap : linkedCap;
+    })();
 
     let insertIndex: number;
     if (afterKey == null) {
@@ -623,8 +638,8 @@ export async function createTranslationItem(
         confirmUserWantsDecimalId,
         extraTakenIds: deletedItemIds,
         neighborBounds: neighborBoundsForInsert,
-        ...(nextBaseLinkedMinForInsert != null
-            ? { nextBaseLinkedMinItemId: nextBaseLinkedMinForInsert }
+        ...(nextUpperCapForInsert != null
+            ? { nextBaseLinkedMinItemId: nextUpperCapForInsert }
             : {}),
         ...(minIdBeforeParam ? { minIdBefore: minIdBeforeParam } : {}),
     });

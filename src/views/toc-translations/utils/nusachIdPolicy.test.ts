@@ -77,4 +77,87 @@ describe("nusachIdPolicy", () => {
         expect(id).not.toBe("0");
         expect(Number(id)).toBeGreaterThan(Number(floor));
     });
+
+    it("keeps same id in middle insert: full linked vs sparse linked", () => {
+        const ordered = ["100", "200", "300"];
+        const fullLinked = [
+            ["110", "130"],
+            ["210", "230"],
+            ["310", "330"],
+        ];
+        const sparseLinked = [["110", "130"], [], []];
+        const insertIndex = 1;
+
+        const idWithFull = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: fullLinked,
+        });
+        const idWithSparse = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: sparseLinked,
+        });
+
+        expect(idWithSparse).toBe(idWithFull);
+    });
+
+    it("keeps same id at part start with neighbor bounds", () => {
+        const ordered = ["200", "300"];
+        const fullLinked = [
+            ["210", "230"],
+            ["310", "330"],
+        ];
+        const sparseLinked = [[], []];
+        const insertIndex = 0;
+        const neighborBounds = { prevLastItemId: "150", nextFirstItemId: "400" };
+
+        const idWithFull = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: fullLinked,
+            neighborBounds,
+        });
+        const idWithSparse = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: sparseLinked,
+            neighborBounds,
+        });
+
+        expect(idWithSparse).toBe(idWithFull);
+    });
+
+    it("keeps same id at part end with next neighbor fallback", () => {
+        const ordered = ["100", "200", "300"];
+        const fullLinked = [
+            ["110", "130"],
+            ["210", "230"],
+            ["310", "330"],
+        ];
+        const sparseLinked = [[], [], ["310", "330"]];
+        const insertIndex = 3;
+        const neighborBounds = { prevLastItemId: "90", nextFirstItemId: "400" };
+
+        const idWithFull = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: fullLinked,
+            neighborBounds,
+        });
+        const idWithSparse = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: sparseLinked,
+            neighborBounds,
+        });
+
+        expect(idWithSparse).toBe(idWithFull);
+    });
+
+    it("extraTakenIds act as gap blockers inside the insert window", () => {
+        const ordered = ["100", "200"];
+        const linked = [["110", "130"], []];
+        const insertIndex = 1;
+
+        const idWithoutGapBlocker = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: linked,
+        });
+        const idWithGapBlocker = computeItemIdForInsert(ordered, insertIndex, {
+            linkedIdsPerPosition: linked,
+            extraTakenIds: ["150"],
+        });
+
+        expect(Number(idWithGapBlocker)).toBeGreaterThan(Number(idWithoutGapBlocker));
+        expect(Number(idWithGapBlocker)).toBeGreaterThan(150);
+        expect(Number(idWithGapBlocker)).toBeLessThan(200);
+    });
 });

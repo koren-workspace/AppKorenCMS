@@ -12,8 +12,13 @@
 import { Entity } from "@firecms/core";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import { chunkArray, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import { cmsDebugItemIdsEnabled } from "../utils/debugFlags";
 
 export { NO_SPACE_BETWEEN_ITEMS };
+
+function cmsIdDbg(...args: unknown[]) {
+    if (cmsDebugItemIdsEnabled()) console.log(...args);
+}
 
 /** ממשק מינימלי ל-DataSource (fetchCollection, saveEntity, deleteEntity) – מאפשר טסטים עם mock */
 type DataSource = {
@@ -168,6 +173,21 @@ export async function savePartItems(
     const { path, changedIds, localValues } = params;
     const now = Date.now();
 
+    for (const id of changedIds) {
+        if (!id.startsWith("new_")) continue;
+        const values = localValues[id];
+        const rawItemId = values?.itemId;
+        const itemIdStr =
+            rawItemId != null && String(rawItemId).trim() !== ""
+                ? String(rawItemId).trim()
+                : "";
+        if (!itemIdStr) {
+            throw new Error(
+                `savePartItems: new item missing valid itemId (changedId=${id})`
+            );
+        }
+    }
+
     const chunks = chunkArray(changedIds, SAVE_CHUNK_SIZE);
     for (const chunkIds of chunks) {
         const savePromises = chunkIds.map((id) => {
@@ -221,18 +241,45 @@ export async function deletePartItemAndRelatedTranslations(
 
     await softDeleteEntity(dataSource, itemEntity);
 
-    for (const trans of translations) {
-        const tid = trans?.translationId;
-        if (!tid || tid === currentTranslationId) continue;
-        const itemsPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
-        const related = await dataSource.fetchCollection({
-            path: itemsPath,
-            collection: itemsCollection,
-            filter: { linkedItem: ["array-contains", itemId] },
-        });
-        for (const entity of related) {
-            await softDeleteEntity(dataSource, entity);
-        }
+    const otherTranslations = translations.filter(
+        (t) => t?.translationId && t.translationId !== currentTranslationId
+    );
+
+    const relatedLists = await Promise.all(
+        otherTranslations.map((trans: any) => {
+            const tid = trans.translationId as string;
+            const itemsPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+            return dataSource.fetchCollection({
+                path: itemsPath,
+                collection: itemsCollection,
+                filter: { linkedItem: ["array-contains", itemId] },
+            });
+        })
+    );
+
+    const relatedFlat = relatedLists.flat();
+    const results = await Promise.allSettled(
+        relatedFlat.map((entity) => softDeleteEntity(dataSource, entity))
+    );
+
+    const failures = results.flatMap((r, i) =>
+        r.status === "rejected"
+            ? [
+                  {
+                      entityId: relatedFlat[i]?.id,
+                      reason: r.reason,
+                  },
+              ]
+            : []
+    );
+
+    if (failures.length > 0) {
+        const detail = failures
+            .map((f) => `${f.entityId ?? "?"}: ${f.reason}`)
+            .join("; ");
+        throw new Error(
+            `deletePartItemAndRelatedTranslations: ${failures.length} related soft-delete(s) failed (${detail})`
+        );
     }
 }
 
@@ -337,6 +384,8 @@ export type CreateTranslationItemParams = {
     baseItemIdsInPartOrder?: string[];
     /** אינדקס שורת הבסיס ב-baseItems (לפי entity.id) */
     currentBaseRowIndex?: number;
+    /** רצפל מזהי פריטים לפי תבנית אקסל (נגזר ממזהה המקטע) */
+    minIdBefore?: string;
     content: string;
     type?: string;
     titleType?: string;
@@ -412,6 +461,7 @@ export async function createTranslationItem(
         confirmUserWantsDecimalId,
         translations,
         partName,
+        minIdBefore: minIdBeforeParam,
     } = params;
 
     const path = `translations/${targetTranslationId}/prayers/${selectedPrayerId}/items`;
@@ -543,42 +593,23 @@ export async function createTranslationItem(
 
     // כמו בבסיס: קודם גבול ממקטע הבא באותו תרגום; אם אין (אין מקטע הבא / ריק) – תורן ל-fetch כל התפילה
     let nextFirstFromPrayer: string | undefined;
-    const numericLowerBoundCandidates = [
-        ...orderedItemIds.map((id) => Number(id)),
-        ...deletedItemIds.map((id) => Number(id)),
-    ].filter((n) => !Number.isNaN(n));
-    const lowerBoundForNextItemId =
-        numericLowerBoundCandidates.length > 0
-            ? Math.max(...numericLowerBoundCandidates)
-            : undefined;
     if (
         insertIndex >= orderedItemIds.length &&
         neighborItemBounds.nextFirstItemId == null
     ) {
-        try {
-            const allPrayerItems = await dataSource.fetchCollection({
-                path,
-                collection: itemsCollection,
-            });
-            const laterIds = allPrayerItems
-                .filter((e: any) => e.values?.deleted !== true)
-                .map((e: any) => e.values?.itemId)
-                .filter((id: any) => id != null && id !== "")
-                .map((id: any) => String(id))
-                .filter((id: string) =>
-                    lowerBoundForNextItemId == null
-                        ? true
-                        : Number(id) > lowerBoundForNextItemId
-                );
-            if (laterIds.length > 0) {
-                laterIds.sort((a: string, b: string) => Number(a) - Number(b));
-                nextFirstFromPrayer = laterIds[0];
-                console.log(
-                    `[CMS-ID] createTranslationItem: insertIndex(${insertIndex}) >= orderedItemIds.length(${orderedItemIds.length}) → nextFirstItemId מ-fetch כולל תפילה: ${nextFirstFromPrayer}`
-                );
-            }
-        } catch (_) {
-            // ממשיכים ללא גבול עליון אם ה-fetch נכשל
+        const allPrayerItems = await dataSource.fetchCollection({
+            path,
+            collection: itemsCollection,
+        });
+        const laterIds = allPrayerItems
+            .filter((e: any) => e.values?.deleted !== true)
+            .map((e: any) => e.values?.itemId)
+            .filter((id: any) => id != null && id !== "")
+            .map((id: any) => String(id))
+            .filter((id: string) => Number(id) > Number(baseItemId));
+        if (laterIds.length > 0) {
+            laterIds.sort((a: string, b: string) => Number(a) - Number(b));
+            nextFirstFromPrayer = laterIds[0];
         }
     }
 
@@ -595,6 +626,7 @@ export async function createTranslationItem(
         ...(nextBaseLinkedMinForInsert != null
             ? { nextBaseLinkedMinItemId: nextBaseLinkedMinForInsert }
             : {}),
+        ...(minIdBeforeParam ? { minIdBefore: minIdBeforeParam } : {}),
     });
 
     // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
@@ -609,7 +641,7 @@ export async function createTranslationItem(
     } else {
         newMitId = newItemId;
     }
-    console.log("[CMS-ID] createTranslationItem | targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId, "baseItemId=", baseItemId, "afterItemId=", afterItemId, "insertIndex=", insertIndex, "orderedItemIds=", orderedItemIds, "=> newItemId=", newItemId, "newMitId=", newMitId, "baseItemMitId=", baseItemMitId ?? "(none)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
+    cmsIdDbg("[CMS-ID] createTranslationItem | targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId, "baseItemId=", baseItemId, "afterItemId=", afterItemId, "insertIndex=", insertIndex, "orderedItemIds=", orderedItemIds, "=> newItemId=", newItemId, "newMitId=", newMitId, "baseItemMitId=", baseItemMitId ?? "(none)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
 
     const values: Record<string, any> = {
         content: content ?? "",
@@ -705,13 +737,17 @@ export async function splitPartItems(
     );
 
     const splitIdx = baseItems.findIndex((e: any) => e.values?.itemId === splitAtItemId);
-    if (splitIdx < 0) return;
+    if (splitIdx < 0) {
+        throw new Error(`splitPartItems: split item not found: ${splitAtItemId}`);
+    }
 
     const movedItems = insertBefore
         ? baseItems.slice(0, splitIdx + 1)
         : baseItems.slice(splitIdx);
 
-    if (movedItems.length === 0) return;
+    if (movedItems.length === 0) {
+        throw new Error("splitPartItems: no items selected for split");
+    }
 
     const movedItemIds = new Set(
         movedItems.map((e: any) => e.values?.itemId as string).filter(Boolean)
@@ -782,6 +818,8 @@ export type MoveItemsToPartParams = {
     paragraphByBaseItemId?: Record<string, boolean>;
     /** translations array from TOC (כולל categories/prayers/parts לכל תרגום) */
     translations: any[];
+    /** רצפל מזהי פריט במקטע היעד (תבנית אקסל) */
+    minIdBefore?: string;
 };
 
 /**
@@ -802,6 +840,7 @@ export async function moveItemsToPart(
         insertAfterItemId,
         paragraphByBaseItemId = {},
         translations,
+        minIdBefore: moveMinIdBefore,
     } = params;
 
     if (movedItemIds.length === 0) return;
@@ -828,7 +867,9 @@ export async function moveItemsToPart(
             (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, { numeric: true })
         );
 
-    if (movedEntities.length === 0) return;
+    if (movedEntities.length === 0) {
+        throw new Error("moveItemsToPart: no matching source items found for movedItemIds");
+    }
 
     // פריטי יעד של הבסיס (ללא הפריטים המועברים, למקרה עתידי של source==target)
     const rawTargetItems = await fetchPartItems(
@@ -861,7 +902,9 @@ export async function moveItemsToPart(
 
     for (const item of movedEntities) {
         const oldBaseItemId = item.values?.itemId as string;
-        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx);
+        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
+            ...(moveMinIdBefore ? { minIdBefore: moveMinIdBefore } : {}),
+        });
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
         oldToNewBaseItemId[oldBaseItemId] = newBaseItemId;
@@ -874,7 +917,7 @@ export async function moveItemsToPart(
         oldToNewBaseMitId[oldBaseItemId] = newBaseMitId;
 
         prevBaseMitId = newBaseMitId;
-        console.log("[CMS-ID] moveItemsToPart (base) | oldBaseItemId=", oldBaseItemId, "newBaseItemId=", newBaseItemId, "newBaseMitId=", newBaseMitId, "baseInsertIdx=", baseInsertIdx - 1, "wantsParagraph=", wantsParagraph);
+        cmsIdDbg("[CMS-ID] moveItemsToPart (base) | oldBaseItemId=", oldBaseItemId, "newBaseItemId=", newBaseItemId, "newBaseMitId=", newBaseMitId, "baseInsertIdx=", baseInsertIdx - 1, "wantsParagraph=", wantsParagraph);
     }
 
     const now = Date.now();
@@ -967,32 +1010,6 @@ export async function moveItemsToPart(
                 .map((e: any) => e.values?.itemId)
                 .filter((v: string | undefined) => !!v)
                 .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
-            const translationItemById = new Map<string, Entity<any>>();
-            stableTargetItems.forEach((e: any) => {
-                const id = e.values?.itemId;
-                if (id != null && id !== "") translationItemById.set(String(id), e);
-            });
-            const getPrimaryLinkedBaseId = (item: Entity<any> | undefined): string | undefined => {
-                const link = item?.values?.linkedItem;
-                if (Array.isArray(link)) return link.find((id: any) => id != null && id !== "");
-                return link != null && link !== "" ? String(link) : undefined;
-            };
-
-            // עוגן התחלתי: אחרי התרגומים שכבר מקושרים לפריט הבסיס "insertAfterItemId" אם קיים.
-            // כך נמנעים מהשוואת Number בין מרחבי IDs שונים (בסיס מול תרגום).
-            let nextInsertPos = 0;
-            if (insertAfterItemId != null && insertAfterItemId !== "") {
-                let lastLinkedPos = -1;
-                for (let i = 0; i < translationOrderedIds.length; i++) {
-                    const id = translationOrderedIds[i];
-                    const entity = translationItemById.get(id);
-                    if (getPrimaryLinkedBaseId(entity) === insertAfterItemId) {
-                        lastLinkedPos = i;
-                    }
-                }
-                nextInsertPos =
-                    lastLinkedPos >= 0 ? lastLinkedPos + 1 : translationOrderedIds.length;
-            }
 
             for (const oldBaseId of orderedOldBaseIds) {
                 const relatedItems = relatedByBaseId.get(oldBaseId) ?? [];
@@ -1002,13 +1019,18 @@ export async function moveItemsToPart(
                 const baseIsParagraph =
                     (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
 
-                console.log("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "baseIsParagraph=", baseIsParagraph);
+                cmsIdDbg("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "baseIsParagraph=", baseIsParagraph);
 
-                // שומרים על רצף ההכנסה לפי סדר ההעברה, בלי להצליב ערכים נומריים בין בסיס לתרגום.
-                let insertPos = nextInsertPos;
+                // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
+                let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
+                if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
+                translationOrderedIds.splice(baseRefPos, 0, newBaseId);
+                let insertPos = baseRefPos + 1;
 
                 for (const item of relatedItems) {
-                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos);
+                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {
+                        ...(moveMinIdBefore ? { minIdBefore: moveMinIdBefore } : {}),
+                    });
                     translationOrderedIds.splice(insertPos, 0, newTranslationItemId);
                     insertPos++;
 
@@ -1021,7 +1043,7 @@ export async function moveItemsToPart(
                         ? (oldToNewBaseMitId[oldBaseId] ?? item.values?.mit_id)
                         : newTranslationItemId;
 
-                    console.log("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
+                    cmsIdDbg("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
 
                     await dataSource.saveEntity({
                         path,
@@ -1040,7 +1062,6 @@ export async function moveItemsToPart(
                         collection: itemsCollection,
                     });
                 }
-                nextInsertPos = insertPos;
             }
         }
     }

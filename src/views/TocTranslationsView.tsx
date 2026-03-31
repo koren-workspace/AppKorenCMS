@@ -29,7 +29,8 @@ import { EditCategoryModal } from "./toc-translations/components/EditCategoryMod
 import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
 import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
-import { EditTocModal } from "./toc-translations/components/EditTocModal";
+// ─── מושבת זמנית: עריכת נוסח ב־TOC — להפעלה בטל הערות ────────────────────────
+// import { EditTocModal } from "./toc-translations/components/EditTocModal";
 import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBanner";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
@@ -52,8 +53,9 @@ export function TocTranslationsView() {
     const [editPrayerId, setEditPrayerId] = useState<string | null>(null);
     const [editCategoryModalOpen, setEditCategoryModalOpen] = useState(false);
     const [editCategoryId, setEditCategoryId] = useState<string | null>(null);
-    const [editTocModalOpen, setEditTocModalOpen] = useState(false);
-    const [editTocId, setEditTocId] = useState<string | null>(null);
+    // ─── מושבת זמנית: עריכת נוסח (מודל) — להפעלה בטל הערות ───────────────────
+    // const [editTocModalOpen, setEditTocModalOpen] = useState(false);
+    // const [editTocId, setEditTocId] = useState<string | null>(null);
 
     const allowAddPart = isBase;
     const allowAddInstruction = !isBase;
@@ -107,10 +109,11 @@ export function TocTranslationsView() {
     }) => {
         if (!editPartId) return;
         const dateSetIds = params.dateSetIds?.length ? params.dateSetIds : ["100"];
-        await nav.updatePart(editPartId, {
+        const ok = await nav.updatePart(editPartId, {
             ...params,
             dateSetIds,
         });
+        if (!ok) return;
         setEditPartModalOpen(false);
         setEditPartId(null);
         if (partEdit.selectedGroupId === editPartId) {
@@ -133,17 +136,17 @@ export function TocTranslationsView() {
         setEditPrayerModalOpen(true);
     };
 
-    const openEditTocModal = (tocId: string) => {
-        setEditTocId(tocId);
-        setEditTocModalOpen(true);
-    };
+    // const openEditTocModal = (tocId: string) => {
+    //     setEditTocId(tocId);
+    //     setEditTocModalOpen(true);
+    // };
 
-    const handleEditTocSubmit = async (params: { nusach: string }) => {
-        if (!editTocId) return;
-        await nav.updateToc(editTocId, params);
-        setEditTocModalOpen(false);
-        setEditTocId(null);
-    };
+    // const handleEditTocSubmit = async (params: { nusach: string }) => {
+    //     if (!editTocId) return;
+    //     await nav.updateToc(editTocId, params);
+    //     setEditTocModalOpen(false);
+    //     setEditTocId(null);
+    // };
 
     const openEditCategoryModal = (categoryId: string) => {
         setEditCategoryId(categoryId);
@@ -207,7 +210,7 @@ export function TocTranslationsView() {
     const hasTranslationSelection =
         !!nav.selectedTocId && nav.selectedTranslationIndex != null;
 
-    /** כל הפריטים שמקושרים לפריט הבסיס – מכל התרגומים (להצגה במודל הוספת תרגום) */
+    /** כל הפריטים שמקושרים לפריט הבסיס – מכל התרגומים (להצגה במודל הוספת תרגום לפריט בודד) */
     const addTranslationExistingLinked = (() => {
         const item = partEdit.addTranslationBaseItem;
         if (!item || !partEdit.enhancements) return [];
@@ -238,19 +241,24 @@ export function TocTranslationsView() {
             />
             <div className="flex flex-1 min-h-0 gap-1">
             {/* עמודה 1–2: בחירת נוסח (TOC) ותרגום */}
+            {/*
+              מושבת זמנית: ניהול נוסח/תרגום שלמים בעמודות 1–2 (הוספת נוסח, עריכת נוסח, מחיקה,
+              הוספת/מחיקת תרגום לרשימת התרגומים). הוספת תרגום *לפריט בודד* נשארת פעילה מעמודת העריכה.
+              להפעלה בטל הערות וחבר:
+              onAddToc={nav.addToc}
+              onEditToc={openEditTocModal}
+              onDeleteToc={nav.deleteToc}
+              onAddTranslation={nav.addTranslation}
+              getSuggestedTranslationId={nav.getSuggestedTranslationId}
+              onDeleteTranslation={nav.deleteTranslation}
+            */}
             <TocAndTranslationColumns
                 tocItems={nav.tocItems}
                 selectedTocId={nav.selectedTocId}
                 onSelectToc={withUnsavedCheck(nav.onSelectToc)}
-                onAddToc={nav.addToc}
-                onEditToc={openEditTocModal}
-                onDeleteToc={nav.deleteToc}
                 translations={nav.currentTocData?.translations ?? []}
                 selectedTranslationIndex={nav.selectedTranslationIndex}
                 onSelectTranslation={withUnsavedCheck(nav.onSelectTranslation)}
-                onAddTranslation={nav.addTranslation}
-                getSuggestedTranslationId={nav.getSuggestedTranslationId}
-                onDeleteTranslation={nav.deleteTranslation}
                 isSaving={nav.isSaving}
             />
             {/* עמודה 3–5: קטגוריה → תפילה → מקטע; בחירת מקטע טוענת את הפריטים */}
@@ -399,7 +407,8 @@ export function TocTranslationsView() {
                 saving={partEdit.saving}
                 onOpenDateSetIdConfig={partEdit.openDateSetIdModalForAddTranslation}
             />
-            {/* מודל עריכת נוסח */}
+            {/*
+            מושבת זמנית: מודל עריכת נוסח — להפעלה בטל הערות ושחזר state/handlers למעלה
             <EditTocModal
                 open={editTocModalOpen}
                 onClose={() => { setEditTocModalOpen(false); setEditTocId(null); }}
@@ -414,6 +423,7 @@ export function TocTranslationsView() {
                 onSubmit={handleEditTocSubmit}
                 saving={nav.isSaving}
             />
+            */}
             {/* מודל הוספת קטגוריה */}
             <AddCategoryModal
                 open={addCategoryModalOpen}

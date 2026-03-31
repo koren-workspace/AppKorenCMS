@@ -20,38 +20,15 @@ import {
 import { baseColl, dbUpdateTimeCollection } from "../collections";
 import { appendChangeLog } from "../services/changeLogService";
 import { updatePartMetadataInItems } from "../services/partEditService";
+import {
+    allocateIdWithCollision,
+    allocateNewCategoryId,
+    allocateNewPartId,
+    allocateNewPrayerId,
+    resolveDigitMillions,
+} from "../utils/nusachIdPolicy";
 
 const LOG_PREFIX = "[TocTranslations]";
-
-/** מרווח ברירת מחדל כשאין "אחרי" (הוספה בסוף) או אין "לפני" (הוספה בהתחלה) */
-const DEFAULT_ID_GAP = 10;
-
-/**
- * מחשב ID חדש בין idBefore ל-idAfter (חצי ביניהם).
- * אם יש רק לפני – מחזיר לפני + GAP (הוספה בסוף).
- * אם יש רק אחרי – מחזיר אחרי − GAP (הוספה בהתחלה).
- * אם אין אף אחד – מחזיר ערך התחלתי.
- */
-function midIdBetween(
-    idBefore: string | null | undefined,
-    idAfter: string | null | undefined
-): string {
-    const before = idBefore != null ? Number(idBefore) : NaN;
-    const after = idAfter != null ? Number(idAfter) : NaN;
-    let result: string;
-    if (!Number.isNaN(before) && !Number.isNaN(after)) {
-        const mid = (before + after) / 2;
-        result = mid === Math.floor(mid) ? String(Math.floor(mid)) : String(mid);
-    } else if (!Number.isNaN(before)) {
-        result = String(before + DEFAULT_ID_GAP);
-    } else if (!Number.isNaN(after)) {
-        result = String(after - DEFAULT_ID_GAP);
-    } else {
-        result = "1000000";
-    }
-    console.log("[CMS-ID] midIdBetween (prayer) | idBefore=", idBefore ?? "(empty)", "idAfter=", idAfter ?? "(empty)", "=> result=", result);
-    return result;
-}
 
 export function useTocNavigation() {
     const dataSource = useDataSource();
@@ -140,7 +117,19 @@ export function useTocNavigation() {
     const addToc = async (nusachName: string) => {
         const name = nusachName?.trim();
         if (!name) return;
-        const newId = name.replace(/\s+/g, "_");
+        const baseId = name.replace(/\s+/g, "_");
+        const existingIds = new Set(tocItems.map((t) => t.id));
+        let newId = baseId;
+        let suffix = 2;
+        while (existingIds.has(newId)) {
+            newId = `${baseId}_${suffix}`;
+            suffix += 1;
+            if (suffix > 10000) {
+                newId = `${baseId}_${Date.now()}`;
+                break;
+            }
+        }
+        const idAdjusted = newId !== baseId;
         const values = {
             nusach: name,
             timestamp: Date.now(),
@@ -163,7 +152,12 @@ export function useTocNavigation() {
                 details: { newTocId: newId, nusachName: name },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "נוסח חדש נוצר בהצלחה" });
+            snackbar.open({
+                type: "success",
+                message: idAdjusted
+                    ? `נוסח חדש נוצר (מזהה מסמך: ${newId} – נוסף סיומת כי המזהה המנורמל כבר היה בשימוש)`
+                    : "נוסח חדש נוצר בהצלחה",
+            });
             setTocItems((prev) => [...prev, saved]);
             setSelectedTocId(newId);
             setSelectedTranslationIndex(null);
@@ -289,11 +283,24 @@ export function useTocNavigation() {
         });
         const allCategories = trans.categories ?? [];
         const categoryIds = allCategories.map((c: any) => c.id).filter(Boolean);
-        const maxId = allCategories.length
-            ? Math.max(0, ...allCategories.map((c: any) => Number(c.id) || 0))
-            : 0;
-        const newCategoryId = String(maxId + 10);
-        console.log("[CMS-ID] addCategory | existingCategoryIds=", categoryIds, "maxId=", maxId, "afterCategoryId=", afterCategoryId ?? "(none)", "=> newCategoryId=", newCategoryId);
+        const baseTrans = (currentTocData.translations ?? []).find((t: any) =>
+            String(t.translationId ?? "").startsWith("0-")
+        );
+        const digitM = resolveDigitMillions(baseTrans ?? trans, tocId);
+        const newCategoryId = allocateIdWithCollision(
+            allocateNewCategoryId(categoryIds.map(String), digitM),
+            new Set(categoryIds.map(String))
+        );
+        console.log(
+            "[CMS-ID] addCategory | digitM=",
+            digitM,
+            "existingCategoryIds=",
+            categoryIds,
+            "afterCategoryId=",
+            afterCategoryId ?? "(none)",
+            "=> newCategoryId=",
+            newCategoryId
+        );
         const insertAt = (cats: any[], t: any) => {
             const catObj = {
                 ...getCategoryForTranslation(t.translationId ?? ""),
@@ -502,21 +509,31 @@ export function useTocNavigation() {
                 const prayersPath = `translations/${tid}/prayers`;
                 for (const prayerId of prayerIds) {
                     const itemsPath = `${prayersPath}/${prayerId}/items`;
-                    try {
-                        const itemsList = await dataSource.fetchCollection({
-                            path: itemsPath,
-                            collection: baseColl,
+                    const itemsList = await dataSource.fetchCollection({
+                        path: itemsPath,
+                        collection: baseColl,
+                    });
+                    for (const item of itemsList) {
+                        await dataSource.saveEntity({
+                            path: item.path,
+                            entityId: item.id,
+                            values: { ...item.values, deleted: true, timestamp: Date.now() },
+                            status: "existing",
                         });
-                        for (const item of itemsList) await dataSource.saveEntity({ path: item.path, entityId: item.id, values: { ...item.values, deleted: true, timestamp: Date.now() }, status: "existing" });
-                    } catch (_) {}
-                    try {
-                        const prayersList = await dataSource.fetchCollection({
-                            path: prayersPath,
-                            collection: baseColl,
+                    }
+                    const prayersList = await dataSource.fetchCollection({
+                        path: prayersPath,
+                        collection: baseColl,
+                    });
+                    const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                    if (prayerEntity) {
+                        await dataSource.saveEntity({
+                            path: prayerEntity.path,
+                            entityId: prayerEntity.id,
+                            values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
+                            status: "existing",
                         });
-                        const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
-                        if (prayerEntity) await dataSource.saveEntity({ path: prayerEntity.path, entityId: prayerEntity.id, values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() }, status: "existing" });
-                    } catch (_) {}
+                    }
                 }
             }
             await dataSource.saveEntity({
@@ -617,7 +634,10 @@ export function useTocNavigation() {
                         allPrayerIds.push(e.id);
                     }
                 });
-            } catch (_) {}
+            } catch (err) {
+                console.error(`${LOG_PREFIX} Add prayer: failed to load existing prayer IDs`, err);
+                throw err;
+            }
         }
         if (nextId == null && afterId != null) {
             const afterNum = Number(afterId);
@@ -626,11 +646,15 @@ export function useTocNavigation() {
                 .sort((a, b) => Number(a) - Number(b))[0];
             if (nextInCollection != null) nextId = nextInCollection;
         }
-        let newPrayerId = midIdBetween(afterId ?? null, nextId ?? null);
-        const initialPrayerId = newPrayerId;
-        while (existingIds.has(newPrayerId)) {
-            newPrayerId = String((Number(newPrayerId) || 0) + 1);
-        }
+        const digitPray = resolveDigitMillions(baseTrans ?? trans, selectedTocId!);
+        const candidatePrayer = allocateNewPrayerId(
+            afterId ?? null,
+            nextId ?? null,
+            allPrayerIds,
+            digitPray
+        );
+        let newPrayerId = allocateIdWithCollision(candidatePrayer, existingIds);
+        const initialPrayerId = candidatePrayer;
         if (initialPrayerId !== newPrayerId) {
             console.log("[CMS-ID] addPrayer | afterId=", afterId ?? "(none)", "nextId=", nextId ?? "(none)", "existingIds.count=", existingIds.size, "initialPrayerId=", initialPrayerId, "=> newPrayerId=", newPrayerId, "(collision resolved)");
         }
@@ -798,6 +822,32 @@ export function useTocNavigation() {
         setIsSaving(true);
         setSavingMessage("מעדכן תפילה...");
         try {
+            const translationsToUpdate = targetTranslationId
+                ? currentTocData.translations.filter((t: any) => t.translationId === targetTranslationId)
+                : currentTocData.translations;
+
+            for (const t of translationsToUpdate ?? []) {
+                const tId = t?.translationId;
+                if (!tId) continue;
+                const typeName = tId === `1-${tocId}` ? nameEn : nameHe;
+                const prayersPath = `translations/${tId}/prayers`;
+                const prayersList = await dataSource.fetchCollection({
+                    path: prayersPath,
+                    collection: baseColl,
+                });
+                const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                if (prayerEntity) {
+                    const pathToUse = (prayerEntity as any).path ?? prayersPath;
+                    await dataSource.saveEntity({
+                        path: pathToUse,
+                        entityId: prayerEntity.id,
+                        values: { ...prayerEntity.values, type: typeName, timestamp: Date.now() },
+                        status: "existing",
+                        collection: baseColl,
+                    });
+                }
+            }
+
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
@@ -812,34 +862,6 @@ export function useTocNavigation() {
                         : t
                 )
             );
-
-            const translationsToUpdate = targetTranslationId
-                ? currentTocData.translations.filter((t: any) => t.translationId === targetTranslationId)
-                : currentTocData.translations;
-
-            for (const t of translationsToUpdate ?? []) {
-                const tId = t?.translationId;
-                if (!tId) continue;
-                const typeName = tId === `1-${tocId}` ? nameEn : nameHe;
-                const prayersPath = `translations/${tId}/prayers`;
-                try {
-                    const prayersList = await dataSource.fetchCollection({
-                        path: prayersPath,
-                        collection: baseColl,
-                    });
-                    const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
-                    if (prayerEntity) {
-                        const pathToUse = (prayerEntity as any).path ?? prayersPath;
-                        await dataSource.saveEntity({
-                            path: pathToUse,
-                            entityId: prayerEntity.id,
-                            values: { ...prayerEntity.values, type: typeName, timestamp: Date.now() },
-                            status: "existing",
-                            collection: baseColl,
-                        });
-                    }
-                } catch (_) {}
-            }
 
             appendChangeLog({
                 timestamp: Date.now(),
@@ -926,21 +948,31 @@ export function useTocNavigation() {
                 if (!tid) continue;
                 const prayersPath = `translations/${tid}/prayers`;
                 const itemsPath = `${prayersPath}/${prayerId}/items`;
-                try {
-                    const itemsList = await dataSource.fetchCollection({
-                        path: itemsPath,
-                        collection: baseColl,
+                const itemsList = await dataSource.fetchCollection({
+                    path: itemsPath,
+                    collection: baseColl,
+                });
+                for (const item of itemsList) {
+                    await dataSource.saveEntity({
+                        path: item.path,
+                        entityId: item.id,
+                        values: { ...item.values, deleted: true, timestamp: Date.now() },
+                        status: "existing",
                     });
-                    for (const item of itemsList) await dataSource.saveEntity({ path: item.path, entityId: item.id, values: { ...item.values, deleted: true, timestamp: Date.now() }, status: "existing" });
-                } catch (_) {}
-                try {
-                    const prayersList = await dataSource.fetchCollection({
-                        path: prayersPath,
-                        collection: baseColl,
+                }
+                const prayersList = await dataSource.fetchCollection({
+                    path: prayersPath,
+                    collection: baseColl,
+                });
+                const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                if (prayerEntity) {
+                    await dataSource.saveEntity({
+                        path: prayerEntity.path,
+                        entityId: prayerEntity.id,
+                        values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
+                        status: "existing",
                     });
-                    const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
-                    if (prayerEntity) await dataSource.saveEntity({ path: prayerEntity.path, entityId: prayerEntity.id, values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() }, status: "existing" });
-                } catch (_) {}
+                }
             }
             await dataSource.saveEntity({
                 path: "toc",
@@ -1158,17 +1190,26 @@ export function useTocNavigation() {
             return [];
         };
 
-        // חישוב newPartId מהתרגום הבסיסי (0-*) – מקטע חדש = max + 10
         const baseTrans = currentTocData.translations.find((t: any) =>
             String(t.translationId ?? "").startsWith("0-")
         ) ?? trans;
         const allParts = getParts(baseTrans);
         const partIds = allParts.map((p: any) => p.id).filter(Boolean);
-        const maxId = allParts.length
-            ? Math.max(0, ...allParts.map((p: any) => Number(p.id) || 0))
-            : 0;
-        const newPartId = String(maxId + 10);
-        console.log("[CMS-ID] addPart | selectedPrayerId=", selectedPrayerId, "existingPartIds=", partIds, "maxId=", maxId, "afterPartId=", afterPartId ?? "(none)", "=> newPartId=", newPartId);
+        const digitPart = resolveDigitMillions(baseTrans, selectedTocId!);
+        const candidatePart = allocateNewPartId(allParts, afterPartId, digitPart);
+        const newPartId = allocateIdWithCollision(candidatePart, new Set(partIds.map(String)));
+        console.log(
+            "[CMS-ID] addPart | digitM=",
+            digitPart,
+            "selectedPrayerId=",
+            selectedPrayerId,
+            "existingPartIds=",
+            partIds,
+            "afterPartId=",
+            afterPartId ?? "(none)",
+            "=> newPartId=",
+            newPartId
+        );
 
         // בסיס המקטע החדש עם שדות תצוגה
         const basePart = {
@@ -1266,7 +1307,7 @@ export function useTocNavigation() {
             hazan?: boolean | null;
             minyan?: boolean | null;
         }
-    ) => {
+    ): Promise<boolean> => {
         if (
             !selectedTocId ||
             selectedTranslationIndex == null ||
@@ -1274,7 +1315,7 @@ export function useTocNavigation() {
             !selectedPrayerId ||
             !currentTocData?.translations?.length
         )
-            return;
+            return false;
         const tocId = selectedTocId;
         const tid = currentTranslationData?.translationId ?? "";
         const isBase = String(tid).startsWith("0-");
@@ -1304,14 +1345,14 @@ export function useTocNavigation() {
         } else if (!isBase && params.name != null) {
             targetTranslationId = tid;
             const currPart = getExistingPart(currentTranslationData);
-            if (!currPart) return;
+            if (!currPart) return false;
             nameHe = params.name;
             nameEn = params.name;
             dateSetIds = currPart.dateSetIds ?? ["100"];
             hazan = currPart.hazan ?? null;
             minyan = currPart.minyan ?? null;
         } else {
-            return;
+            return false;
         }
 
         const getPartForTranslation = (translationId: string) => {
@@ -1384,9 +1425,11 @@ export function useTocNavigation() {
                 savedToFirestore: true,
             });
             snackbar.open({ type: "success", message: "המקטע עודכן" });
+            return true;
         } catch (err) {
             console.error(`${LOG_PREFIX} Update part failed`, err);
             snackbar.open({ type: "error", message: "שגיאה בעדכון המקטע" });
+            return false;
         } finally {
             setIsSaving(false);
             setSavingMessage(null);
@@ -1507,21 +1550,19 @@ export function useTocNavigation() {
                 const tid = t.translationId;
                 if (!tid) continue;
                 const itemsPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
-                try {
-                    const itemsList = await dataSource.fetchCollection({
-                        path: itemsPath,
-                        collection: baseColl,
-                        filter: { partId: ["==", partId] },
+                const itemsList = await dataSource.fetchCollection({
+                    path: itemsPath,
+                    collection: baseColl,
+                    filter: { partId: ["==", partId] },
+                });
+                for (const item of itemsList) {
+                    await dataSource.saveEntity({
+                        path: item.path,
+                        entityId: item.id,
+                        values: { ...item.values, deleted: true, timestamp: Date.now() },
+                        status: "existing",
                     });
-                    for (const item of itemsList) {
-                        await dataSource.saveEntity({
-                            path: item.path,
-                            entityId: item.id,
-                            values: { ...item.values, deleted: true, timestamp: Date.now() },
-                            status: "existing",
-                        });
-                    }
-                } catch (_) {}
+                }
             }
             await dataSource.saveEntity({
                 path: "toc",

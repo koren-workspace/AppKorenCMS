@@ -11,7 +11,7 @@
  * (הקשר הניווט הנוכחי – נדרש לבניית paths ולטעינה).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Entity, useDataSource, useSnackbarController } from "@firecms/core";
 import {
     fetchPartWithEnhancements,
@@ -27,6 +27,7 @@ import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
 import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import { itemMinIdBefore, resolveDigitMillions } from "../utils/nusachIdPolicy";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
 import { defaultAddParagraphForm, type AddParagraphFormValues } from "../components/AddParagraphModal";
@@ -192,6 +193,23 @@ export function usePartEdit(context: PartEditContext) {
         nextFirstItemId?: string;
         nextFirstMitId?: string;
     }>({});
+
+    const baseTranslationForPolicy = useMemo(
+        () =>
+            currentTocData?.translations?.find((t: any) =>
+                String(t?.translationId ?? "").startsWith("0-")
+            ),
+        [currentTocData]
+    );
+    const digitMillionsForPolicy = useMemo(
+        () => resolveDigitMillions(baseTranslationForPolicy, selectedTocId ?? ""),
+        [baseTranslationForPolicy, selectedTocId]
+    );
+    const itemMinBeforeForSelectedPart = useMemo(
+        () =>
+            selectedGroupId ? itemMinIdBefore(digitMillionsForPolicy, selectedGroupId) : undefined,
+        [digitMillionsForPolicy, selectedGroupId]
+    );
     const [enhancements, setEnhancements] = useState<
         Record<string, Entity<any>[]>
     >({});
@@ -226,6 +244,9 @@ export function usePartEdit(context: PartEditContext) {
     /** לקריאה בעת השלמת lookup אסינכרוני – state ב-closure עלול להיות מיושן */
     const pendingParagraphSheetsWritesRef = useRef<PendingParagraphSheetsWrite[]>([]);
     pendingParagraphSheetsWritesRef.current = pendingParagraphSheetsWrites;
+
+    /** מונע מרוץ בטעינת מקטע: תשובה מאיחור ממקטע קודם לא דורסת את המקטע הנוכחי */
+    const partFetchGenRef = useRef(0);
 
     /** כשפותחים מודל dateSetId מתוך הוספת פריט – שומרים את סוג ההוספה (part/instruction) */
     const [addItemDateSetIdSource, setAddItemDateSetIdSource] = useState<"part" | "instruction" | null>(null);
@@ -360,6 +381,7 @@ export function usePartEdit(context: PartEditContext) {
     ) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData)
             return;
+        const fetchGen = ++partFetchGenRef.current;
         const preserveEdits =
             options?.preserveLocalEdits === true && partId === selectedGroupId;
         const savedChangedIds = preserveEdits ? new Set(changedIds) : new Set<string>();
@@ -397,6 +419,8 @@ export function usePartEdit(context: PartEditContext) {
                     ? fetchPartItems(dataSource, translationId, selectedPrayerId, nextPartId)
                     : Promise.resolve([] as Entity<any>[]),
             ]);
+
+            if (fetchGen !== partFetchGenRef.current) return;
 
             // חישוב גבולות מהפריטים שנטענו
             const bounds: typeof neighborBounds = {};
@@ -500,13 +524,14 @@ export function usePartEdit(context: PartEditContext) {
                 setOriginalEnhancementValues(origEnhMap);
             }
         } catch (err) {
+            if (fetchGen !== partFetchGenRef.current) return;
             console.error(`${LOG_PREFIX} Part fetch failed`, err);
             snackbar.open({
                 type: "error",
                 message: "שגיאה בטעינת נתונים",
             });
         } finally {
-            setLoading(false);
+            if (fetchGen === partFetchGenRef.current) setLoading(false);
         }
     };
 
@@ -999,6 +1024,15 @@ export function usePartEdit(context: PartEditContext) {
             idAfter = neighborBounds.nextFirstMitId;
         }
 
+        if (
+            (idBefore == null || idBefore === "") &&
+            (idAfter === undefined || idAfter === null || idAfter === "") &&
+            selectedGroupId &&
+            selectedTocId
+        ) {
+            idBefore = itemMinIdBefore(digitMillionsForPolicy, selectedGroupId);
+        }
+
         let result = idBetween(idBefore ?? undefined, idAfter ?? undefined);
         const takenMitIds = new Set<string>(
             [
@@ -1044,18 +1078,29 @@ export function usePartEdit(context: PartEditContext) {
     };
 
     /**
-     * מחשב itemId לפריט חדש במיקום index.
-     * אחרי הפרדת טווחים לפי תרגום אין צורך למזג IDs של כל ה-enhancements מכל התרגומים;
-     * החישוב מתבסס על שכנים ברשימה הנוכחית + neighborBounds + מזהים שנמחקו/בהמתנה למחיקה.
+     * מחשב itemId לפריט חדש במיקום index. לוקח בחשבון שכנים מהרשימה + פריטי תרגום מקושרים (enhancements).
      * confirmUserWantsDecimalId – נקרא כשאין מקום שלם בין שני מספרים צמודים, שואל האם ליצור מזהה .5.
      */
     const computeItemIdForIndex = (index: number, confirmUserWantsDecimalId?: () => boolean): string => {
         const orderedItemIds = allItems.map((i) => getItemIdInCurrentContext(i));
+        const allEnhancements = Object.values(enhancements).flat() as Entity<any>[];
+        const linkedIdsPerPosition = allItems.map((item) => {
+            const positionId = getItemIdForPosition(item);
+            if (!positionId) return [];
+            return allEnhancements
+                .filter((e) => {
+                    const link = e.values?.linkedItem;
+                    const baseId = Array.isArray(link) ? link[0] : link;
+                    return baseId === positionId;
+                })
+                .map((e) => (e.id && /^\d+$/.test(String(e.id)) ? String(e.id) : (e.values?.itemId ?? "")))
+                .filter((id) => id != null && id !== "");
+        });
 
         let nextFirstItemId = neighborBounds.nextFirstItemId;
         if (!nextFirstItemId && baseItems.length > 0 && index >= allItems.length) {
-            const baseIds = orderedItemIds.filter(Boolean);
-            const maxAbove = baseIds.length > 0 ? baseIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
+            const allIds = [...orderedItemIds.filter(Boolean), ...linkedIdsPerPosition.flat()];
+            const maxAbove = allIds.length > 0 ? allIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
             if (maxAbove) nextFirstItemId = getNextBaseItemIdAfter(maxAbove) ?? undefined;
         }
 
@@ -1066,6 +1111,8 @@ export function usePartEdit(context: PartEditContext) {
                 ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
             ],
             confirmUserWantsDecimalId,
+            linkedIdsPerPosition,
+            ...(itemMinBeforeForSelectedPart ? { minIdBefore: itemMinBeforeForSelectedPart } : {}),
         });
     };
 
@@ -1097,7 +1144,11 @@ export function usePartEdit(context: PartEditContext) {
             newBaseItemId = computeItemIdForInsert(
                 orderedIdsWithoutMoved,
                 newIndex,
-                { neighborBounds, extraTakenIds }
+                {
+                    neighborBounds,
+                    extraTakenIds,
+                    ...(itemMinBeforeForSelectedPart ? { minIdBefore: itemMinBeforeForSelectedPart } : {}),
+                }
             );
         } catch (e) {
             if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
@@ -1111,10 +1162,13 @@ export function usePartEdit(context: PartEditContext) {
         }
 
         const prevMitId = prev ? getEffectiveMitId(prev) : null;
+        const movedMitBefore = getEffectiveMitId(moved);
+        /** המשך פסקה: אותו mit_id כמו השורה שמעל במיקום החדש (בלי window.confirm). אם לא — mit_id חדש = itemId. */
         const isPartOfParagraph =
-            prev != null
-                ? window.confirm("האם הפריט שהוזז הוא חלק מהפסקה של הפריט שלפניו במיקום החדש?")
-                : false;
+            prev != null &&
+            prevMitId != null &&
+            String(prevMitId).trim() !== "" &&
+            String(movedMitBefore) === String(prevMitId);
         const newBaseMitId =
             isPartOfParagraph && prevMitId != null && String(prevMitId).trim() !== ""
                 ? String(prevMitId)
@@ -1172,7 +1226,9 @@ export function usePartEdit(context: PartEditContext) {
                 .forEach((enh: any) => {
                     let newEnhItemId = newBaseItemId;
                     try {
-                        newEnhItemId = computeItemIdForInsert(enhOrderedIds, enhInsertPos);
+                        newEnhItemId = computeItemIdForInsert(enhOrderedIds, enhInsertPos, {
+                            ...(itemMinBeforeForSelectedPart ? { minIdBefore: itemMinBeforeForSelectedPart } : {}),
+                        });
                     } catch {
                         newEnhItemId = enhOrderedIds[enhInsertPos - 1] ?? newBaseItemId;
                     }
@@ -1682,6 +1738,20 @@ export function usePartEdit(context: PartEditContext) {
         if (!selectedGroupId || !selectedPrayerId || !selectedTocId || !currentTranslationData?.translationId) return;
 
         const { splitAtItemId, newPartNameHe, newPartNameEn, newPartDateSetIds, newPartHazan, newPartMinyan, insertBefore } = params;
+        const sourceItems = await fetchPartItems(
+            dataSource,
+            currentTranslationData.translationId,
+            selectedPrayerId,
+            selectedGroupId
+        );
+        const hasSplitItem = sourceItems.some((e) => String(e.values?.itemId ?? "") === splitAtItemId);
+        if (!hasSplitItem) {
+            snackbar.open({
+                type: "warning",
+                message: "לא נמצא פריט חתך במקטע, הפיצול לא בוצע",
+            });
+            return;
+        }
 
         // tocId נגזר ממזהה התרגום הנוכחי: "0-ashkenaz" → "ashkenaz"
         const tocId = selectedTocId;
@@ -1746,7 +1816,14 @@ export function usePartEdit(context: PartEditContext) {
             await fetchItemsWithEnhancements(selectedGroupId);
         } catch (err) {
             console.error(`${LOG_PREFIX} Split part failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה בפיצול המקטע" });
+            const msg = err instanceof Error ? err.message : "";
+            if (msg.includes("splitPartItems: split item not found")) {
+                snackbar.open({ type: "warning", message: "לא נמצא פריט חתך במקטע, הפיצול לא בוצע" });
+            } else if (msg.includes("splitPartItems: no items selected for split")) {
+                snackbar.open({ type: "warning", message: "לא נמצאו פריטים להעברה בפיצול" });
+            } else {
+                snackbar.open({ type: "error", message: "שגיאה בפיצול המקטע" });
+            }
         } finally {
             setSaving(false);
         }
@@ -1803,6 +1880,7 @@ export function usePartEdit(context: PartEditContext) {
                 insertAfterItemId,
                 paragraphByBaseItemId,
                 translations: currentTocData?.translations ?? [],
+                minIdBefore: itemMinIdBefore(digitMillionsForPolicy, targetPartId),
             });
 
             appendChangeLog({
@@ -1831,7 +1909,12 @@ export function usePartEdit(context: PartEditContext) {
             await fetchItemsWithEnhancements(selectedGroupId);
         } catch (err) {
             console.error(`${LOG_PREFIX} Move items to part failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה בהעברת הפריטים" });
+            const msg = err instanceof Error ? err.message : "";
+            if (msg.includes("moveItemsToPart: no matching source items found for movedItemIds")) {
+                snackbar.open({ type: "warning", message: "לא נמצאו פריטים תואמים להעברה, הפעולה לא בוצעה" });
+            } else {
+                snackbar.open({ type: "error", message: "שגיאה בהעברת הפריטים" });
+            }
         } finally {
             setSaving(false);
         }
@@ -1973,6 +2056,7 @@ export function usePartEdit(context: PartEditContext) {
                     afterItemId: addTranslationInsertAfterId,
                     baseItemIdsInPartOrder,
                     currentBaseRowIndex,
+                    minIdBefore: itemMinBeforeForSelectedPart,
                     content: translationContent,
                     type: form.type ?? "body",
                     titleType: form.titleType,

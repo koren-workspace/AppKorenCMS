@@ -139,6 +139,33 @@ describe("partEditService – עדכון פריטים (savePartItems)", () => {
             expect(saveEntity.mock.calls[i][0].values.content).toBe(`תוכן ${i + 1}`);
         });
     });
+
+    it("פריט new_* בלי itemId תקף – זורק לפני saveEntity", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const dataSource = {
+            fetchCollection: vi.fn(),
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        await expect(
+            savePartItems(dataSource, {
+                path: basePath,
+                changedIds: ["new_abc"],
+                localValues: {},
+            })
+        ).rejects.toThrow("savePartItems: new item missing valid itemId");
+
+        await expect(
+            savePartItems(dataSource, {
+                path: basePath,
+                changedIds: ["new_abc"],
+                localValues: { new_abc: { content: "x", partId: "p1" } },
+            })
+        ).rejects.toThrow("savePartItems: new item missing valid itemId");
+
+        expect(saveEntity).not.toHaveBeenCalled();
+    });
 });
 
 describe("partEditService – מחיקות (deletePartItemAndRelatedTranslations)", () => {
@@ -271,6 +298,58 @@ describe("partEditService – מחיקות (deletePartItemAndRelatedTranslations
         expect(saveEntity).toHaveBeenCalledTimes(1);
         expect(saveEntity.mock.calls[0][0].values.deleted).toBe(true);
     });
+
+    it("כשמחיקת תרגום מקושר אחת נכשלת – מנסים את כולן ואז נזרקת שגיאת מצטברת", async () => {
+        const relatedOk = {
+            id: "item_ok",
+            path: "translations/0-sefard/prayers/p1/items",
+            values: { linkedItem: ["item_200"], itemId: "item_ok" },
+        };
+        const relatedFail = {
+            id: "item_bad",
+            path: "translations/0-sefard/prayers/p1/items",
+            values: { linkedItem: ["item_200"], itemId: "item_bad" },
+        };
+        const fetchCollection = vi.fn().mockResolvedValue([relatedOk, relatedFail]);
+        const saveEntity = vi.fn().mockImplementation((opts: any) => {
+            if (opts.entityId === "item_bad") {
+                return Promise.reject(new Error("network"));
+            }
+            return Promise.resolve(undefined);
+        });
+        const dataSource = {
+            fetchCollection,
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        const itemEntity = {
+            id: "item_200",
+            path: "translations/0-ashkenaz/prayers/p1/items",
+            values: { content: "בסיס", itemId: "item_200", partId: "part1" },
+        };
+
+        const params: DeletePartItemParams = {
+            itemEntity: itemEntity as any,
+            itemId: "item_200",
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p1",
+            translations: [
+                { translationId: "0-ashkenaz" },
+                { translationId: "0-sefard" },
+            ],
+        };
+
+        await expect(
+            deletePartItemAndRelatedTranslations(dataSource, params)
+        ).rejects.toThrow(/deletePartItemAndRelatedTranslations/);
+
+        expect(saveEntity).toHaveBeenCalledTimes(3);
+        const savedIds = saveEntity.mock.calls.map((c: any) => c[0].entityId);
+        expect(savedIds).toContain("item_200");
+        expect(savedIds).toContain("item_ok");
+        expect(savedIds).toContain("item_bad");
+    });
 });
 
 // ─── splitPartItems ───────────────────────────────────────────────────────────
@@ -402,6 +481,32 @@ describe("partEditService – splitPartItems", () => {
         // הפריט הבסיסי מקבל שם עברי
         const baseCall = ds.saveEntity.mock.calls.find((c: any) => c[0].entityId === "e1")?.[0];
         expect(baseCall?.values.partName).toBe("חדש");
+    });
+
+    it("זורק שגיאה כשפריט החתך לא נמצא", async () => {
+        const items = [
+            { id: "e1", values: { itemId: "1", partId: "p1" } },
+            { id: "e2", values: { itemId: "2", partId: "p1" } },
+        ];
+        const ds = makeDataSource(items);
+
+        const params: SplitPartItemsParams = {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "prayer1",
+            tocId: "ashkenaz",
+            currentPartId: "p1",
+            splitAtItemId: "999",
+            insertBefore: false,
+            newPartId: "p2",
+            newPartNameHe: "חדש",
+            newPartNameEn: "New",
+            translations: [{ translationId: "0-ashkenaz" }],
+        };
+
+        await expect(splitPartItems(ds as any, params)).rejects.toThrow(
+            "splitPartItems: split item not found: 999"
+        );
+        expect(ds.saveEntity).not.toHaveBeenCalled();
     });
 });
 
@@ -576,5 +681,39 @@ describe("partEditService – moveItemsToPart", () => {
             expect(c.values.mit_id).toBe("100"); // הבסיס חלק מפסקה -> אותו mit_id לתרגומים
             expect(c.values.itemId).not.toBe("1100"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
         });
+    });
+
+    it("זורק שגיאה כשאין התאמה בין movedItemIds לפריטי המקור", async () => {
+        const srcBase = { id: "b1", values: { itemId: "10", mit_id: "10", partId: "src" } };
+        const translations = [
+            {
+                translationId: "0-ashkenaz",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "יעד" }] }] }],
+            },
+        ];
+        const ds = {
+            fetchCollection: vi.fn().mockImplementation(({ filter }: any) => {
+                const pid = filter?.partId?.[1];
+                if (pid === "src") return Promise.resolve([srcBase]);
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const params: MoveItemsToPartParams = {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            movedItemIds: ["999"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: null,
+            translations,
+        };
+
+        await expect(moveItemsToPart(ds as any, params)).rejects.toThrow(
+            "moveItemsToPart: no matching source items found for movedItemIds"
+        );
+        expect(ds.saveEntity).not.toHaveBeenCalled();
     });
 });

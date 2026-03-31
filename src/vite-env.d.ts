@@ -10,4 +10,6 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_MEASUREMENT_ID: string;
   readonly VITE_GOOGLE_SHEETS_SPREADSHEET_ID: string;
   readonly VITE_GOOGLE_SHEETS_SHEET_NAME?: string;
+  /** true = לוגי itemId מפורטים בקונסולה (itemUtils / חלק מ-partEditService) */
+  readonly VITE_DEBUG_CMS_ITEM_IDS?: string;
 }

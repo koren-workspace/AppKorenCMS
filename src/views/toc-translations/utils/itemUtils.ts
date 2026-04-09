@@ -158,21 +158,32 @@ function computeBoundsFromOrderedList(
     let idBeforeSource = "";
     let idAfterSource = "";
 
+    cmsIdLog(`${ID_LOG_PREFIX}   ┌─ computeBoundsFromOrderedList ─┐`);
+    cmsIdLog(`${ID_LOG_PREFIX}   │ מצב: ${linkedIdsPerPosition ? "עם linkedIdsPerPosition" : "פשוט (ללא linked)"}`);
+
     if (linkedIdsPerPosition) {
         const above: string[] = [];
         for (let i = 0; i < insertIndex; i++) {
             const id = orderedItemIds[i];
-            if (id) above.push(id);
             const linked = linkedIdsPerPosition[i];
-            if (linked) for (const lid of linked) if (lid) above.push(lid);
+            const posIds: string[] = [];
+            if (id) { above.push(id); posIds.push(id); }
+            if (linked) for (const lid of linked) if (lid) { above.push(lid); posIds.push(lid); }
+            if (posIds.length > 0)
+                cmsIdLog(`${ID_LOG_PREFIX}   │ מעל [${i}]: בסיס=${id ?? "(ריק)"} linked=[${linked?.join(",") ?? ""}] → [${posIds.join(",")}]`);
         }
         const below: string[] = [];
         for (let i = insertIndex; i < orderedItemIds.length; i++) {
             const id = orderedItemIds[i];
-            if (id) below.push(id);
             const linked = linkedIdsPerPosition[i];
-            if (linked) for (const lid of linked) if (lid) below.push(lid);
+            const posIds: string[] = [];
+            if (id) { below.push(id); posIds.push(id); }
+            if (linked) for (const lid of linked) if (lid) { below.push(lid); posIds.push(lid); }
+            if (posIds.length > 0)
+                cmsIdLog(`${ID_LOG_PREFIX}   │ מתחת [${i}]: בסיס=${id ?? "(ריק)"} linked=[${linked?.join(",") ?? ""}] → [${posIds.join(",")}]`);
         }
+        cmsIdLog(`${ID_LOG_PREFIX}   │ סה"כ מעל: ${above.length} IDs [${above.length <= 20 ? above.join(",") : above.slice(0, 10).join(",") + "..."}]`);
+        cmsIdLog(`${ID_LOG_PREFIX}   │ סה"כ מתחת: ${below.length} IDs [${below.length <= 20 ? below.join(",") : below.slice(0, 10).join(",") + "..."}]`);
         if (above.length > 0) {
             idBefore = above.reduce((a, b) => (Number(a) >= Number(b) ? a : b));
             idBeforeSource = `MAX מעל insertIndex (בסיס+מקושרים): [${above.join(",")}] → ${idBefore}`;
@@ -186,19 +197,26 @@ function computeBoundsFromOrderedList(
             if (orderedItemIds[i]) {
                 idBefore = orderedItemIds[i];
                 idBeforeSource = `שכן ישיר מעל: orderedItemIds[${i}]=${idBefore}`;
+                cmsIdLog(`${ID_LOG_PREFIX}   │ שכן מעל: סורק מ-[${insertIndex - 1}] ← מצא ב-[${i}]=${idBefore}`);
                 break;
             }
         }
+        if (!idBefore) cmsIdLog(`${ID_LOG_PREFIX}   │ שכן מעל: לא נמצא (insertIndex=${insertIndex})`);
         for (let i = insertIndex; i < orderedItemIds.length; i++) {
             if (orderedItemIds[i]) {
                 idAfter = orderedItemIds[i];
                 idAfterSource = `שכן ישיר מתחת: orderedItemIds[${i}]=${idAfter}`;
+                cmsIdLog(`${ID_LOG_PREFIX}   │ שכן מתחת: סורק מ-[${insertIndex}] → מצא ב-[${i}]=${idAfter}`);
                 break;
             }
         }
+        if (!idAfter) cmsIdLog(`${ID_LOG_PREFIX}   │ שכן מתחת: לא נמצא`);
         if (!idBefore && idBeforeSource === "") idBeforeSource = "(אין)";
         if (!idAfter && idAfterSource === "") idAfterSource = "(אין)";
     }
+
+    cmsIdLog(`${ID_LOG_PREFIX}   │ תוצאה: idBefore=${idBefore ?? "(ריק)"} idAfter=${idAfter ?? "(ריק)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}   └──────────────────────────────────┘`);
 
     return { idBefore, idAfter, idBeforeSource, idAfterSource };
 }
@@ -207,31 +225,51 @@ function applyNeighborBoundsFallback(
     b: InsertBoundsState,
     neighborBounds: InsertNeighborBounds | undefined
 ): void {
+    cmsIdLog(`${ID_LOG_PREFIX}   [שלב 2: neighborBounds fallback] neighborBounds=${neighborBounds ? JSON.stringify(neighborBounds) : "(לא סופק)"}`);
     if (b.idBefore == null && neighborBounds?.prevLastItemId) {
         b.idBefore = neighborBounds.prevLastItemId;
-        cmsIdLog(`${ID_LOG_PREFIX}   idBefore (fallback מ-neighborBounds.prevLastItemId): ${b.idBefore}`);
+        cmsIdLog(`${ID_LOG_PREFIX}     ✓ idBefore היה ריק → עדכון מ-prevLastItemId: ${b.idBefore}`);
+    } else if (b.idBefore == null) {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ idBefore ריק ואין prevLastItemId – נשאר ריק`);
+    } else {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ idBefore כבר מוגדר (${b.idBefore}) – ללא שינוי`);
     }
     if (b.idAfter == null && neighborBounds?.nextFirstItemId) {
         b.idAfter = neighborBounds.nextFirstItemId;
-        cmsIdLog(`${ID_LOG_PREFIX}   idAfter (fallback מ-neighborBounds.nextFirstItemId): ${b.idAfter}`);
+        cmsIdLog(`${ID_LOG_PREFIX}     ✓ idAfter היה ריק → עדכון מ-nextFirstItemId: ${b.idAfter}`);
+    } else if (b.idAfter == null) {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ idAfter ריק ואין nextFirstItemId – נשאר ריק`);
+    } else {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ idAfter כבר מוגדר (${b.idAfter}) – ללא שינוי`);
     }
 }
 
 function applyMinIdBeforeConstraint(b: InsertBoundsState, minIdBefore: string | undefined): void {
-    if (minIdBefore == null || minIdBefore === "") return;
+    cmsIdLog(`${ID_LOG_PREFIX}   [שלב 3: minIdBefore] minIdBefore=${minIdBefore ?? "(לא סופק)"}`);
+    if (minIdBefore == null || minIdBefore === "") {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ לא סופק – דילוג`);
+        return;
+    }
     const minNum = Number(minIdBefore);
-    if (Number.isNaN(minNum)) return;
+    if (Number.isNaN(minNum)) {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ ערך לא מספרי (${minIdBefore}) – דילוג`);
+        return;
+    }
     const beforeNum = b.idBefore != null && b.idBefore !== "" ? Number(b.idBefore) : NaN;
     if (Number.isNaN(beforeNum) || beforeNum < minNum) {
         cmsIdLog(
-            `${ID_LOG_PREFIX}   אילוץ minIdBefore=${minIdBefore}: idBefore היה ${b.idBefore ?? "(ריק)"} → מעדכן ל-${minIdBefore}`
+            `${ID_LOG_PREFIX}     ✓ idBefore היה ${b.idBefore ?? "(ריק)"} (${Number.isNaN(beforeNum) ? "ריק" : beforeNum + " < " + minNum}) → מעדכן ל-${minIdBefore}`
         );
         b.idBefore = minIdBefore;
+    } else {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ idBefore (${beforeNum}) >= minIdBefore (${minNum}) – ללא שינוי`);
     }
     const afterNum = b.idAfter != null && b.idAfter !== "" ? Number(b.idAfter) : NaN;
     if (!Number.isNaN(afterNum) && afterNum <= minNum) {
-        cmsIdLog(`${ID_LOG_PREFIX}   אילוץ minIdBefore: idAfter=${b.idAfter} <= minIdBefore → מאפסים idAfter`);
+        cmsIdLog(`${ID_LOG_PREFIX}     ✓ idAfter=${b.idAfter} <= minIdBefore(${minNum}) → מאפסים idAfter`);
         b.idAfter = null;
+    } else {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ idAfter (${b.idAfter ?? "ריק"}) ${!Number.isNaN(afterNum) ? `> minIdBefore(${minNum})` : "ריק"} – ללא שינוי`);
     }
 }
 
@@ -239,41 +277,66 @@ function applyNextBaseLinkedCap(
     b: InsertBoundsState,
     nextBaseLinkedMinItemId: string | undefined
 ): void {
-    if (nextBaseLinkedMinItemId == null || nextBaseLinkedMinItemId === "") return;
+    cmsIdLog(`${ID_LOG_PREFIX}   [שלב 4: nextBaseLinkedMinItemId cap] nextBaseLinkedMinItemId=${nextBaseLinkedMinItemId ?? "(לא סופק)"}`);
+    if (nextBaseLinkedMinItemId == null || nextBaseLinkedMinItemId === "") {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ לא סופק – דילוג`);
+        return;
+    }
     const capNum = Number(nextBaseLinkedMinItemId);
-    if (Number.isNaN(capNum)) return;
+    if (Number.isNaN(capNum)) {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ ערך לא מספרי (${nextBaseLinkedMinItemId}) – דילוג`);
+        return;
+    }
     const beforeNum = b.idBefore != null && b.idBefore !== "" ? Number(b.idBefore) : NaN;
     if (Number.isNaN(beforeNum) || capNum > beforeNum) {
         if (b.idAfter == null || b.idAfter === "") {
+            const oldAfter = b.idAfter;
             b.idAfter = nextBaseLinkedMinItemId;
             b.idAfterSource = `nextBaseLinkedMinItemId (אין שכן מתחת): ${b.idAfter}`;
+            cmsIdLog(`${ID_LOG_PREFIX}     ✓ idAfter היה ${oldAfter ?? "(ריק)"} → עדכון ל-${b.idAfter} (אין שכן מתחת, capNum ${capNum} > idBefore ${beforeNum})`);
         } else {
             const afterNum = Number(b.idAfter);
             if (!Number.isNaN(afterNum) && capNum < afterNum) {
+                const oldAfter = b.idAfter;
                 b.idAfter = nextBaseLinkedMinItemId;
                 b.idAfterSource = `MIN(שכן מתחת, nextBaseLinkedMinItemId) → ${b.idAfter}`;
+                cmsIdLog(`${ID_LOG_PREFIX}     ✓ capNum(${capNum}) < idAfter(${afterNum}) → idAfter עודכן מ-${oldAfter} ל-${b.idAfter}`);
+            } else {
+                cmsIdLog(`${ID_LOG_PREFIX}     ─ capNum(${capNum}) >= idAfter(${b.idAfter}) – ללא שינוי`);
             }
         }
+    } else {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ capNum(${capNum}) <= idBefore(${beforeNum}) – ללא שינוי`);
     }
 }
 
 function bumpIdBeforeFromExtraInGap(b: InsertBoundsState, extraTakenIds: string[] | undefined): void {
-    if (!extraTakenIds || extraTakenIds.length === 0) return;
+    cmsIdLog(`${ID_LOG_PREFIX}   [שלב 5: bumpIdBefore מ-extraTakenIds] extraTakenIds=${extraTakenIds?.length ? `[${extraTakenIds.length} IDs: ${extraTakenIds.length <= 20 ? extraTakenIds.join(",") : extraTakenIds.slice(0, 10).join(",") + "..."}]` : "(ריק)"}`);
+    if (!extraTakenIds || extraTakenIds.length === 0) {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ אין extraTakenIds – דילוג`);
+        return;
+    }
     const beforeNum = b.idBefore != null && b.idBefore !== "" ? Number(b.idBefore) : -Infinity;
     const afterNum = b.idAfter != null && b.idAfter !== "" ? Number(b.idAfter) : Infinity;
+    cmsIdLog(`${ID_LOG_PREFIX}     תחום חיפוש: (${beforeNum === -Infinity ? "-∞" : beforeNum}, ${afterNum === Infinity ? "∞" : afterNum})`);
+    const inGap: string[] = [];
     let maxInZone = -Infinity;
     for (const id of extraTakenIds) {
         const n = Number(id);
-        if (!Number.isNaN(n) && n > beforeNum && n < afterNum && n > maxInZone) {
-            maxInZone = n;
+        if (!Number.isNaN(n) && n > beforeNum && n < afterNum) {
+            inGap.push(id);
+            if (n > maxInZone) maxInZone = n;
         }
     }
     if (maxInZone > -Infinity) {
         const newIdBefore = String(maxInZone);
+        cmsIdLog(`${ID_LOG_PREFIX}     IDs בתחום: [${inGap.join(",")}] → MAX=${maxInZone}`);
         cmsIdLog(
-            `${ID_LOG_PREFIX}   extraTakenIds: מעדכן idBefore מ-${b.idBefore ?? "(ריק)"} ל-${newIdBefore} (MAX של extraTakenIds בתחום (${b.idBefore ?? "-∞"}, ${b.idAfter ?? "∞"}))`
+            `${ID_LOG_PREFIX}     ✓ מעדכן idBefore מ-${b.idBefore ?? "(ריק)"} ל-${newIdBefore}`
         );
         b.idBefore = newIdBefore;
+    } else {
+        cmsIdLog(`${ID_LOG_PREFIX}     ─ אין IDs בתחום – ללא שינוי`);
     }
 }
 
@@ -363,22 +426,42 @@ export function computeItemIdForInsert(
         confirmUserWantsDecimalId,
     } = options ?? {};
 
-    cmsIdLog(`${ID_LOG_PREFIX} ═══ computeItemIdForInsert (כניסה) ═══`);
-    cmsIdLog(`${ID_LOG_PREFIX}   קלט: orderedItemIds=${JSON.stringify(orderedItemIds)} (אורך ${orderedItemIds.length}) insertIndex=${insertIndex}`);
-    cmsIdLog(`${ID_LOG_PREFIX}   אופציות: linkedIdsPerPosition=${linkedIdsPerPosition ? `כן (${linkedIdsPerPosition.length} עמדות)` : "לא"} neighborBounds=${neighborBounds ? JSON.stringify(neighborBounds) : "(לא)"} extraTakenIds=${extraTakenIds?.length ? JSON.stringify(extraTakenIds) : "(לא)"} minIdBefore=${minIdBefore ?? "(לא)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX} ╔═══════════════════════════════════════════════════════════╗`);
+    cmsIdLog(`${ID_LOG_PREFIX} ║  computeItemIdForInsert – התחלה                          ║`);
+    cmsIdLog(`${ID_LOG_PREFIX} ╚═══════════════════════════════════════════════════════════╝`);
+    cmsIdLog(`${ID_LOG_PREFIX}   קלט: orderedItemIds=${orderedItemIds.length <= 20 ? JSON.stringify(orderedItemIds) : `[${orderedItemIds.length} IDs: ${orderedItemIds.slice(0, 8).join(",")}...]`} (אורך ${orderedItemIds.length}) insertIndex=${insertIndex}`);
+    cmsIdLog(`${ID_LOG_PREFIX}   אופציות:`);
+    cmsIdLog(`${ID_LOG_PREFIX}     linkedIdsPerPosition: ${linkedIdsPerPosition ? `כן (${linkedIdsPerPosition.length} עמדות)` : "לא"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}     neighborBounds: ${neighborBounds ? JSON.stringify(neighborBounds) : "(לא סופק)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}     extraTakenIds: ${extraTakenIds?.length ? `[${extraTakenIds.length} IDs${extraTakenIds.length <= 15 ? ": " + extraTakenIds.join(",") : ""}]` : "(לא סופק)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}     minIdBefore: ${minIdBefore ?? "(לא סופק)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}     nextBaseLinkedMinItemId: ${nextBaseLinkedMinItemId ?? "(לא סופק)"}`);
 
+    cmsIdLog(`${ID_LOG_PREFIX}   [שלב 1: חישוב גבולות מהרשימה]`);
     const b = computeBoundsFromOrderedList(orderedItemIds, insertIndex, linkedIdsPerPosition);
-    cmsIdLog(`${ID_LOG_PREFIX}   idBefore: ${b.idBeforeSource || "(ריק)"} → ${b.idBefore ?? "(ריק)"}`);
-    cmsIdLog(`${ID_LOG_PREFIX}   idAfter:  ${b.idAfterSource || "(ריק)"} → ${b.idAfter ?? "(ריק)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}   → idBefore: ${b.idBeforeSource || "(ריק)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}   → idAfter:  ${b.idAfterSource || "(ריק)"}`);
 
     applyNeighborBoundsFallback(b, neighborBounds);
-    applyMinIdBeforeConstraint(b, minIdBefore);
-    applyNextBaseLinkedCap(b, nextBaseLinkedMinItemId);
-    bumpIdBeforeFromExtraInGap(b, extraTakenIds);
+    cmsIdLog(`${ID_LOG_PREFIX}   ── מצב אחרי שלב 2: idBefore=${b.idBefore ?? "(ריק)"} idAfter=${b.idAfter ?? "(ריק)"}`);
 
+    applyMinIdBeforeConstraint(b, minIdBefore);
+    cmsIdLog(`${ID_LOG_PREFIX}   ── מצב אחרי שלב 3: idBefore=${b.idBefore ?? "(ריק)"} idAfter=${b.idAfter ?? "(ריק)"}`);
+
+    applyNextBaseLinkedCap(b, nextBaseLinkedMinItemId);
+    cmsIdLog(`${ID_LOG_PREFIX}   ── מצב אחרי שלב 4: idBefore=${b.idBefore ?? "(ריק)"} idAfter=${b.idAfter ?? "(ריק)"}`);
+
+    bumpIdBeforeFromExtraInGap(b, extraTakenIds);
+    cmsIdLog(`${ID_LOG_PREFIX}   ── מצב אחרי שלב 5: idBefore=${b.idBefore ?? "(ריק)"} idAfter=${b.idAfter ?? "(ריק)"}`);
+
+    cmsIdLog(`${ID_LOG_PREFIX}   [שלב 6: בניית takenIds + חישוב מספר סופי]`);
     const takenIds = buildTakenIdsForInsert(orderedItemIds, linkedIdsPerPosition, extraTakenIds);
     const result = computeNextAvailableItemId(b.idBefore, b.idAfter, takenIds, { confirmUserWantsDecimalId });
-    cmsIdLog(`${ID_LOG_PREFIX} ═══ computeItemIdForInsert תוצאה: ${result} ═══`);
+
+    cmsIdLog(`${ID_LOG_PREFIX} ╔═══════════════════════════════════════════════════════════╗`);
+    cmsIdLog(`${ID_LOG_PREFIX} ║  תוצאה סופית: ${result.padEnd(42)} ║`);
+    cmsIdLog(`${ID_LOG_PREFIX} ║  (idBefore=${(b.idBefore ?? "ריק").padEnd(12)} idAfter=${(b.idAfter ?? "ריק").padEnd(12)})      ║`);
+    cmsIdLog(`${ID_LOG_PREFIX} ╚═══════════════════════════════════════════════════════════╝`);
     return result;
 }
 

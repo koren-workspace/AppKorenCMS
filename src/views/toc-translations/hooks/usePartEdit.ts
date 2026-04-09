@@ -39,7 +39,11 @@ import {
     type ParagraphLookupResult,
     type SaveParagraphToSheetsParams,
 } from "../services/googleSheetsService";
-import { cmsSimpleBaseIntervalEnabled } from "../utils/debugFlags";
+import { cmsSimpleBaseIntervalEnabled, cmsDebugItemIdsEnabled } from "../utils/debugFlags";
+
+function cmsIdDbg(...args: unknown[]) {
+    if (cmsDebugItemIdsEnabled()) console.log(...args);
+}
 
 /** הקשר הניווט – מועבר מ-useTocNavigation כדי לדעת איזה תרגום/תפילה נבחרו */
 export type PartEditContext = {
@@ -1083,11 +1087,17 @@ export function usePartEdit(context: PartEditContext) {
      * confirmUserWantsDecimalId – נקרא כשאין מקום שלם בין שני מספרים צמודים, שואל האם ליצור מזהה .5.
      */
     const computeItemIdForIndex = (index: number, confirmUserWantsDecimalId?: () => boolean): string => {
+        cmsIdDbg("[CMS-ID] ▶▶▶ computeItemIdForIndex – התחלה | index=", index, "allItems.length=", allItems.length, "baseItems.length=", baseItems.length);
+
         const orderedItemIds = allItems.map((i) => getItemIdInCurrentContext(i));
+        cmsIdDbg("[CMS-ID]   orderedItemIds=", orderedItemIds.length <= 20 ? JSON.stringify(orderedItemIds) : `[${orderedItemIds.length} IDs: ${orderedItemIds.slice(0, 8).join(",")}...]`);
+
         const allEnhancements = Object.values(enhancements).flat() as Entity<any>[];
+        cmsIdDbg("[CMS-ID]   enhancements: סה\"כ=", allEnhancements.length, "IDs=", allEnhancements.length <= 20 ? allEnhancements.map((e) => e.id ?? e.values?.itemId ?? "?").join(",") : `[${allEnhancements.length} פריטים]`);
+
         const simpleBaseIntervalEnabled = cmsSimpleBaseIntervalEnabled();
-        // מסלול פשוט: מספיק "חלון" של שורת הבסיס שמעל נקודת ההכנסה (base + linked),
-        // בהנחה שהאינווריאנט B_i < linked(B_i) < B_{i+1} נשמר.
+        cmsIdDbg("[CMS-ID]   simpleBaseIntervalEnabled=", simpleBaseIntervalEnabled);
+
         const getLinkedIdsForPositionId = (positionId: string): string[] =>
             allEnhancements
                 .filter((e) => {
@@ -1109,8 +1119,9 @@ export function usePartEdit(context: PartEditContext) {
             if (!prevPositionId) return [];
             return getLinkedIdsForPositionId(prevPositionId);
         });
-        // הערות/פריטים לא-מקושרים (ללא linkedItem) עדיין תופסים מקום על ציר ה-IDs.
-        // לכן מכניסים אותם כ-gap blockers כדי שלא יוקצה ID "דרכם".
+        const linkedNonEmpty = linkedIdsPerPosition.map((ids, i) => ids.length > 0 ? `[${i}]=[${ids.join(",")}]` : null).filter(Boolean);
+        cmsIdDbg("[CMS-ID]   linkedIdsPerPosition: עמדות עם linked=", linkedNonEmpty.length, linkedNonEmpty.length <= 15 ? linkedNonEmpty.join(" ") : `[${linkedNonEmpty.length} עמדות]`);
+
         const unlinkedEnhancementIds =
             baseItems.length > 0
                 ? allEnhancements
@@ -1124,9 +1135,15 @@ export function usePartEdit(context: PartEditContext) {
                       )
                       .filter((id) => id != null && id !== "")
                 : [];
+        if (unlinkedEnhancementIds.length > 0)
+            cmsIdDbg("[CMS-ID]   unlinkedEnhancementIds (gap blockers)=", JSON.stringify(unlinkedEnhancementIds));
 
         let nextFirstItemId = neighborBounds.nextFirstItemId;
+        cmsIdDbg("[CMS-ID]   neighborBounds=", JSON.stringify(neighborBounds));
+        cmsIdDbg("[CMS-ID]   nextFirstItemId (מ-neighborBounds)=", nextFirstItemId ?? "(ריק)");
+
         if (!nextFirstItemId && baseItems.length > 0 && index >= allItems.length) {
+            cmsIdDbg("[CMS-ID]   → nextFirstItemId ריק + הוספה בסוף → חישוב מ-getNextBaseItemIdAfter");
             const allIds = simpleBaseIntervalEnabled
                 ? (() => {
                       const lastIndex = allItems.length - 1;
@@ -1144,19 +1161,30 @@ export function usePartEdit(context: PartEditContext) {
                   ];
             const maxAbove =
                 allIds.length > 0 ? allIds.reduce((a, b) => (Number(a) >= Number(b) ? a : b)) : null;
-            if (maxAbove) nextFirstItemId = getNextBaseItemIdAfter(maxAbove) ?? undefined;
+            cmsIdDbg("[CMS-ID]   maxAbove=", maxAbove ?? "(אין)");
+            if (maxAbove) {
+                nextFirstItemId = getNextBaseItemIdAfter(maxAbove) ?? undefined;
+                cmsIdDbg("[CMS-ID]   getNextBaseItemIdAfter(", maxAbove, ") →", nextFirstItemId ?? "(אין)");
+            }
         }
+
+        const extraTakenIds = [
+            ...deletedIdsFromServer.itemIds,
+            ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
+            ...unlinkedEnhancementIds,
+        ];
+        cmsIdDbg("[CMS-ID]   extraTakenIds: deletedFromServer=", deletedIdsFromServer.itemIds.length, "pendingDeletes=", pendingDeletes.length, "unlinked=", unlinkedEnhancementIds.length, "סה\"כ=", extraTakenIds.length);
+
+        const isNewPrayer = allItems.length === 0 && !neighborBounds.prevLastItemId && !nextFirstItemId;
+        cmsIdDbg("[CMS-ID]   itemMinBeforeForSelectedPart=", itemMinBeforeForSelectedPart ?? "(ריק)", "isNewPrayer=", isNewPrayer);
+        cmsIdDbg("[CMS-ID]   → קריאה ל-computeItemIdForInsert...");
 
         return computeItemIdForInsert(orderedItemIds, index, {
             neighborBounds: { prevLastItemId: neighborBounds.prevLastItemId, nextFirstItemId },
-            extraTakenIds: [
-                ...deletedIdsFromServer.itemIds,
-                ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
-                ...unlinkedEnhancementIds,
-            ],
+            extraTakenIds,
             confirmUserWantsDecimalId,
             linkedIdsPerPosition,
-            ...(itemMinBeforeForSelectedPart ? { minIdBefore: itemMinBeforeForSelectedPart } : {}),
+            ...(isNewPrayer && itemMinBeforeForSelectedPart ? { minIdBefore: itemMinBeforeForSelectedPart } : {}),
         });
     };
 
@@ -1191,7 +1219,6 @@ export function usePartEdit(context: PartEditContext) {
                 {
                     neighborBounds,
                     extraTakenIds,
-                    ...(itemMinBeforeForSelectedPart ? { minIdBefore: itemMinBeforeForSelectedPart } : {}),
                 }
             );
         } catch (e) {
@@ -1270,9 +1297,7 @@ export function usePartEdit(context: PartEditContext) {
                 .forEach((enh: any) => {
                     let newEnhItemId = newBaseItemId;
                     try {
-                        newEnhItemId = computeItemIdForInsert(enhOrderedIds, enhInsertPos, {
-                            ...(itemMinBeforeForSelectedPart ? { minIdBefore: itemMinBeforeForSelectedPart } : {}),
-                        });
+                        newEnhItemId = computeItemIdForInsert(enhOrderedIds, enhInsertPos, {});
                     } catch {
                         newEnhItemId = enhOrderedIds[enhInsertPos - 1] ?? newBaseItemId;
                     }
@@ -1923,7 +1948,6 @@ export function usePartEdit(context: PartEditContext) {
                 insertAfterItemId,
                 paragraphByBaseItemId,
                 translations: currentTocData?.translations ?? [],
-                minIdBefore: itemMinIdBefore(digitMillionsForPolicy, targetPartId),
             });
 
             appendChangeLog({

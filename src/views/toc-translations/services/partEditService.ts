@@ -465,6 +465,11 @@ export async function createTranslationItem(
     } = params;
 
     const path = `translations/${targetTranslationId}/prayers/${selectedPrayerId}/items`;
+    cmsIdDbg("[CMS-ID] ▶▶▶ createTranslationItem – התחלה");
+    cmsIdDbg("[CMS-ID]   targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId);
+    cmsIdDbg("[CMS-ID]   baseItemId=", baseItemId, "afterItemId=", afterItemId ?? "(ריק)", "minIdBefore=", minIdBeforeParam ?? "(ריק)");
+    cmsIdDbg("[CMS-ID]   path=", path);
+
     const [partEntities, neighborItemBounds] = await Promise.all([
         dataSource.fetchCollection({
             path,
@@ -479,11 +484,15 @@ export async function createTranslationItem(
         }),
     ]);
 
+    cmsIdDbg("[CMS-ID]   partEntities נטענו: סה\"כ=", partEntities.length);
+    cmsIdDbg("[CMS-ID]   neighborItemBounds=", JSON.stringify(neighborItemBounds));
+
     const deletedItemIds: string[] = partEntities
         .filter((e: any) => e.values?.deleted === true)
         .map((e: any) => e.values?.itemId)
         .filter((id: any) => id != null && String(id).trim() !== "")
         .map((id: any) => String(id));
+    cmsIdDbg("[CMS-ID]   deletedItemIds=", deletedItemIds.length > 0 ? JSON.stringify(deletedItemIds) : "(אין)");
 
     const allItems = partEntities
         .filter((e: any) => e.values?.deleted !== true)
@@ -495,6 +504,8 @@ export async function createTranslationItem(
     const orderedItemIds = allItems.map((e: any) =>
         e.values?.itemId != null && e.values?.itemId !== "" ? String(e.values.itemId) : ""
     );
+    cmsIdDbg("[CMS-ID]   allItems (לא deleted, ממוין):", allItems.length, "פריטים");
+    cmsIdDbg("[CMS-ID]   orderedItemIds=", orderedItemIds.length <= 20 ? JSON.stringify(orderedItemIds) : `[${orderedItemIds.length} IDs: ${orderedItemIds.slice(0, 8).join(",")}...]`);
 
     const idNorm = (v: unknown) =>
         v != null && String(v).trim() !== "" ? String(v).trim() : "";
@@ -547,6 +558,8 @@ export async function createTranslationItem(
     };
 
     tryAnchorFromPriorBaseRows();
+    cmsIdDbg("[CMS-ID]   baseKey=", baseKey, "afterKey (אחרי tryAnchor)=", afterKey ?? "(ריק)", "curBaseIdx=", curBaseIdx);
+    cmsIdDbg("[CMS-ID]   rawItemRow (baseItemIdsInPartOrder)=", rawItemRow.length <= 20 ? JSON.stringify(rawItemRow) : `[${rawItemRow.length} IDs]`);
 
     /** סימטריה לסריקה אחורה: מינימום itemId בין תרגומי שורת הבסיס הבאה (לפי סדר שורות) שיש לה תרגומים — כבסיס ל-idAfter. */
     const nextBaseLinkedMinForInsert = ((): string | undefined => {
@@ -579,43 +592,52 @@ export async function createTranslationItem(
         return Number(baseCap) <= Number(linkedCap) ? baseCap : linkedCap;
     })();
 
+    cmsIdDbg("[CMS-ID]   nextBaseLinkedMinForInsert=", nextBaseLinkedMinForInsert ?? "(ריק)");
+    cmsIdDbg("[CMS-ID]   nextBaseItemIdForInsert=", nextBaseItemIdForInsert ?? "(ריק)");
+    cmsIdDbg("[CMS-ID]   nextUpperCapForInsert=", nextUpperCapForInsert ?? "(ריק)");
+
     let insertIndex: number;
     if (afterKey == null) {
         const linkedToBase = allItems.filter((e: any) => linksToBaseItemId(e, baseKey));
         if (linkedToBase.length > 0) {
-            // allItems ממוין לפי itemId — האחרון הוא המקסימום; מוסיפים אחרי כל התרגומים לבסיס הזה, לא לפני הראשון
             const lastLinked = linkedToBase[linkedToBase.length - 1];
             const lastIdx = allItems.findIndex((e: any) => e.id === lastLinked.id);
             insertIndex = lastIdx >= 0 ? lastIdx + 1 : allItems.length;
+            cmsIdDbg("[CMS-ID]   insertIndex: afterKey=null, linkedToBase=", linkedToBase.length, "→ אחרי אחרון (idx=", lastIdx, ") → insertIndex=", insertIndex);
         } else {
             insertIndex = 0;
+            cmsIdDbg("[CMS-ID]   insertIndex: afterKey=null, אין פריטים מקושרים ל-baseKey → insertIndex=0");
         }
     } else {
         let inAll = allItems.findIndex(
             (e: any) => idNorm(e.values?.itemId ?? e.id) === afterKey
         );
         if (inAll < 0) {
+            cmsIdDbg("[CMS-ID]   afterKey=", afterKey, "לא נמצא ב-allItems → מנסה tryAnchorFromPriorBaseRows");
             afterKey = null;
             tryAnchorFromPriorBaseRows();
             if (afterKey != null && afterKey !== "") {
                 inAll = allItems.findIndex(
                     (e: any) => idNorm(e.values?.itemId ?? e.id) === afterKey
                 );
+                cmsIdDbg("[CMS-ID]   afterKey חדש מ-tryAnchor=", afterKey, "inAll=", inAll);
             }
         }
         insertIndex = inAll >= 0 ? inAll + 1 : allItems.length;
+        cmsIdDbg("[CMS-ID]   insertIndex: afterKey=", afterKey, "inAll=", inAll, "→ insertIndex=", insertIndex);
     }
 
-    // כמו בבסיס: קודם גבול ממקטע הבא באותו תרגום; אם אין (אין מקטע הבא / ריק) – תורן ל-fetch כל התפילה
     let nextFirstFromPrayer: string | undefined;
     if (
         insertIndex >= orderedItemIds.length &&
         neighborItemBounds.nextFirstItemId == null
     ) {
+        cmsIdDbg("[CMS-ID]   הוספה בסוף + אין nextFirstItemId ממקטע סמוך → fetch כל התפילה");
         const allPrayerItems = await dataSource.fetchCollection({
             path,
             collection: itemsCollection,
         });
+        cmsIdDbg("[CMS-ID]   allPrayerItems=", allPrayerItems.length, "פריטים בתפילה");
         const laterIds = allPrayerItems
             .filter((e: any) => e.values?.deleted !== true)
             .map((e: any) => e.values?.itemId)
@@ -625,6 +647,9 @@ export async function createTranslationItem(
         if (laterIds.length > 0) {
             laterIds.sort((a: string, b: string) => Number(a) - Number(b));
             nextFirstFromPrayer = laterIds[0];
+            cmsIdDbg("[CMS-ID]   laterIds (> baseItemId", baseItemId, "):", laterIds.length, "→ nextFirstFromPrayer=", nextFirstFromPrayer);
+        } else {
+            cmsIdDbg("[CMS-ID]   אין IDs מאוחרים מ-baseItemId=", baseItemId, "בכל התפילה");
         }
     }
 
@@ -633,6 +658,10 @@ export async function createTranslationItem(
         nextFirstItemId:
             neighborItemBounds.nextFirstItemId ?? nextFirstFromPrayer ?? undefined,
     };
+    const isNewPrayer = orderedItemIds.length === 0 && !neighborBoundsForInsert.prevLastItemId && !neighborBoundsForInsert.nextFirstItemId;
+    cmsIdDbg("[CMS-ID]   neighborBoundsForInsert=", JSON.stringify(neighborBoundsForInsert));
+    cmsIdDbg("[CMS-ID]   isNewPrayer=", isNewPrayer, "(orderedItemIds.length=", orderedItemIds.length, "prevLast=", neighborBoundsForInsert.prevLastItemId ?? "ריק", "nextFirst=", neighborBoundsForInsert.nextFirstItemId ?? "ריק", ")");
+    cmsIdDbg("[CMS-ID]   → קריאה ל-computeItemIdForInsert: orderedItemIds=", orderedItemIds.length, "insertIndex=", insertIndex, "extraTakenIds(deleted)=", deletedItemIds.length, "nextUpperCap=", nextUpperCapForInsert ?? "(ריק)", "minIdBefore=", isNewPrayer ? (minIdBeforeParam ?? "(ריק)") : "(לא רלוונטי – יש פריטים/שכנים)");
 
     const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
         confirmUserWantsDecimalId,
@@ -641,7 +670,7 @@ export async function createTranslationItem(
         ...(nextUpperCapForInsert != null
             ? { nextBaseLinkedMinItemId: nextUpperCapForInsert }
             : {}),
-        ...(minIdBeforeParam ? { minIdBefore: minIdBeforeParam } : {}),
+        ...(isNewPrayer && minIdBeforeParam ? { minIdBefore: minIdBeforeParam } : {}),
     });
 
     // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
@@ -656,7 +685,10 @@ export async function createTranslationItem(
     } else {
         newMitId = newItemId;
     }
-    cmsIdDbg("[CMS-ID] createTranslationItem | targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId, "baseItemId=", baseItemId, "afterItemId=", afterItemId, "insertIndex=", insertIndex, "orderedItemIds=", orderedItemIds, "=> newItemId=", newItemId, "newMitId=", newMitId, "baseItemMitId=", baseItemMitId ?? "(none)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
+    cmsIdDbg("[CMS-ID] ◀◀◀ createTranslationItem – תוצאה סופית:");
+    cmsIdDbg("[CMS-ID]   newItemId=", newItemId, "newMitId=", newMitId);
+    cmsIdDbg("[CMS-ID]   baseItemMitId=", baseItemMitId ?? "(ריק)", "baseIsPartOfParagraph=", baseIsPartOfParagraph, "isStartOfParagraph=", isStartOfParagraph);
+    cmsIdDbg("[CMS-ID]   mit_id חישוב:", baseIsPartOfParagraph ? "בסיס חלק מפסקה → mit_id=baseItemMitId" : isStartOfParagraph && baseItemMitId != null ? "תחילת פסקה → mit_id=baseItemMitId" : "רגיל → mit_id=newItemId");
 
     const values: Record<string, any> = {
         content: content ?? "",
@@ -833,8 +865,6 @@ export type MoveItemsToPartParams = {
     paragraphByBaseItemId?: Record<string, boolean>;
     /** translations array from TOC (כולל categories/prayers/parts לכל תרגום) */
     translations: any[];
-    /** רצפל מזהי פריט במקטע היעד (תבנית אקסל) */
-    minIdBefore?: string;
 };
 
 /**
@@ -855,7 +885,6 @@ export async function moveItemsToPart(
         insertAfterItemId,
         paragraphByBaseItemId = {},
         translations,
-        minIdBefore: moveMinIdBefore,
     } = params;
 
     if (movedItemIds.length === 0) return;
@@ -917,9 +946,7 @@ export async function moveItemsToPart(
 
     for (const item of movedEntities) {
         const oldBaseItemId = item.values?.itemId as string;
-        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
-            ...(moveMinIdBefore ? { minIdBefore: moveMinIdBefore } : {}),
-        });
+        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {});
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
         oldToNewBaseItemId[oldBaseItemId] = newBaseItemId;
@@ -1043,9 +1070,7 @@ export async function moveItemsToPart(
                 let insertPos = baseRefPos + 1;
 
                 for (const item of relatedItems) {
-                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {
-                        ...(moveMinIdBefore ? { minIdBefore: moveMinIdBefore } : {}),
-                    });
+                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {});
                     translationOrderedIds.splice(insertPos, 0, newTranslationItemId);
                     insertPos++;
 

@@ -480,7 +480,7 @@ export function useTocNavigation() {
         }
     };
 
-    /** מוחק קטגוריה: רק בנוסח הבסיסי (0-*). מוציא את הקטגוריה מכל התרגומים ב-TOC ומוחק מסמכי תפילות (ופריטים) בכל תרגום. */
+    /** מוחק קטגוריה: רק בנוסח הבסיסי (0-*). מעדכן קודם TOC (עקביות), אח"כ cascade soft-delete על פריטים ותפילות. */
     const deleteCategory = async (categoryId: string) => {
         if (
             !selectedTocId ||
@@ -503,39 +503,6 @@ export function useTocNavigation() {
         setIsSaving(true);
         setSavingMessage("מוחק קטגוריה...");
         try {
-            for (const t of currentTocData.translations ?? []) {
-                const tid = t.translationId;
-                if (!tid) continue;
-                const prayersPath = `translations/${tid}/prayers`;
-                for (const prayerId of prayerIds) {
-                    const itemsPath = `${prayersPath}/${prayerId}/items`;
-                    const itemsList = await dataSource.fetchCollection({
-                        path: itemsPath,
-                        collection: baseColl,
-                    });
-                    for (const item of itemsList) {
-                        await dataSource.saveEntity({
-                            path: item.path,
-                            entityId: item.id,
-                            values: { ...item.values, deleted: true, timestamp: Date.now() },
-                            status: "existing",
-                        });
-                    }
-                    const prayersList = await dataSource.fetchCollection({
-                        path: prayersPath,
-                        collection: baseColl,
-                    });
-                    const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
-                    if (prayerEntity) {
-                        await dataSource.saveEntity({
-                            path: prayerEntity.path,
-                            entityId: prayerEntity.id,
-                            values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
-                            status: "existing",
-                        });
-                    }
-                }
-            }
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
@@ -560,6 +527,47 @@ export function useTocNavigation() {
                 );
                 if (!stillSelected) setSelectedCategoryName(null);
             }
+
+            let cascadeFailures = 0;
+            for (const t of currentTocData.translations ?? []) {
+                const tid = t.translationId;
+                if (!tid) continue;
+                const prayersPath = `translations/${tid}/prayers`;
+                for (const prayerId of prayerIds) {
+                    try {
+                        const itemsPath = `${prayersPath}/${prayerId}/items`;
+                        const itemsList = await dataSource.fetchCollection({
+                            path: itemsPath,
+                            collection: baseColl,
+                        });
+                        for (const item of itemsList) {
+                            await dataSource.saveEntity({
+                                path: item.path,
+                                entityId: item.id,
+                                values: { ...item.values, deleted: true, timestamp: Date.now() },
+                                status: "existing",
+                            });
+                        }
+                        const prayersList = await dataSource.fetchCollection({
+                            path: prayersPath,
+                            collection: baseColl,
+                        });
+                        const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                        if (prayerEntity) {
+                            await dataSource.saveEntity({
+                                path: prayerEntity.path,
+                                entityId: prayerEntity.id,
+                                values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
+                                status: "existing",
+                            });
+                        }
+                    } catch (cascadeErr) {
+                        cascadeFailures++;
+                        console.error(`${LOG_PREFIX} deleteCategory cascade failed for translation=${tid} prayer=${prayerId}`, cascadeErr);
+                    }
+                }
+            }
+
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "delete_category",
@@ -567,7 +575,11 @@ export function useTocNavigation() {
                 details: { deletedId: categoryId, deletedName: categoryToDelete?.name },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "קטגוריה נמחקה מכל התרגומים" });
+            if (cascadeFailures > 0) {
+                snackbar.open({ type: "warning", message: `קטגוריה נמחקה מה-TOC, אך ${cascadeFailures} פריטים/תפילות לא נוקו במלואם` });
+            } else {
+                snackbar.open({ type: "success", message: "קטגוריה נמחקה מכל התרגומים" });
+            }
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete category failed`, err);
             snackbar.open({ type: "error", message: "שגיאה במחיקת קטגוריה" });
@@ -919,7 +931,7 @@ export function useTocNavigation() {
     };
 
     /**
-     * מוחק תפילה: רק בנוסח הבסיסי (0-*). מוציא את התפילה מכל התרגומים ב-TOC ומוחק מסמך התפילה (ופריטים) בכל תרגום.
+     * מוחק תפילה: רק בנוסח הבסיסי (0-*). מעדכן קודם TOC (עקביות), אח"כ cascade soft-delete על פריטים ומסמכי תפילה.
      */
     const deletePrayer = async (prayerId: string) => {
         if (
@@ -943,37 +955,6 @@ export function useTocNavigation() {
         setIsSaving(true);
         setSavingMessage("מוחק תפילה...");
         try {
-            for (const t of currentTocData.translations ?? []) {
-                const tid = t.translationId;
-                if (!tid) continue;
-                const prayersPath = `translations/${tid}/prayers`;
-                const itemsPath = `${prayersPath}/${prayerId}/items`;
-                const itemsList = await dataSource.fetchCollection({
-                    path: itemsPath,
-                    collection: baseColl,
-                });
-                for (const item of itemsList) {
-                    await dataSource.saveEntity({
-                        path: item.path,
-                        entityId: item.id,
-                        values: { ...item.values, deleted: true, timestamp: Date.now() },
-                        status: "existing",
-                    });
-                }
-                const prayersList = await dataSource.fetchCollection({
-                    path: prayersPath,
-                    collection: baseColl,
-                });
-                const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
-                if (prayerEntity) {
-                    await dataSource.saveEntity({
-                        path: prayerEntity.path,
-                        entityId: prayerEntity.id,
-                        values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
-                        status: "existing",
-                    });
-                }
-            }
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
@@ -989,6 +970,45 @@ export function useTocNavigation() {
                 )
             );
             if (selectedPrayerId === prayerId) setSelectedPrayerId(null);
+
+            let cascadeFailures = 0;
+            for (const t of currentTocData.translations ?? []) {
+                const tid = t.translationId;
+                if (!tid) continue;
+                try {
+                    const prayersPath = `translations/${tid}/prayers`;
+                    const itemsPath = `${prayersPath}/${prayerId}/items`;
+                    const itemsList = await dataSource.fetchCollection({
+                        path: itemsPath,
+                        collection: baseColl,
+                    });
+                    for (const item of itemsList) {
+                        await dataSource.saveEntity({
+                            path: item.path,
+                            entityId: item.id,
+                            values: { ...item.values, deleted: true, timestamp: Date.now() },
+                            status: "existing",
+                        });
+                    }
+                    const prayersList = await dataSource.fetchCollection({
+                        path: prayersPath,
+                        collection: baseColl,
+                    });
+                    const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
+                    if (prayerEntity) {
+                        await dataSource.saveEntity({
+                            path: prayerEntity.path,
+                            entityId: prayerEntity.id,
+                            values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
+                            status: "existing",
+                        });
+                    }
+                } catch (cascadeErr) {
+                    cascadeFailures++;
+                    console.error(`${LOG_PREFIX} deletePrayer cascade failed for translation=${tid}`, cascadeErr);
+                }
+            }
+
             const prayerName = trans?.categories?.flatMap((c: any) => c.prayers ?? []).find((p: any) => p.id === prayerId)?.name;
             appendChangeLog({
                 timestamp: Date.now(),
@@ -997,7 +1017,11 @@ export function useTocNavigation() {
                 details: { deletedId: prayerId, deletedName: prayerName },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "תפילה נמחקה מכל התרגומים" });
+            if (cascadeFailures > 0) {
+                snackbar.open({ type: "warning", message: `תפילה נמחקה מה-TOC, אך ${cascadeFailures} תרגומים לא נוקו במלואם` });
+            } else {
+                snackbar.open({ type: "success", message: "תפילה נמחקה מכל התרגומים" });
+            }
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete prayer failed`, err);
             snackbar.open({ type: "error", message: "שגיאה במחיקת תפילה" });
@@ -1043,14 +1067,14 @@ export function useTocNavigation() {
             await dataSource.saveEntity({
                 path: "toc",
                 entityId: selectedTocId,
-                values: { ...currentTocData, translations: updated },
+                values: { ...currentTocData, translations: updated, timestamp: Date.now() },
                 status: "existing",
                 collection: baseColl,
             });
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
-                        ? { ...t, values: { ...t.values, translations: updated } }
+                        ? { ...t, values: { ...t.values, translations: updated, timestamp: Date.now() } }
                         : t
                 )
             );
@@ -1119,7 +1143,7 @@ export function useTocNavigation() {
         }
     };
 
-    /** מוחק רק את מסמך הנוסח (TOC) ב-collection "toc"; לא נוגע בתרגומים */
+    /** מוחק נוסח (TOC): מסמן את מסמך ה-TOC כמחוק, ומבצע cascade soft-delete על כל התרגומים, התפילות והפריטים שמתחתיו */
     const deleteToc = async (tocId: string) => {
         const toc = tocItems.find((t) => t.id === tocId);
         if (!toc) return;
@@ -1127,6 +1151,59 @@ export function useTocNavigation() {
         setSavingMessage("מוחק נוסח...");
         try {
             await dataSource.saveEntity({ path: toc.path, entityId: toc.id, values: { ...toc.values, deleted: true, timestamp: Date.now() }, status: "existing" });
+
+            const tocData = toc.values as any;
+            const translations = tocData?.translations ?? [];
+            let cascadeFailures = 0;
+            for (const trans of translations) {
+                const tid = trans?.translationId;
+                if (!tid) continue;
+                try {
+                    const prayersPath = `translations/${tid}/prayers`;
+                    const prayersList = await dataSource.fetchCollection({
+                        path: prayersPath,
+                        collection: baseColl,
+                    });
+                    for (const prayer of prayersList) {
+                        const itemsPath = `${prayersPath}/${prayer.id}/items`;
+                        const itemsList = await dataSource.fetchCollection({
+                            path: itemsPath,
+                            collection: baseColl,
+                        });
+                        for (const item of itemsList) {
+                            await dataSource.saveEntity({
+                                path: item.path,
+                                entityId: item.id,
+                                values: { ...item.values, deleted: true, timestamp: Date.now() },
+                                status: "existing",
+                            });
+                        }
+                        await dataSource.saveEntity({
+                            path: prayer.path,
+                            entityId: prayer.id,
+                            values: { ...prayer.values, deleted: true, timestamp: Date.now() },
+                            status: "existing",
+                        });
+                    }
+                    const transList = await dataSource.fetchCollection({
+                        path: "translations",
+                        collection: baseColl,
+                    });
+                    const transEntity = transList.find((e) => e.id === tid);
+                    if (transEntity) {
+                        await dataSource.saveEntity({
+                            path: transEntity.path,
+                            entityId: transEntity.id,
+                            values: { ...transEntity.values, deleted: true, timestamp: Date.now() },
+                            status: "existing",
+                        });
+                    }
+                } catch (cascadeErr) {
+                    cascadeFailures++;
+                    console.error(`${LOG_PREFIX} deleteToc cascade failed for translation ${tid}`, cascadeErr);
+                }
+            }
+
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "delete_toc",
@@ -1134,13 +1211,17 @@ export function useTocNavigation() {
                 details: { deletedId: tocId, deletedName: (toc.values as any)?.nusach },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "הנוסח נמחק" });
             setTocItems((prev) => prev.filter((t) => t.id !== tocId));
             if (selectedTocId === tocId) {
                 setSelectedTocId(null);
                 setSelectedTranslationIndex(null);
                 setSelectedCategoryName(null);
                 setSelectedPrayerId(null);
+            }
+            if (cascadeFailures > 0) {
+                snackbar.open({ type: "warning", message: `הנוסח נמחק, אך ${cascadeFailures} תרגומים לא נוקו במלואם` });
+            } else {
+                snackbar.open({ type: "success", message: "הנוסח נמחק בהצלחה (כולל כל התרגומים והפריטים)" });
             }
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete TOC failed`, err);

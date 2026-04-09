@@ -29,8 +29,8 @@ import { CSS } from "@dnd-kit/utilities";
 
 type PrayerNavigationColumnsProps = {
     currentCategories: any[];
-    selectedCategoryName: string | null;
-    onSelectCategory: (categoryName: string) => void;
+    selectedCategoryId: string | null;
+    onSelectCategory: (categoryId: string) => void;
     /** נקרא בלחיצה על "הוסף קטגוריה" – פותח מודל להזנת שם עברית + אנגלית. afterCategoryId = null = בסוף הרשימה */
     onAddCategoryClick?: (afterCategoryId: string | null) => void;
     onEditCategory?: (categoryId: string) => void;
@@ -147,7 +147,7 @@ function SortablePartItem({
 
 export function PrayerNavigationColumns({
     currentCategories,
-    selectedCategoryName,
+    selectedCategoryId,
     onSelectCategory,
     onAddCategoryClick,
     onEditCategory,
@@ -242,9 +242,9 @@ export function PrayerNavigationColumns({
                         <div className="flex items-center gap-0.5">
                             <button
                                 type="button"
-                                onClick={() => onSelectCategory(category.name)}
+                                onClick={() => onSelectCategory(category.id)}
                                 disabled={isSaving}
-                                className={`flex-1 text-right p-1.5 rounded border ${selectedCategoryName === category.name ? "bg-indigo-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
+                                className={`flex-1 text-right p-1.5 rounded border ${selectedCategoryId === category.id ? "bg-indigo-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
                             >
                                 {category.name}
                             </button>

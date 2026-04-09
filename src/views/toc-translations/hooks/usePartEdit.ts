@@ -1485,7 +1485,6 @@ export function usePartEdit(context: PartEditContext) {
                         minyan: addParagraphForm.minyan,
                         dateSetId,
                         timestamp: Date.now(),
-                        deleted: false,
                     },
                 },
             ]);
@@ -2172,7 +2171,6 @@ export function usePartEdit(context: PartEditContext) {
                         minyan: form.minyan,
                         dateSetId: form.dateSetId?.trim() || "100",
                         timestamp: Date.now(),
-                        deleted: false,
                     });
                 } catch (err) {
                     console.error(`${LOG_PREFIX} Save paragraph translation to sheets failed`, err);

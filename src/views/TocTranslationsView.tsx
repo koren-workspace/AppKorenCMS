@@ -264,7 +264,7 @@ export function TocTranslationsView() {
             {/* עמודה 3–5: קטגוריה → תפילה → מקטע; בחירת מקטע טוענת את הפריטים */}
             <PrayerNavigationColumns
                 currentCategories={nav.currentCategories}
-                selectedCategoryName={nav.selectedCategoryName}
+                selectedCategoryId={nav.selectedCategoryId}
                 onSelectCategory={nav.onSelectCategory}
                 onAddCategoryClick={openAddCategoryModal}
                 onEditCategory={canEditNames ? openEditCategoryModal : undefined}
@@ -279,7 +279,7 @@ export function TocTranslationsView() {
                 showAddPrayer={
                     !!nav.selectedTocId &&
                     nav.selectedTranslationIndex != null &&
-                    !!nav.selectedCategoryName &&
+                    !!nav.selectedCategoryId &&
                     allowAddPart
                 }
                 currentParts={nav.currentParts}

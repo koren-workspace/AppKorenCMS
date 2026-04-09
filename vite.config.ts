@@ -32,13 +32,13 @@ const SHEET_SAVES = "שמירות"
 /** כותרות עמודות לכל sheet */
 const HEADERS_SAVES = [
     "save_id", "תאריך_ושעה", "פעולה",
-    "tocId", "שם_נוסח", "translationId", "שם_תרגום", "prayerId", "שם_תפילה", "partId", "שם_פריט",
+    "tocId", "שם_נוסח", "translationId", "שם_תרגום", "prayerId", "שם_תפילה", "partId", "שם_מקטע",
     "מספר_שינויים", "סיכום",
     "נשמר_Firestore", "פורסם_Bagel",
 ]
 const HEADERS_CHANGES = [
     "save_id", "תאריך_ושעה", "פעולה",
-    "נוסח", "תרגום", "קטגוריה", "תפילה", "פריט", "partId",
+    "נוסח", "תרגום", "קטגוריה", "תפילה", "מקטע", "partId",
     "itemId", "תוכן_פריט", "mit_id",
     "שדה", "לפני", "אחרי",
     "סטטוס",
@@ -70,7 +70,7 @@ function buildSummary(entry: any): string {
     }
     if (d.deletedItemId) return `מחיקת פריט ${d.deletedItemId}`
     if (d.newItemId) return `הוספת תרגום לפריט ${d.baseItemId ?? d.newItemId}`
-    if (d.newPartId) return `הוספת פריט: ${d.partName ?? d.newPartId}`
+    if (d.newPartId) return `הוספת מקטע: ${d.partName ?? d.newPartId}`
     if (d.movedItemIds?.length) return `העברת ${d.movedItemIds.length} פריטים`
     if (d.newTocId) return `הוספת נוסח: ${d.nusachName ?? d.newTocId}`
     if (d.deletedId) return `מחיקת ${entry.action.replace("delete_", "")}: ${d.deletedName ?? d.deletedId}`
@@ -199,7 +199,7 @@ function appendEntryToExcel(entry: any): void {
         changeRows.push(makeRow({
             nusach, trgum, category, prayer,
             makatav: d.partName ?? d.newPartId, partId: d.newPartId,
-            sade: "פריט", lifnei: "", acharei: d.partName ?? d.newPartId,
+            sade: "מקטע", lifnei: "", acharei: d.partName ?? d.newPartId,
         }))
     }
 
@@ -208,7 +208,7 @@ function appendEntryToExcel(entry: any): void {
         changeRows.push(makeRow({
             nusach, trgum, category, prayer,
             makatav: d.deletedName ?? d.deletedId, partId: d.deletedId,
-            sade: "פריט", lifnei: d.deletedName ?? d.deletedId, acharei: "",
+            sade: "מקטע", lifnei: d.deletedName ?? d.deletedId, acharei: "",
         }))
     }
 
@@ -292,12 +292,12 @@ function appendEntryToExcel(entry: any): void {
         }
     }
 
-    // ── split_part: פיצול פריט ────────────────────────────────────────────────
+    // ── split_part: פיצול מקטע ────────────────────────────────────────────────
     if (entry.action === "split_part" && d.fromPartId) {
         changeRows.push(makeRow({
             nusach, trgum, category, prayer,
             makatav: d.partName ?? d.newPartId ?? "", partId: d.fromPartId ?? "",
-            sade: "פיצול_פריט",
+            sade: "פיצול_מקטע",
             lifnei: d.fromPartId ?? "",
             acharei: `${d.partName ?? ""} (${d.newPartId ?? ""})`,
         }))
@@ -334,7 +334,7 @@ function appendEntryToExcel(entry: any): void {
         changeRows.push(makeRow({
             nusach, trgum, category, prayer,
             makatav: d.nameHe ?? d.partId ?? "", partId: d.partId ?? "",
-            sade: "שם_פריט", lifnei: "", acharei: d.nameHe ?? "",
+            sade: "שם_מקטע", lifnei: "", acharei: d.nameHe ?? "",
         }))
     }
 

@@ -1,10 +1,10 @@
 /**
- * partEditService – לוגיקת טעינה, שמירה ופרסום של פריט
+ * partEditService – לוגיקת טעינה, שמירה ופרסום של מקטע (ורשימת הפריטים בו)
  *
  * פונקציות "טהורות": מקבלות dataSource (ו-params) ומבצעות קריאות ל-Firestore/API.
  * אין כאן state או UI – רק פעולות. ה-hook usePartEdit קורא לפונקציות ומעדכן state + snackbar.
  *
- * - fetchPartWithEnhancements: טוען פריטי פריט, ממיין לפי itemId, טוען תרגומים מקושרים במנות
+ * - fetchPartWithEnhancements: טוען פריטי המקטע, ממיין לפי itemId, טוען תרגומים מקושרים במנות
  * - savePartItems: שומר רשימת פריטים (חדשים + קיימים) לפי path
  * - updateFirestoreTimestamp: מעדכן db-update-time ב-Firestore (Bagel SDK ב-bagelUpdateTimeService)
  */
@@ -27,7 +27,7 @@ type DataSource = {
     deleteEntity: (opts: any) => Promise<void>;
 };
 
-/** פרמטרים לטעינת פריט: מזהה תרגום, תפילה, פריט, ורשימת תרגומים (לשליפת enhancements) */
+/** פרמטרים לטעינת מקטע: מזהה תרגום, תפילה, מזהה מקטע, ורשימת תרגומים (לשליפת enhancements) */
 export type FetchPartParams = {
     translationId: string;
     selectedPrayerId: string;
@@ -41,7 +41,7 @@ export type FetchPartResult = {
     sorted: Entity<any>[];
     enhancementsMap: Record<string, Entity<any>[]>;
     initialValues: Record<string, any>;
-    /** פריטי הבסיס (0-*) של אותו פריט – רק כשעורכים תרגום לא-בסיס */
+    /** פריטי הבסיס (0-*) של אותו מקטע – רק כשעורכים תרגום לא-בסיס */
     baseItems?: Entity<any>[];
     /** מזההים של פריטים שמסומנים deleted: true – לא מוצגים אבל נספרים בחישוב itemId/mit_id לפריטים חדשים */
     deletedItemIds: string[];
@@ -49,7 +49,7 @@ export type FetchPartResult = {
 };
 
 /**
- * טוען פריטי פריט (filter partId), ממיין לפי itemId.
+ * טוען פריטי המקטע (filter partId), ממיין לפי itemId.
  * לכל תרגום אחר טוען פריטים עם linkedItem שמכיל את ה-itemIds (במנות של 30 בגלל מגבלת Firestore).
  */
 export async function fetchPartWithEnhancements(
@@ -90,7 +90,7 @@ export async function fetchPartWithEnhancements(
     const idChunks = chunkArray(sourceItemIds, 30);
     const enhancementsMap: Record<string, Entity<any>[]> = {};
 
-    // טוען מכל תרגום (חוץ מהנוכחי) פריטים שמקושרים ל-itemIds של הפריט
+    // טוען מכל תרגום (חוץ מהנוכחי) פריטים שמקושרים ל-itemIds של המקטע
     const enhancementPromises = translations.map(async (trans: any) => {
         if (trans.translationId === currentTranslationId) return;
         const tPath = `translations/${trans.translationId}/prayers/${selectedPrayerId}/items`;
@@ -111,7 +111,7 @@ export async function fetchPartWithEnhancements(
     const initialValues: Record<string, any> = {};
     sorted.forEach((item) => (initialValues[item.id] = { ...item.values }));
 
-    // כשעורכים תרגום (לא בסיס) – טוענים גם פריטי הבסיס של אותו פריט
+    // כשעורכים תרגום (לא בסיס) – טוענים גם פריטי הבסיס של אותו מקטע
     let baseItems: Entity<any>[] | undefined;
     const isCurrentBase = String(currentTranslationId ?? "").startsWith("0-");
     if (!isCurrentBase) {
@@ -207,7 +207,7 @@ export async function savePartItems(
 }
 
 /**
- * מסמן פריט פריט כמחוק (deleted: true) בתרגום הנוכחי ובכל התרגומים המקושרים אליו (linkedItem).
+ * מסמן פריט כמחוק (deleted: true) בתרגום הנוכחי ובכל התרגומים המקושרים אליו (linkedItem).
  * לא מוחק את הדוקומנט — מאפשר לאנדרואיד לזהות את המחיקה בסנכרון מבוסס-timestamp.
  */
 export type DeletePartItemParams = {
@@ -284,7 +284,7 @@ export async function deletePartItemAndRelatedTranslations(
 }
 
 /**
- * טוען פריטי פריט של תרגום אחד (לפי partId), ממוינים לפי itemId.
+ * טוען פריטי המקטע של תרגום אחד (לפי partId), ממוינים לפי itemId.
  */
 export async function fetchPartItems(
     dataSource: DataSource,
@@ -308,7 +308,7 @@ export async function fetchPartItems(
     );
 }
 
-/** רשימת פריטים לתפילה מתוך מבנה ה-TOC (כמו ב-usePartEdit.getPartsFromToc) */
+/** רשימת מקטעים לתפילה מתוך מבנה ה-TOC (כמו ב-usePartEdit.getPartsFromToc) */
 export function getPartsForPrayerInTranslation(
     translations: any[],
     translationId: string,
@@ -324,7 +324,7 @@ export function getPartsForPrayerInTranslation(
 }
 
 /**
- * itemId של הפריט האחרון בפריט הקודם והראשון בפריט הבא – אותו תרגום (כמו neighborBounds בטעינת פריט).
+ * itemId של הפריט האחרון במקטע הקודם והראשון במקטע הבא – אותו תרגום (כמו neighborBounds בטעינת מקטע).
  */
 export async function fetchNeighborItemIdBoundsForPart(
     dataSource: DataSource,
@@ -373,18 +373,18 @@ export type CreateTranslationItemParams = {
     targetTranslationId: string;
     selectedPrayerId: string;
     partId: string;
-    /** רשימת התרגומים מה-TOC – לחישוב פריט קודם/הבא לאותו תרגום יעד */
+    /** רשימת התרגומים מה-TOC – לחישוב מקטע קודם/הבא לאותו תרגום יעד */
     translations: any[];
     baseItemId: string;
     afterItemId: string | null;
     /**
-     * סדר itemId לכל שורת בסיס בפריט — באורך זהה ל-baseItems (מחרוזת ריקה אם חסר).
+     * סדר itemId לכל שורת בסיס במקטע — באורך זהה ל-baseItems (מחרוזת ריקה אם חסר).
      * סריקה לאחור: לכל שורה קודמת מחפשים תרגומים ש-linkedItem מצביע על itemId של אותה שורה.
      */
     baseItemIdsInPartOrder?: string[];
     /** אינדקס שורת הבסיס ב-baseItems (לפי entity.id) */
     currentBaseRowIndex?: number;
-    /** רצפל מזהי פריטים לפי תבנית אקסל (נגזר ממזהה הפריט) */
+    /** רצפל מזהי פריטים לפי תבנית אקסל (נגזר ממזהה המקטע) */
     minIdBefore?: string;
     content: string;
     type?: string;
@@ -411,7 +411,7 @@ export type CreateTranslationItemParams = {
     baseItemMitId?: string;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
     confirmUserWantsDecimalId?: () => boolean;
-    /** שם הפריט – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
+    /** שם המקטע – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
     partName?: string;
 };
 
@@ -550,7 +550,7 @@ export async function createTranslationItem(
             : rawItemRow.findIndex((id) => id === baseKey);
 
     /**
-     * אין afterItemId: עוגן = מקסימום itemId מבין כל פריטי התרגום בפריט שמקושרים לשורת בסיס כלשהי
+     * אין afterItemId: עוגן = מקסימום itemId מבין כל פריטי התרגום במקטע שמקושרים לשורת בסיס כלשהי
      * עם אינדקס < curBaseIdx (לא רק "השורה הקרובה ביותר עם תרגום") — כדי שלא ייבחר עוגן נמוך
      * כשיש שורת בסיס קודמת עם תרגום בעל itemId גבוה יותר (מיון גלובלי vs סדר שורות).
      */
@@ -651,7 +651,7 @@ export async function createTranslationItem(
         insertIndex >= orderedItemIds.length &&
         neighborItemBounds.nextFirstItemId == null
     ) {
-        cmsIdDbg("[CMS-ID]   הוספה בסוף + אין nextFirstItemId מפריט סמוך → fetch כל התפילה");
+        cmsIdDbg("[CMS-ID]   הוספה בסוף + אין nextFirstItemId ממקטע סמוך → fetch כל התפילה");
         const allPrayerItems = await dataSource.fetchCollection({
             path,
             collection: itemsCollection,
@@ -749,9 +749,9 @@ export async function createTranslationItem(
 // ─── Split Part ──────────────────────────────────────────────────────────────
 
 /**
- * פרמטרים לפיצול פריט: מזהה פריט החתך קובע אילו פריטים עוברים לפריט החדש.
+ * פרמטרים לפיצול מקטע: מזהה פריט החתך קובע אילו פריטים עוברים למקטע החדש.
  * insertBefore=false → פריט החתך ועד הסוף עוברים.
- * insertBefore=true  → מתחילת הפריט עד פריט החתך (כולל) עוברים.
+ * insertBefore=true  → מתחילת המקטע עד פריט החתך (כולל) עוברים.
  */
 export type SplitPartItemsParams = {
     currentTranslationId: string;
@@ -768,7 +768,7 @@ export type SplitPartItemsParams = {
 };
 
 /**
- * מעדכן partId / partName / partIdAndName / timestamp על פריטי הפריט המועברים,
+ * מעדכן partId / partName / partIdAndName / timestamp על פריטי המקטע המועברים,
  * כולל פריטים מקושרים בכל שאר התרגומים.
  * partName = שם עברי לכולם חוץ מתרגום "1-{tocId}", שם שמקבל שם אנגלי.
  */
@@ -864,11 +864,11 @@ export async function splitPartItems(
 export type MoveItemsToPartParams = {
     currentTranslationId: string;
     selectedPrayerId: string;
-    /** tocId – לא בשימוש כאן כי שם הפריט נלקח מה-TOC לכל תרגום */
+    /** tocId – לא בשימוש כאן כי שם המקטע נלקח מה-TOC לכל תרגום */
     movedItemIds: string[];
     sourcePartId: string;
     targetPartId: string;
-    /** itemId של הפריט שאחריו להכניס; null = תחילת הפריט היעד */
+    /** itemId של הפריט שאחריו להכניס; null = תחילת המקטע היעד */
     insertAfterItemId: string | null;
     /**
      * האם פריט בסיס הוא חלק מפסקה של הפריט שלפניו במיקום החדש.
@@ -881,8 +881,8 @@ export type MoveItemsToPartParams = {
 };
 
 /**
- * מעביר פריטים (רצף רציף) מפריט מקור לפריט יעד באותה תפילה.
- * סדר הפריטים המועברים נשמר לפי itemId, ובמקביל מחושבים mit_id חדשים לפי מיקום ההכנסה בפריט היעד.
+ * מעביר פריטים (רצף רציף) ממקטע מקור למקטע יעד באותה תפילה.
+ * סדר הפריטים המועברים נשמר לפי itemId, ובמקביל מחושבים mit_id חדשים לפי מיקום ההכנסה במקטע היעד.
  * partName לכל תרגום נלקח מעץ ה-TOC של אותו תרגום.
  */
 export async function moveItemsToPart(
@@ -1046,7 +1046,7 @@ export async function moveItemsToPart(
 
     const now = Date.now();
 
-    // עוזר: שם הפריט היעד לפי עץ TOC של תרגום מסוים
+    // עוזר: שם מקטע היעד לפי עץ TOC של תרגום מסוים
     const getTargetPartName = (trans: any): string => {
         for (const cat of trans.categories ?? []) {
             const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
@@ -1287,7 +1287,7 @@ export type UpdatePartMetadataParams = {
 };
 
 /**
- * מעדכן partName ו-partIdAndName על כל הפריטים בפריט, בכל התרגומים.
+ * מעדכן partName ו-partIdAndName על כל הפריטים במקטע, בכל התרגומים.
  * השם לכל תרגום נלקח מעץ ה-TOC של אותו תרגום.
  */
 export async function updatePartMetadataInItems(

@@ -5,7 +5,7 @@
  * - getItemStyle: classNames ל-textarea לפי סוג הפריט (title / instructions / body)
  * - idBetween: מחשב ערך mit_id חדש בין שני ערכים קיימים
  * - computeNextAvailableItemId: מחשב itemId חדש פנוי בין שני ערכים, עם decimal fallback
- * - computeItemIdForInsert: צינור קבוע – גבולות מאזן הרשימה → תיקוני פריט/מדיניות → takenIds → מספר פנוי
+ * - computeItemIdForInsert: צינור קבוע – גבולות מאזן הרשימה → תיקוני מקטע/מדיניות → takenIds → מספר פנוי
  */
 
 import { cmsDebugItemIdsEnabled } from "./debugFlags";
@@ -390,7 +390,7 @@ export interface ComputeItemIdForInsertOptions {
      */
     minIdBefore?: string;
     /**
-     * סימטריה לסריקה אחורה על בסיס: מינימום itemId מבין תרגומי שורת הבסיס הבאה (בפריט) שיש לה תרגומים.
+     * סימטריה לסריקה אחורה על בסיס: מינימום itemId מבין תרגומי שורת הבסיס הבאה (במקטע) שיש לה תרגומים.
      * מחמיר את idAfter: idAfter_effective = MIN(numeric)(idAfter מהשכן/גבול, ערך זה), רק אם הערך > idBefore.
      */
     nextBaseLinkedMinItemId?: string;

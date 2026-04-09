@@ -68,11 +68,12 @@ type PartItemRowProps = {
     autoFocus?: boolean;
     /** פותח מודל הגדרת/עריכת dateSetId (לחיצה על שדה dateSetId) */
     onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string) => void;
-    /** props לידית גרירה */
-    dragHandleProps?: {
-        attributes?: Record<string, unknown>;
-        listeners?: Record<string, unknown>;
-    };
+    // ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
+    // /** props לידית גרירה */
+    // dragHandleProps?: {
+    //     attributes?: Record<string, unknown>;
+    //     listeners?: Record<string, unknown>;
+    // };
 };
 
 export function PartItemRow({
@@ -98,7 +99,7 @@ export function PartItemRow({
     restrictTypeToInstructions = false,
     autoFocus = false,
     onOpenDateSetIdConfig,
-    dragHandleProps,
+    // dragHandleProps,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
     const [showProps, setShowProps] = useState(false);
@@ -159,6 +160,7 @@ export function PartItemRow({
                                 {showProps ? "הסתר מאפיינים" : "מאפיינים"}
                             </button>
                         )}
+                        {/* ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
                         {dragHandleProps && (
                             <button
                                 type="button"
@@ -171,6 +173,7 @@ export function PartItemRow({
                                 ⠿
                             </button>
                         )}
+                        */}
                         {onDelete && !isPendingDelete && (
                             <button
                                 type="button"
@@ -677,7 +680,7 @@ export function PartItemRow({
                         disabled={isAddTranslationBlocked}
                         title={
                             isAddTranslationBlocked
-                                ? "הוספת תרגום זמינה רק אחרי לחיצה על «שמור פריט» (בראש אזור הפריט)"
+                                ? "הוספת תרגום זמינה רק אחרי לחיצה על «שמור מקטע» (בראש אזור המקטע)"
                                 : undefined
                         }
                         onClick={() => onAddTranslation!(item)}
@@ -694,8 +697,8 @@ export function PartItemRow({
                             className="mt-1.5 text-[10px] text-amber-900/90 text-center leading-snug px-1"
                             dir="rtl"
                         >
-                            לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת הפריט</span>
-                            — לחץ <span className="font-semibold">«שמור פריט»</span> למעלה.
+                            לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת המקטע</span>
+                            — לחץ <span className="font-semibold">«שמור מקטע»</span> למעלה.
                         </p>
                     )}
                 </div>

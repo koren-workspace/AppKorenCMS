@@ -2,7 +2,7 @@
  * PartEditPanel – אזור העריכה הראשי במסך
  *
  * מציג:
- *   - PartEditToolbar: כותרת הפריט + כפתורי "שמור פריט" ו"פרסום לבייגל" (לפי נוסח)
+ *   - PartEditToolbar: כותרת/מצב מקטע + "שמור מקטע" (כשמקטע נבחר) + "פרסום לאפליקציה" (תמיד, לפי נוסח)
  *   - במצב טעינה: "טוען..."
  *   - לאחר טעינה: רשימת פריטים (PartItemRow) + כפתור "הוסף פריט"
  *
@@ -13,24 +13,27 @@ import React from "react";
 import { Entity } from "@firecms/core";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
-import {
-    DndContext,
-    closestCenter,
-    PointerSensor,
-    useSensor,
-    useSensors,
-    DragEndEvent,
-} from "@dnd-kit/core";
-import {
-    SortableContext,
-    verticalListSortingStrategy,
-    useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+// ——— גרירת פריטים בתוך המקטע (מושבתת זמנית) ———
+// import {
+//     DndContext,
+//     closestCenter,
+//     PointerSensor,
+//     useSensor,
+//     useSensors,
+//     DragEndEvent,
+// } from "@dnd-kit/core";
+// import {
+//     SortableContext,
+//     verticalListSortingStrategy,
+//     useSortable,
+// } from "@dnd-kit/sortable";
+// import { CSS } from "@dnd-kit/utilities";
 
 export type PartEditPanelProps = {
     selectedGroupId: string | null;
-    /** שם הנוסח הנבחר — מוצג ליד פרסום לבייגל (הפרסום לפי נוסח, לא לפי פריט) */
+    /** נוסח (TOC) נבחר — מאפשר פרסום גם בלי מקטע פתוח */
+    selectedTocId: string | null;
+    /** שם הנוסח הנבחר — מוצג ליד פרסום לבייגל (הפרסום לפי נוסח, לא לפי מקטע) */
     publishNusachLabel?: string | null;
     saving: boolean;
     changedIds: Set<string>;
@@ -59,7 +62,7 @@ export type PartEditPanelProps = {
     pendingDeletes?: Array<{ entity: Entity<any>; itemId: string }>;
     /** מחזיר פריט מרשימת המחיקות המתינות */
     onRestoreItem?: (item: Entity<any>, itemId: string) => void;
-    /** רק בנוסח הבסיסי (0-*) מותר להוסיף פריטים; בשאר הנוסחים – עריכה בלבד */
+    /** רק בנוסח הבסיסי (0-*) מותר להוסיף מקטעים; בשאר הנוסחים – עריכה בלבד */
     allowAddPart?: boolean;
     /** רק בתרגום (לא בסיס) מותר להוסיף הוראות – טקסט שלא מקושר לבסיס */
     allowAddInstruction?: boolean;
@@ -86,33 +89,35 @@ export type PartEditPanelProps = {
     onReorderItems?: (activeId: string, overId: string) => void;
 };
 
-function SortableItemRow({
-    item,
-    children,
-}: {
-    item: Entity<any>;
-    children: (dragHandleProps: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }) => React.ReactNode;
-}) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-        id: item.id,
-    });
-    const style: React.CSSProperties = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-    };
-    return (
-        <div ref={setNodeRef} style={style}>
-            {children({
-                attributes: attributes as unknown as Record<string, unknown>,
-                listeners: listeners as unknown as Record<string, unknown>,
-            })}
-        </div>
-    );
-}
+// ——— גרירת פריטים בתוך המקטע (מושבתת זמנית) ———
+// function SortableItemRow({
+//     item,
+//     children,
+// }: {
+//     item: Entity<any>;
+//     children: (dragHandleProps: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }) => React.ReactNode;
+// }) {
+//     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+//         id: item.id,
+//     });
+//     const style: React.CSSProperties = {
+//         transform: CSS.Transform.toString(transform),
+//         transition,
+//         opacity: isDragging ? 0.5 : 1,
+//     };
+//     return (
+//         <div ref={setNodeRef} style={style}>
+//             {children({
+//                 attributes: attributes as unknown as Record<string, unknown>,
+//                 listeners: listeners as unknown as Record<string, unknown>,
+//             })}
+//         </div>
+//     );
+// }
 
 export function PartEditPanel({
     selectedGroupId,
+    selectedTocId,
     publishNusachLabel,
     saving,
     changedIds,
@@ -146,24 +151,26 @@ export function PartEditPanel({
     allowSplitAndMove = false,
     onSplitPart,
     onMoveItemsToPart,
-    onReorderItems,
+    onReorderItems: _onReorderItems,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0 || pendingDeletesCount > 0;
-    const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-    );
-
-    const handleDragEnd = (event: DragEndEvent) => {
-        const { active, over } = event;
-        if (!over || active.id === over.id) return;
-        onReorderItems?.(String(active.id), String(over.id));
-    };
+    // ——— גרירת פריטים בתוך המקטע (מושבתת זמנית) ———
+    // const sensors = useSensors(
+    //     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    // );
+    //
+    // const handleDragEnd = (event: DragEndEvent) => {
+    //     const { active, over } = event;
+    //     if (!over || active.id === over.id) return;
+    //     _onReorderItems?.(String(active.id), String(over.id));
+    // };
 
     return (
         <div className="flex-1 bg-white p-4 shadow-xl overflow-hidden flex flex-col">
             <PartEditToolbar
                 selectedGroupId={selectedGroupId}
+                selectedTocId={selectedTocId}
                 publishNusachLabel={publishNusachLabel}
                 saving={saving}
                 hasChanges={hasAnyChanges}
@@ -212,6 +219,66 @@ export function PartEditPanel({
                             </button>
                         )}
                         {/* לכל פריט: ערכים מקומיים + תרגומים מקושרים (לפי itemId/linkedItem) */}
+                        {allItems.map((item, index) => {
+                            const val = localValues[item.id] || {};
+                            const curId = val.itemId;
+                            const related = Object.entries(enhancements).flatMap(
+                                ([tId, list]) =>
+                                    list
+                                        .filter((e) => {
+                                            const link = e.values?.linkedItem;
+                                            return Array.isArray(link)
+                                                ? link.includes(curId)
+                                                : link === curId;
+                                        })
+                                        .map((e) => ({ ...e, tId }))
+                            );
+                            return (
+                                <PartItemRow
+                                    key={item.id}
+                                    item={item}
+                                    localVal={val}
+                                    isChanged={changedIds.has(item.id)}
+                                    related={related}
+                                    enhancementLocalValues={enhancementLocalValues}
+                                    onEnhancementFieldChange={onEnhancementFieldChange}
+                                    isEnhancementChanged={(eid) => enhancementChangedIds.has(eid)}
+                                    onContentChange={onContentChange}
+                                    onFieldChange={onFieldChange}
+                                    onDelete={onDeleteItem}
+                                    isPendingDelete={pendingDeleteIds.has(item.id)}
+                                    onRestore={onRestoreItem}
+                                    isBaseTranslation={isBaseTranslation}
+                                    currentTranslationId={currentTranslationId}
+                                    onAddAfter={
+                                        allowAddPart
+                                            ? () => onAddNewItemAt(index + 1)
+                                            : undefined
+                                    }
+                                    onAddParagraphAfter={
+                                        allowAddPart && onAddNewParagraphAt
+                                            ? () => onAddNewParagraphAt(index + 1)
+                                            : undefined
+                                    }
+                                    onAddInstructionAfter={
+                                        allowAddInstruction && onAddNewInstructionAt
+                                            ? () => onAddNewInstructionAt(index + 1)
+                                            : undefined
+                                    }
+                                    onAddTranslation={isBaseTranslation ? onAddTranslation : undefined}
+                                    isAddTranslationBlocked={
+                                        isBaseTranslation && isAddTranslationBlockedForItem
+                                            ? isAddTranslationBlockedForItem(item)
+                                            : false
+                                    }
+                                    restrictTypeToInstructions={restrictTypeToInstructions}
+                                    autoFocus={lastAddedItemId === item.id}
+                                    onOpenDateSetIdConfig={onOpenDateSetIdForItem}
+                                />
+                            );
+                        })}
+                        {/*
+                        גרירת פריטים בתוך המקטע (מושבתת זמנית) — הקוד המקורי:
                         <DndContext
                             sensors={sensors}
                             collisionDetection={closestCenter}
@@ -285,6 +352,7 @@ export function PartEditPanel({
                                 })}
                             </SortableContext>
                         </DndContext>
+                        */}
                     </div>
                 )
             )}

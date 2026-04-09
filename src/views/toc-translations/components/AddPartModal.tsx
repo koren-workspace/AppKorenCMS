@@ -1,7 +1,7 @@
 /**
- * AddPartModal – מודל הוספת פריט חדש
+ * AddPartModal – מודל הוספת מקטע חדש
  *
- * מאפשר למשתמש להגדיר את כל המאפיינים כמו בפיצול פריט:
+ * מאפשר למשתמש להגדיר את כל המאפיינים כמו בפיצול מקטע:
  *   - שם עברית + אנגלית
  *   - dateSetIds / hazan / minyan (תנאי תצוגה)
  */
@@ -76,14 +76,14 @@ export function AddPartModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" dir="rtl">
             <div className="bg-white rounded-lg shadow-xl w-[500px] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                    <h2 className="font-bold text-sm">הוספת פריט חדש</h2>
+                    <h2 className="font-bold text-sm">הוספת מקטע חדש</h2>
                     <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-[10px] font-semibold mb-1">שם הפריט (עברית) *</label>
+                            <label className="block text-[10px] font-semibold mb-1">שם המקטע (עברית) *</label>
                             <input
                                 type="text"
                                 value={nameHe}
@@ -153,7 +153,7 @@ export function AddPartModal({
                         disabled={!canSubmit}
                         className="px-5 py-1.5 bg-blue-600 text-white rounded font-bold text-sm disabled:opacity-30 hover:bg-blue-700"
                     >
-                        {saving ? "מוסיף..." : "הוסף פריט"}
+                        {saving ? "מוסיף..." : "הוסף מקטע"}
                     </button>
                 </div>
             </div>

@@ -4,12 +4,12 @@
  * =============================================================================
  *
  * המסך מחולק לשלוש עמודות:
- *   1. ניווט: נוסח (TOC) → תרגום → קטגוריה → תפילה → פריט
- *   2. לאחר בחירת פריט: אזור עריכה (פריטים + שמירה + פרסום)
+ *   1. ניווט: נוסח (TOC) → תרגום → קטגוריה → תפילה → מקטע
+ *   2. לאחר בחירת מקטע: אזור עריכה (פריטים + שמירה + פרסום)
  *
  * זרימת נתונים:
  *   - useTocNavigation: טוען רשימת נוסחים, שומר את הבחירות, ומחשב categories/prayers/parts
- *   - usePartEdit: טוען פריטי הפריט + תרגומים מקושרים, שומר שינויים, מפרסם ל-Bagel
+ *   - usePartEdit: טוען פריטי המקטע + תרגומים מקושרים, שומר שינויים, מפרסם ל-Bagel
  *   - הקומפוננטות מקבלות את כל הנתונים ב-props (controlled).
  */
 
@@ -261,7 +261,7 @@ export function TocTranslationsView() {
                 onSelectTranslation={withUnsavedCheck(nav.onSelectTranslation)}
                 isSaving={nav.isSaving}
             />
-            {/* עמודה 3–5: קטגוריה → תפילה → פריט; בחירת פריט טוענת את הפריטים */}
+            {/* עמודה 3–5: קטגוריה → תפילה → מקטע; בחירת מקטע טוענת את הפריטים */}
             <PrayerNavigationColumns
                 currentCategories={nav.currentCategories}
                 selectedCategoryId={nav.selectedCategoryId}
@@ -300,6 +300,7 @@ export function TocTranslationsView() {
             {/* אזור העריכה: toolbar + רשימת פריטים (לאחר טעינה) */}
             <PartEditPanel
                 selectedGroupId={partEdit.selectedGroupId}
+                selectedTocId={nav.selectedTocId}
                 publishNusachLabel={nav.currentTocData?.nusach ?? nav.selectedTocId}
                 saving={partEdit.saving}
                 changedIds={partEdit.changedIds}
@@ -448,7 +449,7 @@ export function TocTranslationsView() {
                 onSubmit={handleAddPrayerSubmit}
                 saving={nav.isSaving}
             />
-            {/* מודל עריכת פריט */}
+            {/* מודל עריכת מקטע */}
             <EditPartModal
                 open={editPartModalOpen}
                 onClose={() => { setEditPartModalOpen(false); setEditPartId(null); }}
@@ -456,14 +457,14 @@ export function TocTranslationsView() {
                 onSubmit={handleEditPartSubmit}
                 saving={nav.isSaving}
             />
-            {/* מודל הוספת פריט */}
+            {/* מודל הוספת מקטע */}
             <AddPartModal
                 open={addPartModalOpen}
                 onClose={() => setAddPartModalOpen(false)}
                 onSubmit={handleAddPartSubmit}
                 saving={nav.isSaving}
             />
-            {/* מודל פיצול פריט */}
+            {/* מודל פיצול מקטע */}
             <SplitPartModal
                 open={partEdit.splitPartModalOpen}
                 onClose={partEdit.closeSplitPartModal}
@@ -477,7 +478,7 @@ export function TocTranslationsView() {
                 onSubmit={partEdit.handleSplitPart}
                 saving={partEdit.saving}
             />
-            {/* מודל העברת פריטים לפריט אחר */}
+            {/* מודל העברת פריטים למקטע אחר */}
             <MoveToPartModal
                 open={partEdit.moveToPartModalOpen}
                 onClose={partEdit.closeMoveToPartModal}

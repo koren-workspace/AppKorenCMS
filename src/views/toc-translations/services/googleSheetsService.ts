@@ -127,7 +127,7 @@ const TYPE_TO_SHEETS_CATEGORY: Record<string, string> = {
     shiratHayam: "שירת הים",
 };
 
-/** פריט לפני המקף הראשון: 0-ashkenaz→0, sefard-1→sefard, 10-zaks→10 */
+/** חלק לפני המקף הראשון בין המזהים: 0-ashkenaz→0, sefard-1→sefard, 10-zaks→10 */
 function getTranslationPrefix(translationId: string | null | undefined): string | null {
     const s = String(translationId ?? "").trim();
     const i = s.indexOf("-");

@@ -378,7 +378,7 @@ describe("partEditService – splitPartItems", () => {
         return { fetchCollection, saveEntity, deleteEntity: vi.fn() };
     }
 
-    it("insertBefore=false – פריט החתך ועד הסוף עוברים לפריט החדש", async () => {
+    it("insertBefore=false – פריט החתך ועד הסוף עוברים למקטע החדש", async () => {
         const items = [
             { id: "e1", values: { itemId: "1", mit_id: "10", partId: "p1", partName: "ישן", partIdAndName: "p1 ישן", content: "א" } },
             { id: "e2", values: { itemId: "2", mit_id: "20", partId: "p1", partName: "ישן", partIdAndName: "p1 ישן", content: "ב" } },
@@ -414,7 +414,7 @@ describe("partEditService – splitPartItems", () => {
         expect(typeof e2Call.values.timestamp).toBe("number");
     });
 
-    it("insertBefore=true – מהתחלה עד פריט החתך (כולל) עוברים", async () => {
+    it("insertBefore=true – מהתחלה עד פריט החתך (כולל) עוברים למקטע החדש", async () => {
         const items = [
             { id: "e1", values: { itemId: "1", mit_id: "10", partId: "p1", partName: "ישן", content: "א" } },
             { id: "e2", values: { itemId: "2", mit_id: "20", partId: "p1", partName: "ישן", content: "ב" } },
@@ -518,7 +518,7 @@ describe("partEditService – moveItemsToPart", () => {
         vi.clearAllMocks();
     });
 
-    it("העברה לפריט ריק – לפריט בסיס מחושב itemId חדש וגם mit_id בהתאם", async () => {
+    it("העברה למקטע ריק – לפריט בסיס מחושב itemId חדש וגם mit_id בהתאם", async () => {
         const sourceItem = {
             id: "e1",
             values: { itemId: "100", mit_id: "50", partId: "src", partName: "מקור", content: "א" },

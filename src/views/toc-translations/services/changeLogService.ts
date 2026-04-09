@@ -13,7 +13,7 @@ const STORAGE_KEY = "cms_changelog_entries";
 const MAX_ENTRIES = 2500;
 
 export type ChangeLogAction =
-    | "save_part_items"      // שמירת פריטי פריט (עדכון שדות)
+    | "save_part_items"      // שמירת פריטי מקטע (עדכון שדות)
     | "delete_part_item"    // מחיקת פריט פריט (soft delete)
     | "create_translation_item"  // הוספת פריט תרגום חדש
     | "publish_to_bagel"    // פרסום ל-Bagel

@@ -1,10 +1,10 @@
 /**
- * SplitPartModal – מודל פיצול מקטע
+ * SplitPartModal – מודל פיצול פריט
  *
  * תהליך:
- *  1. המשתמש מזין שם עברי + אנגלי למקטע החדש
- *  2. בוחר dateSetIds / hazan / minyan (ממולאים מהמקטע הנוכחי)
- *  3. בוחר מיקום המקטע החדש: אחרי הנוכחי / לפני הנוכחי
+ *  1. המשתמש מזין שם עברי + אנגלי לפריט החדש
+ *  2. בוחר dateSetIds / hazan / minyan (ממולאים מהפריט הנוכחי)
+ *  3. בוחר מיקום הפריט החדש: אחרי הנוכחי / לפני הנוכחי
  *  4. בוחר פריט חתך ברשימת הפריטים (radio button)
  *     – הפריטים הנבחרים מסומנים בצבע שונה לפי הכלל:
  *       "אחרי" → מהחתך עד הסוף עוברים; "לפני" → מהתחלה עד החתך עוברים.
@@ -16,11 +16,11 @@ import { Entity } from "@firecms/core";
 export type SplitPartModalProps = {
     open: boolean;
     onClose: () => void;
-    /** פריטי המקטע הנוכחי (ממוינים לפי itemId) */
+    /** פריטי הפריט הנוכחי (ממוינים לפי itemId) */
     items: Entity<any>[];
     /** ערכים מקומיים (לתצוגת content) */
     localValues: Record<string, any>;
-    /** מקטע נוכחי – לאתחול dateSetIds / hazan / minyan */
+    /** פריט נוכחי – לאתחול dateSetIds / hazan / minyan */
     currentPart: { id: string; name: string; dateSetIds?: string[]; hazan?: boolean | null; minyan?: boolean | null } | null;
     onSubmit: (params: {
         splitAtItemId: string;
@@ -51,7 +51,7 @@ export function SplitPartModal({
     const [insertBefore, setInsertBefore] = useState(false);
     const [splitAtItemId, setSplitAtItemId] = useState<string | null>(null);
 
-    // אתחול ערכי dateSetIds / hazan / minyan מהמקטע הנוכחי בכל פתיחה
+    // אתחול ערכי dateSetIds / hazan / minyan מהפריט הנוכחי בכל פתיחה
     useEffect(() => {
         if (!open) return;
         setNameHe("");
@@ -117,7 +117,7 @@ export function SplitPartModal({
             <div className="bg-white rounded-lg shadow-xl w-[600px] max-h-[90vh] flex flex-col overflow-hidden">
                 {/* כותרת */}
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                    <h2 className="font-bold text-sm">פיצול מקטע: {currentPart?.id}</h2>
+                    <h2 className="font-bold text-sm">פיצול פריט: {currentPart?.id}</h2>
                     <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
                 </div>
 
@@ -125,7 +125,7 @@ export function SplitPartModal({
                     {/* שמות */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-[10px] font-semibold mb-1">שם המקטע החדש (עברית) *</label>
+                            <label className="block text-[10px] font-semibold mb-1">שם הפריט החדש (עברית) *</label>
                             <input
                                 type="text"
                                 value={nameHe}
@@ -150,7 +150,7 @@ export function SplitPartModal({
 
                     {/* תנאי תצוגה */}
                     <div className="border rounded p-3 space-y-2">
-                        <div className="text-[10px] font-semibold text-gray-600">תנאי תצוגה (ממוקם מהמקטע הנוכחי)</div>
+                        <div className="text-[10px] font-semibold text-gray-600">תנאי תצוגה (ממוקם מהפריט הנוכחי)</div>
                         <div className="flex items-center gap-4 flex-wrap">
                             <div className="flex items-center gap-1">
                                 <span className="text-[10px]">dateSetIds:</span>
@@ -181,7 +181,7 @@ export function SplitPartModal({
                         </div>
                     </div>
 
-                    {/* מיקום המקטע החדש */}
+                    {/* מיקום הפריט החדש */}
                     <div className="flex gap-4">
                         <label className="flex items-center gap-1.5 cursor-pointer">
                             <input
@@ -190,7 +190,7 @@ export function SplitPartModal({
                                 checked={!insertBefore}
                                 onChange={() => setInsertBefore(false)}
                             />
-                            <span className="text-[11px]">המקטע החדש <strong>אחרי</strong> הנוכחי</span>
+                            <span className="text-[11px]">הפריט החדש <strong>אחרי</strong> הנוכחי</span>
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                             <input
@@ -199,7 +199,7 @@ export function SplitPartModal({
                                 checked={insertBefore}
                                 onChange={() => setInsertBefore(true)}
                             />
-                            <span className="text-[11px]">המקטע החדש <strong>לפני</strong> הנוכחי</span>
+                            <span className="text-[11px]">הפריט החדש <strong>לפני</strong> הנוכחי</span>
                         </label>
                     </div>
 
@@ -207,11 +207,11 @@ export function SplitPartModal({
                     <div>
                         <div className="text-[10px] font-semibold text-gray-700 mb-1.5">
                             {insertBefore
-                                ? "בחר פריט חתך — מהתחלה עד פריט זה (כולל) יעברו למקטע החדש:"
-                                : "בחר פריט חתך — מפריט זה עד הסוף יעברו למקטע החדש:"}
+                                ? "בחר פריט חתך — מהתחלה עד פריט זה (כולל) יעברו לפריט החדש:"
+                                : "בחר פריט חתך — מפריט זה עד הסוף יעברו לפריט החדש:"}
                         </div>
                         {items.length === 0 && (
-                            <div className="text-gray-400 text-[10px]">אין פריטים במקטע</div>
+                            <div className="text-gray-400 text-[10px]">אין פריטים בפריט</div>
                         )}
                         <div className="border rounded overflow-hidden divide-y max-h-64 overflow-y-auto">
                             {items.map((item, i) => {
@@ -248,7 +248,7 @@ export function SplitPartModal({
                                                 }`}>{type}</span>
                                                 {moving && (
                                                     <span className="text-[9px] bg-blue-200 text-blue-700 px-1 rounded shrink-0">
-                                                        → מקטע חדש
+                                                        → פריט חדש
                                                     </span>
                                                 )}
                                             </div>
@@ -263,8 +263,8 @@ export function SplitPartModal({
                         {splitAtItemId && (
                             <div className="mt-1 text-[10px] text-blue-700 font-medium">
                                 {insertBefore
-                                    ? `${items.slice(0, splitIdx + 1).length} פריטים יעברו למקטע החדש, ${items.slice(splitIdx + 1).length} יישארו`
-                                    : `${items.slice(splitIdx).length} פריטים יעברו למקטע החדש, ${items.slice(0, splitIdx).length} יישארו`}
+                                    ? `${items.slice(0, splitIdx + 1).length} פריטים יעברו לפריט החדש, ${items.slice(splitIdx + 1).length} יישארו`
+                                    : `${items.slice(splitIdx).length} פריטים יעברו לפריט החדש, ${items.slice(0, splitIdx).length} יישארו`}
                             </div>
                         )}
                     </div>
@@ -285,7 +285,7 @@ export function SplitPartModal({
                         disabled={!canSubmit}
                         className="px-5 py-1.5 bg-blue-600 text-white rounded font-bold text-sm disabled:opacity-30 hover:bg-blue-700"
                     >
-                        {saving ? "מפצל..." : "פצל מקטע"}
+                        {saving ? "מפצל..." : "פצל פריט"}
                     </button>
                 </div>
             </div>

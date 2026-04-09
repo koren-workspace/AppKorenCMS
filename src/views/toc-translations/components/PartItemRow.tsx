@@ -42,7 +42,7 @@ type PartItemRowProps = {
     onContentChange: (itemId: string, value: string) => void;
     /** עדכון שדה מאפיין (entityId, fieldName, value) */
     onFieldChange?: (entityId: string, field: string, value: unknown) => void;
-    /** מוחק את המקטע ואת כל התרגומים המקושרים */
+    /** מוחק את הפריט ואת כל התרגומים המקושרים */
     onDelete?: (item: Entity<any>, itemId: string) => void;
     /** פריט סומן למחיקה (ימוחק בשמירה) – מציג עיצוב מודגש וכפתור "החזר" */
     isPendingDelete?: boolean;
@@ -60,11 +60,11 @@ type PartItemRowProps = {
     onAddInstructionAfter?: () => void;
     /** פותח מודל הוספת תרגום לפריט הזה */
     onAddTranslation?: (item: Entity<any>) => void;
-    /** מנוטרל עד שמירת מקטע (פריט חדש / פסקה ממתינה ל-Sheets) */
+    /** מנוטרל עד שמירת פריט (פריט חדש / פסקה ממתינה ל-Sheets) */
     isAddTranslationBlocked?: boolean;
     /** בתרגום (לא בסיס): במאפיינים סוג ניתן לשינוי רק בין סוגי הוראות */
     restrictTypeToInstructions?: boolean;
-    /** העברת פוקוס לשדה התוכן (למקטע שנוסף זה עתה) */
+    /** העברת פוקוס לשדה התוכן (לפריט שנוסף זה עתה) */
     autoFocus?: boolean;
     /** פותח מודל הגדרת/עריכת dateSetId (לחיצה על שדה dateSetId) */
     onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string) => void;
@@ -176,17 +176,17 @@ export function PartItemRow({
                                 type="button"
                                 onClick={() => {
                                     const msg = isBaseTranslation && related.length > 0
-                                        ? `למחוק את המקטע ואת כל ${related.length} התרגומים המקושרים אליו?\n(יסומנו כ-deleted בכל הנוסחים)`
+                                        ? `למחוק את הפריט ואת כל ${related.length} התרגומים המקושרים אליו?\n(יסומנו כ-deleted בכל הנוסחים)`
                                         : isBaseTranslation
-                                            ? "למחוק את המקטע?"
-                                            : "למחוק את המקטע? (תרגום זה בלבד)";
+                                            ? "למחוק את הפריט?"
+                                            : "למחוק את הפריט? (תרגום זה בלבד)";
                                     if (window.confirm(msg))
                                         onDelete(item, curId ?? item.id);
                                 }}
                                 className="px-1.5 py-0.5 text-red-500 hover:bg-red-50 border border-red-200 rounded text-[8px] font-bold"
-                                title={isBaseTranslation && related.length > 0 ? "מחק מקטע וכל התרגומים המקושרים בכל הנוסחים" : "מחק מקטע"}
+                                title={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
                             >
-                                מחק מקטע
+                                מחק פריט
                             </button>
                         )}
                         <span>
@@ -677,7 +677,7 @@ export function PartItemRow({
                         disabled={isAddTranslationBlocked}
                         title={
                             isAddTranslationBlocked
-                                ? "הוספת תרגום זמינה רק אחרי לחיצה על «שמור מקטע» (בראש אזור המקטע)"
+                                ? "הוספת תרגום זמינה רק אחרי לחיצה על «שמור פריט» (בראש אזור הפריט)"
                                 : undefined
                         }
                         onClick={() => onAddTranslation!(item)}
@@ -694,8 +694,8 @@ export function PartItemRow({
                             className="mt-1.5 text-[10px] text-amber-900/90 text-center leading-snug px-1"
                             dir="rtl"
                         >
-                            לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת המקטע</span>
-                            — לחץ <span className="font-semibold">«שמור מקטע»</span> למעלה.
+                            לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת הפריט</span>
+                            — לחץ <span className="font-semibold">«שמור פריט»</span> למעלה.
                         </p>
                     )}
                 </div>

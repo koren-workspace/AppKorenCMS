@@ -2,7 +2,7 @@
  * PartEditPanel – אזור העריכה הראשי במסך
  *
  * מציג:
- *   - PartEditToolbar: כותרת המקטע + כפתורי "שמור מקטע" ו"פרסום לבייגל" (לפי נוסח)
+ *   - PartEditToolbar: כותרת הפריט + כפתורי "שמור פריט" ו"פרסום לבייגל" (לפי נוסח)
  *   - במצב טעינה: "טוען..."
  *   - לאחר טעינה: רשימת פריטים (PartItemRow) + כפתור "הוסף פריט"
  *
@@ -30,7 +30,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 export type PartEditPanelProps = {
     selectedGroupId: string | null;
-    /** שם הנוסח הנבחר — מוצג ליד פרסום לבייגל (הפרסום לפי נוסח, לא לפי מקטע) */
+    /** שם הנוסח הנבחר — מוצג ליד פרסום לבייגל (הפרסום לפי נוסח, לא לפי פריט) */
     publishNusachLabel?: string | null;
     saving: boolean;
     changedIds: Set<string>;
@@ -53,13 +53,13 @@ export type PartEditPanelProps = {
     onEnhancementFieldChange?: (entityId: string, translationId: string, field: string, value: unknown) => void;
     onAddNewItemAt: (index: number) => void;
     onAddNewParagraphAt?: (index: number) => void;
-    /** מוחק מקטע ואת כל התרגומים המקושרים (סימון למחיקה בשמירה) */
+    /** מוחק פריט ואת כל התרגומים המקושרים (סימון למחיקה בשמירה) */
     onDeleteItem?: (item: Entity<any>, itemId: string) => void;
     /** פריטים שסומנו למחיקה – מוצגים עם עיצוב "ימוחק בשמירה" וכפתור החזר */
     pendingDeletes?: Array<{ entity: Entity<any>; itemId: string }>;
     /** מחזיר פריט מרשימת המחיקות המתינות */
     onRestoreItem?: (item: Entity<any>, itemId: string) => void;
-    /** רק בנוסח הבסיסי (0-*) מותר להוסיף מקטעים; בשאר הנוסחים – עריכה בלבד */
+    /** רק בנוסח הבסיסי (0-*) מותר להוסיף פריטים; בשאר הנוסחים – עריכה בלבד */
     allowAddPart?: boolean;
     /** רק בתרגום (לא בסיס) מותר להוסיף הוראות – טקסט שלא מקושר לבסיס */
     allowAddInstruction?: boolean;

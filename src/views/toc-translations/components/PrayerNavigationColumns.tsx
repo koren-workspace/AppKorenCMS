@@ -3,7 +3,7 @@
  *
  * עמודה 3: קטגוריות (לפי currentCategories)
  * עמודה 4: תפילות של הקטגוריה הנבחרת (currentPrayers)
- * עמודה 5: מקטעים (parts) של התפילה הנבחרת – לחיצה טוענת את פריטי המקטע (onSelectPart)
+ * עמודה 5: פריטים (parts) של התפילה הנבחרת – לחיצה טוענת את פריטי הפריט (onSelectPart)
  *
  * מקבל את הרשימות וה-handlers מ-useTocNavigation ו-usePartEdit.
  */
@@ -50,20 +50,20 @@ type PrayerNavigationColumnsProps = {
     currentParts: any[];
     selectedGroupId: string | null;
     onSelectPart: (partId: string) => void;
-    /** נקרא בלחיצה על "הוסף מקטע" – פותח מודל להזנת מאפיינים. afterPartId = null = בסוף הרשימה */
+    /** נקרא בלחיצה על "הוסף פריט" – פותח מודל להזנת מאפיינים. afterPartId = null = בסוף הרשימה */
     onAddPartClick?: (afterPartId: string | null) => void;
-    /** נקרא בלחיצה על עריכת מקטע – פותח מודל עריכה */
+    /** נקרא בלחיצה על עריכת פריט – פותח מודל עריכה */
     onEditPart?: (partId: string) => void;
     onDeletePart?: (partId: string) => void;
-    /** מציג את כפתור "הוסף מקטע" רק כשנבחרו נוסח, תרגום, קטגוריה ותפילה */
+    /** מציג את כפתור "הוסף פריט" רק כשנבחרו נוסח, תרגום, קטגוריה ותפילה */
     showAddPart?: boolean;
-    /** קריאה לאחר גרירה לסידור מחדש של מקטעים */
+    /** קריאה לאחר גרירה לסידור מחדש של פריטים */
     onReorderParts?: (orderedPartIds: string[]) => void;
     /** במהלך שמירה – כפתורי הוספה/מחיקה מושבתים ומציגים מצב טעינה */
     isSaving?: boolean;
 };
 
-/** פריט מקטע יחיד הניתן לגרירה */
+/** פריט פריט יחיד הניתן לגרירה */
 function SortablePartItem({
     part,
     selectedGroupId,
@@ -125,7 +125,7 @@ function SortablePartItem({
                     onClick={(e) => { e.stopPropagation(); onEditPart(part.id); }}
                     disabled={isSaving}
                     className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
-                    title="ערוך מקטע"
+                    title="ערוך פריט"
                 >
                     ✎
                 </button>
@@ -136,7 +136,7 @@ function SortablePartItem({
                     onClick={(e) => onDeletePart(e, part.id)}
                     disabled={isSaving}
                     className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-[8px] ${isSaving ? savingClass : "hover:bg-red-50"}`}
-                    title="מחק מקטע"
+                    title="מחק פריט"
                 >
                     ✕
                 </button>
@@ -220,7 +220,7 @@ export function PrayerNavigationColumns({
 
     const handleDeletePart = (e: React.MouseEvent, partId: string) => {
         e.stopPropagation();
-        if (window.confirm("למחוק את המקטע וכל הפריטים שלו מכל התרגומים?")) onDeletePart?.(partId);
+        if (window.confirm("למחוק את הפריט וכל הפריטים שלו מכל התרגומים?")) onDeletePart?.(partId);
     };
 
     return (
@@ -346,7 +346,7 @@ export function PrayerNavigationColumns({
                 ))}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
+                <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. פריט</h4>
                 {currentParts.length === 0 && onAddPartClick && showAddPart && (
                     <button
                         type="button"
@@ -354,7 +354,7 @@ export function PrayerNavigationColumns({
                         disabled={isSaving}
                         className={`py-1.5 rounded border-2 border-dashed font-bold text-[9px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-600 hover:bg-orange-50"}`}
                     >
-                        {isSaving ? "שומר…" : "+ הוסף מקטע"}
+                        {isSaving ? "שומר…" : "+ הוסף פריט"}
                     </button>
                 )}
                 <DndContext
@@ -384,7 +384,7 @@ export function PrayerNavigationColumns({
                                         onClick={() => handleAddPartAfter(part.id)}
                                         disabled={isSaving}
                                         className={`w-full py-0.5 rounded border border-dashed text-[8px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-500 hover:bg-orange-50"}`}
-                                        title={isSaving ? undefined : `הוסף מקטע אחרי "${part.name}"`}
+                                        title={isSaving ? undefined : `הוסף פריט אחרי "${part.name}"`}
                                     >
                                         {isSaving ? "שומר…" : "+ הוסף כאן"}
                                     </button>

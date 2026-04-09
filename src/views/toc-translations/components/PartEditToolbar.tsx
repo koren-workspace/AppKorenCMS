@@ -1,18 +1,18 @@
 /**
  * PartEditToolbar – סרגל פעולות באזור העריכה
  *
- * מציג את שם המקטע הנבחר + שני כפתורים:
- *   - "שמור מקטע": שומר שינויים ל-Firestore (מושבת אם אין שינויים או במצב saving)
- *   - כפתור "פרסום {נוסח} לבייגל": מעדכן timestamp לנוסח הנבחר — סנכרון האפליקציה לפי נוסח, לא לפי מקטע בודד
+ * מציג את שם הפריט הנבחר + שני כפתורים:
+ *   - "שמור פריט": שומר שינויים ל-Firestore (מושבת אם אין שינויים או במצב saving)
+ *   - כפתור "פרסום {נוסח} לבייגל": מעדכן timestamp לנוסח הנבחר — סנכרון האפליקציה לפי נוסח, לא לפי פריט בודד
  *
- * אם אין מקטע נבחר – לא מציג כלום (return null).
+ * אם אין פריט נבחר – לא מציג כלום (return null).
  */
 
 import React from "react";
 
 export type PartEditToolbarProps = {
     selectedGroupId: string | null;
-    /** שם הנוסח הנבחר (להבהרה: פרסום לבייגל חל על כל הנוסח, לא רק על המקטע) */
+    /** שם הנוסח הנבחר (להבהרה: פרסום לבייגל חל על כל הנוסח, לא רק על הפריט) */
     publishNusachLabel?: string | null;
     saving: boolean;
     hasChanges: boolean;
@@ -40,8 +40,8 @@ export function PartEditToolbar({
     const trimmedNusach = publishNusachLabel?.trim() ?? "";
     const hasNusachLabel = trimmedNusach.length > 0;
     const publishTitle = hasNusachLabel
-        ? `מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל. האפליקציה מסנכרנת את כל התרגומים של נוסח זה — לא רק את המקטע הפתוח.`
-        : "מסמן שהנוסח הנבחר התעדכן בבייגל; האפליקציה מסנכרנת לפי נוסח (לא לפי מקטע בודד).";
+        ? `מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל. האפליקציה מסנכרנת את כל התרגומים של נוסח זה — לא רק את הפריט הפתוח.`
+        : "מסמן שהנוסח הנבחר התעדכן בבייגל; האפליקציה מסנכרנת לפי נוסח (לא לפי פריט בודד).";
     const publishButtonLabel = hasNusachLabel
         ? `פרסום ${trimmedNusach} לאפליקציה`
         : "פרסום לאפליקציה";
@@ -58,18 +58,18 @@ export function PartEditToolbar({
                                 onClick={onSplitPart}
                                 disabled={saving}
                                 className="px-3 py-1.5 bg-purple-600 text-white rounded font-bold text-[10px] disabled:opacity-30 hover:bg-purple-700"
-                                title="פצל מקטע – יצירת מקטע חדש מחלק מהפריטים"
+                                title="פצל פריט – יצירת פריט חדש מחלק מהפריטים"
                             >
-                                ✂ פצל מקטע
+                                ✂ פצל פריט
                             </button>
                             <button
                                 type="button"
                                 onClick={onMoveItemsToPart}
                                 disabled={saving}
                                 className="px-3 py-1.5 bg-orange-500 text-white rounded font-bold text-[10px] disabled:opacity-30 hover:bg-orange-600"
-                                title="העבר פריטים למקטע אחר"
+                                title="העבר פריטים לפריט אחר"
                             >
-                                ↔ העבר למקטע
+                                ↔ העבר לפריט
                             </button>
                         </>
                     )}
@@ -79,7 +79,7 @@ export function PartEditToolbar({
                         disabled={saving || !hasChanges}
                         className="px-4 py-1.5 bg-green-600 text-white rounded font-bold disabled:opacity-30"
                     >
-                        {saving ? "שומר..." : "שמור מקטע"}
+                        {saving ? "שומר..." : "שמור פריט"}
                     </button>
                     <button
                         type="button"

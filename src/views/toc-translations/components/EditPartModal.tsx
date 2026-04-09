@@ -1,5 +1,5 @@
 /**
- * EditPartModal – מודל עריכת מקטע קיים
+ * EditPartModal – מודל עריכת פריט קיים
  *
  * בבסיס (0-*): שם עברית + אנגלית, dateSetIds, hazan, minyan.
  * בתרגום (1-*, 2-*): שם בתרגום הנוכחי בלבד.
@@ -115,7 +115,7 @@ export function EditPartModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" dir="rtl">
             <div className="bg-white rounded-lg shadow-xl w-[500px] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                    <h2 className="font-bold text-sm">עריכת מקטע: {initialPart?.id ?? ""}</h2>
+                    <h2 className="font-bold text-sm">עריכת פריט: {initialPart?.id ?? ""}</h2>
                     <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
                 </div>
 
@@ -124,7 +124,7 @@ export function EditPartModal({
                         <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-[10px] font-semibold mb-1">שם המקטע (עברית) *</label>
+                                    <label className="block text-[10px] font-semibold mb-1">שם הפריט (עברית) *</label>
                                     <input
                                         type="text"
                                         value={nameHe}
@@ -181,7 +181,7 @@ export function EditPartModal({
                         </>
                     ) : (
                         <div>
-                            <label className="block text-[10px] font-semibold mb-1">שם המקטע בתרגום זה *</label>
+                            <label className="block text-[10px] font-semibold mb-1">שם הפריט בתרגום זה *</label>
                             <input
                                 type="text"
                                 value={name}

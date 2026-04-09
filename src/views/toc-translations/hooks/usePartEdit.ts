@@ -1,9 +1,9 @@
 /**
- * usePartEdit – Hook לעריכת מקטע (part)
+ * usePartEdit – Hook לעריכת פריט (part)
  *
  * תפקיד:
- *   - טוען פריטי המקטע הנבחר + "תרגומים מקושרים" (enhancements) משאר התרגומים (דרך partEditService)
- *   - שומר עריכות מקומית (localValues, changedIds) עד ללחיצה על "שמור מקטע"
+ *   - טוען פריטי הפריט הנבחר + "תרגומים מקושרים" (enhancements) משאר התרגומים (דרך partEditService)
+ *   - שומר עריכות מקומית (localValues, changedIds) עד ללחיצה על "שמור פריט"
  *   - שמירה: שומר רק פריטים ששונו ל-Firestore (savePartItems)
  *   - פרסום: מעדכן db-update-time (Firestore) + timestamp ב-Bagel (SDK)
  *
@@ -51,11 +51,11 @@ export type PartEditContext = {
     currentTranslationData: any;
     selectedPrayerId: string | null;
     selectedTocId: string | null;
-    /** מקטעים בתפילה הנוכחית (לחישוב afterPartId בפיצול ולמודל ההעברה) */
+    /** פריטים בתפילה הנוכחית (לחישוב afterPartId בפיצול ולמודל ההעברה) */
     currentParts: any[];
     /** תפילות בקטגוריה הנוכחית (לשם תפילה בתיעוד) */
     currentPrayers?: any[];
-    /** מוסיף מקטע ב-TOC (מ-useTocNavigation) – מחזיר newPartId */
+    /** מוסיף פריט ב-TOC (מ-useTocNavigation) – מחזיר newPartId */
     addPart: (
         name: string,
         afterPartId: string | null,
@@ -87,7 +87,7 @@ function matchesPendingParagraphWrite(
     return Boolean(pid && bid && pid === bid);
 }
 
-/** מיזוג תוצאת Sheets עם פסקה שעדיין בתור ל-Sheets (עד "שמור מקטע") – ללא כתיבה מוקדמת לגיליון */
+/** מיזוג תוצאת Sheets עם פסקה שעדיין בתור ל-Sheets (עד "שמור פריט") – ללא כתיבה מוקדמת לגיליון */
 function mergeParagraphLookupWithPending(
     sheetsLookup: ParagraphLookupResult,
     pendingWrites: PendingParagraphSheetsWrite[],
@@ -105,7 +105,7 @@ function mergeParagraphLookupWithPending(
 }
 
 /**
- * itemId לשורת בסיס לסידור מקטע / אינדקס שורה: ערך itemId מהתא או מהמסמך;
+ * itemId לשורת בסיס לסידור פריט / אינדקס שורה: ערך itemId מהתא או מהמסמך;
  * אם התא ריק ומזהה המסמך מספרי בלבד – משתמשים ב-id (כמו בפריטי בסיס ב-Firestore).
  */
 function rowItemIdForBaseOrder(b: Entity<any>, localValues: Record<string, any>): string {
@@ -184,13 +184,13 @@ export function usePartEdit(context: PartEditContext) {
     const dataSource = useDataSource();
     const snackbar = useSnackbarController();
 
-    // —— State: מקטע נבחר, פריטים, עריכות מקומיות, סטטוס טעינה/שמירה ——
+    // —— State: פריט נבחר, פריטים, עריכות מקומיות, סטטוס טעינה/שמירה ——
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
     const [allItems, setAllItems] = useState<Entity<any>[]>([]);
     const [baseItems, setBaseItems] = useState<Entity<any>[]>([]);
     /**
-     * גבולות מהמקטעים הסמוכים – נטענים ב-fetchItemsWithEnhancements.
-     * משמשים לחישוב itemId/mit_id כשהמקטע ריק או כשמוסיפים בקצה הרשימה.
+     * גבולות מהפריטים הסמוכים – נטענים ב-fetchItemsWithEnhancements.
+     * משמשים לחישוב itemId/mit_id כשהפריט ריק או כשמוסיפים בקצה הרשימה.
      */
     const [neighborBounds, setNeighborBounds] = useState<{
         prevLastItemId?: string;
@@ -232,7 +232,7 @@ export function usePartEdit(context: PartEditContext) {
     /** שינויי השמירה האחרונה בלבד – מתאפס בכל שמירה חדשה */
     const [lastSaveEntries, setLastSaveEntries] = useState<ChangeLogEntry[]>([]);
 
-    /** פריטים שסומנו למחיקה – נמחקים ב-Firestore רק בלחיצה על "שמור מקטע" */
+    /** פריטים שסומנו למחיקה – נמחקים ב-Firestore רק בלחיצה על "שמור פריט" */
     const [pendingDeletes, setPendingDeletes] = useState<Array<{ entity: Entity<any>; itemId: string }>>([]);
     /** מזההים של פריטים עם deleted: true בשרת – לא מוצגים אבל נספרים בחישוב itemId/mit_id לפריטים חדשים */
     const [deletedIdsFromServer, setDeletedIdsFromServer] = useState<{ itemIds: string[]; mitIds: string[] }>({
@@ -250,17 +250,17 @@ export function usePartEdit(context: PartEditContext) {
     const pendingParagraphSheetsWritesRef = useRef<PendingParagraphSheetsWrite[]>([]);
     pendingParagraphSheetsWritesRef.current = pendingParagraphSheetsWrites;
 
-    /** מונע מרוץ בטעינת מקטע: תשובה מאיחור ממקטע קודם לא דורסת את המקטע הנוכחי */
+    /** מונע מרוץ בטעינת פריט: תשובה מאיחור מפריט קודם לא דורסת את הפריט הנוכחי */
     const partFetchGenRef = useRef(0);
 
     /** כשפותחים מודל dateSetId מתוך הוספת פריט – שומרים את סוג ההוספה (part/instruction) */
     const [addItemDateSetIdSource, setAddItemDateSetIdSource] = useState<"part" | "instruction" | null>(null);
 
-    /** מודל הגדרת dateSetId לפני הוספת מקטע/הוראה או בעריכת מקטע קיים */
+    /** מודל הגדרת dateSetId לפני הוספת פריט/הוראה או בעריכת פריט קיים */
     const [dateSetIdModalOpen, setDateSetIdModalOpen] = useState(false);
     const [pendingAddKind, setPendingAddKind] = useState<"part" | "instruction" | "paragraph" | "addTranslation" | "edit" | "addItemDateSetId" | "addParagraphDateSetId" | null>(null);
     const [pendingAddIndex, setPendingAddIndex] = useState(0);
-    /** בעריכת dateSetId של מקטע קיים: מזהה הפריט וה-dateSetId הנוכחי (לטעינה במודל) */
+    /** בעריכת dateSetId של פריט קיים: מזהה הפריט וה-dateSetId הנוכחי (לטעינה במודל) */
     const [pendingEditEntityId, setPendingEditEntityId] = useState<string | null>(null);
     const [dateSetIdInitialForEdit, setDateSetIdInitialForEdit] = useState<string | undefined>(undefined);
 
@@ -269,11 +269,11 @@ export function usePartEdit(context: PartEditContext) {
     const [enhancementChangedIds, setEnhancementChangedIds] = useState<Set<string>>(new Set());
     const [enhancementTranslationIds, setEnhancementTranslationIds] = useState<Record<string, string>>({});
 
-    // מודל פיצול מקטע
+    // מודל פיצול פריט
     const [splitPartModalOpen, setSplitPartModalOpen] = useState(false);
-    // מודל העברת פריטים למקטע אחר
+    // מודל העברת פריטים לפריט אחר
     const [moveToPartModalOpen, setMoveToPartModalOpen] = useState(false);
-    /** פריטי מקטע היעד (נטענים בבחירת מקטע במודל ההעברה) */
+    /** פריטי פריט היעד (נטענים בבחירת פריט במודל ההעברה) */
     const [moveTargetPartItems, setMoveTargetPartItems] = useState<Entity<any>[]>([]);
 
     // מודל "הוסף תרגום" – פריט בסיס, תרגום יעד, מיקום, תוכן
@@ -365,7 +365,7 @@ export function usePartEdit(context: PartEditContext) {
         setAddItemDateSetIdSource(null);
     }, [currentTocData, currentTranslationData, selectedPrayerId]);
 
-    /** מחלץ את רשימת המקטעים לתפילה הנוכחית מתוך currentTocData לפי translationId */
+    /** מחלץ את רשימת הפריטים לתפילה הנוכחית מתוך currentTocData לפי translationId */
     const getPartsFromToc = (translationId: string, prayerId: string): any[] => {
         const trans = (currentTocData?.translations ?? []).find(
             (t: any) => t.translationId === translationId
@@ -378,7 +378,7 @@ export function usePartEdit(context: PartEditContext) {
         return [];
     };
 
-    /** טוען פריטי מקטע + enhancements + גבולות מהמקטעים הסמוכים (במקביל).
+    /** טוען פריטי פריט + enhancements + גבולות מהפריטים הסמוכים (במקביל).
      * options.preserveLocalEdits: כשמוסיפים תרגום – מרענן רק enhancements אבל שומר עריכות לא שמורות. */
     const fetchItemsWithEnhancements = async (
         partId: string,
@@ -401,14 +401,14 @@ export function usePartEdit(context: PartEditContext) {
         try {
             const translationId = currentTranslationData.translationId;
 
-            // מזהה מקטעים סמוכים מה-TOC
+            // מזהה פריטים סמוכים מה-TOC
             const parts = getPartsFromToc(translationId, selectedPrayerId);
             const partIdx = parts.findIndex((p: any) => p.id === partId);
             const prevPartId: string | null = partIdx > 0 ? parts[partIdx - 1]?.id ?? null : null;
             const nextPartId: string | null =
                 partIdx >= 0 && partIdx < parts.length - 1 ? parts[partIdx + 1]?.id ?? null : null;
 
-            // טוענים הכל במקביל: פריטי המקטע + פריטי מקטע קודם + פריטי מקטע הבא
+            // טוענים הכל במקביל: פריטי הפריט + פריטי פריט קודם + פריטי פריט הבא
             const [result, prevItems, nextItems] = await Promise.all([
                 fetchPartWithEnhancements(dataSource, {
                     translationId,
@@ -697,7 +697,7 @@ export function usePartEdit(context: PartEditContext) {
 
             snackbar.open({
                 type: "success",
-                message: "המקטע נשמר בהצלחה (מקומי)",
+                message: "הפריט נשמר בהצלחה (מקומי)",
             });
 
             // --- יומן שינויים: חישוב diff לפני ניקוי state ---
@@ -892,7 +892,7 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
-    /** מסמן פריט למחיקה מקומית; המחיקה ב-Firestore מתבצעת רק בלחיצה על "שמור מקטע". הפריט נשאר ברשימה ומסומן כ"ימוחק". */
+    /** מסמן פריט למחיקה מקומית; המחיקה ב-Firestore מתבצעת רק בלחיצה על "שמור פריט". הפריט נשאר ברשימה ומסומן כ"ימוחק". */
     const handleDeleteItem = (item: Entity<any>, itemId: string) => {
         if (!currentTranslationData || !selectedPrayerId || !currentTocData?.translations)
             return;
@@ -994,7 +994,7 @@ export function usePartEdit(context: PartEditContext) {
      * מחשב mit_id לפריט חדש במיקום index. לוקח בחשבון גם שכנים בתרגום וגם בבסיס:
      * idBefore = מקסימום בין (שכן למעלה בתרגום) ל(פריט הבסיס המקביל) – כך ההוראה אחרי שניהם.
      * idAfter = מינימום בין (שכן למטה בתרגום), (פריט הבסיס המקביל), ו(פריט הבסיס הבא) – כך ההוראה לפני כולם.
-     * בקצוות (index=0 / index=allItems.length) + מקטע ריק: neighborBounds מספק את הגבולות.
+     * בקצוות (index=0 / index=allItems.length) + פריט ריק: neighborBounds מספק את הגבולות.
      */
     const computeMitIdForIndex = (index: number): string => {
         let idBefore: string | null = null;
@@ -1006,7 +1006,7 @@ export function usePartEdit(context: PartEditContext) {
             const aboveInBase = getMitIdForPosition(itemAbove);
             idBefore = baseItems.length > 0 ? maxMitId(aboveInTranslation, aboveInBase) : aboveInBase;
         } else if (neighborBounds.prevLastMitId) {
-            // מקטע ריק או הוספה לפני כל הפריטים – גבול תחתון מהמקטע הקודם
+            // פריט ריק או הוספה לפני כל הפריטים – גבול תחתון מהפריט הקודם
             idBefore = neighborBounds.prevLastMitId;
         }
 
@@ -1024,7 +1024,7 @@ export function usePartEdit(context: PartEditContext) {
             idAfter = getNextBaseMitIdAfter(idBefore) ?? undefined;
         }
 
-        // אם עדיין אין גבול עליון (הוספה בסוף המקטע, כולל מקטע ריק) – גבול מהמקטע הבא
+        // אם עדיין אין גבול עליון (הוספה בסוף הפריט, כולל פריט ריק) – גבול מהפריט הבא
         if ((idAfter === undefined || idAfter === null) && neighborBounds.nextFirstMitId) {
             idAfter = neighborBounds.nextFirstMitId;
         }
@@ -1584,7 +1584,7 @@ export function usePartEdit(context: PartEditContext) {
         setDateSetIdModalOpen(true);
     };
 
-    /** פותח מודל עריכת dateSetId של מקטע קיים – טוען את הנתונים של ה-ID הנוכחי */
+    /** פותח מודל עריכת dateSetId של פריט קיים – טוען את הנתונים של ה-ID הנוכחי */
     const openDateSetIdModalForEdit = (entityId: string, currentDateSetId: string) => {
         setPendingAddKind("edit");
         setPendingEditEntityId(entityId);
@@ -1629,7 +1629,7 @@ export function usePartEdit(context: PartEditContext) {
         item;
 
     /**
-     * חסימת "הוסף תרגום" עד שמירת מקטע: פריט new_* לא בשרת, או פסקה בתור ל-Sheets.
+     * חסימת "הוסף תרגום" עד שמירת פריט: פריט new_* לא בשרת, או פסקה בתור ל-Sheets.
      * מונע פער Firebase / Sheets לפני תרגום (במיוחד תרגום פסקה).
      */
     const isAddTranslationBlockedForBaseItem = (item: Entity<any>): boolean => {
@@ -1648,7 +1648,7 @@ export function usePartEdit(context: PartEditContext) {
             snackbar.open({
                 type: "warning",
                 message:
-                    "הוספת תרגום אפשרית רק אחרי שמירת המקטע. לחץ על «שמור מקטע» בראש המסך — עד אז הפריט (והפסקה, אם יש) לא בשרת/בגיליון.",
+                    "הוספת תרגום אפשרית רק אחרי שמירת הפריט. לחץ על «שמור פריט» בראש המסך — עד אז הפריט (והפסקה, אם יש) לא בשרת/בגיליון.",
             });
             return;
         }
@@ -1809,8 +1809,8 @@ export function usePartEdit(context: PartEditContext) {
     const closeSplitPartModal = () => setSplitPartModalOpen(false);
 
     /**
-     * מבצע פיצול מקטע:
-     * 1. מוסיף מקטע חדש ב-TOC (addPart עם שם עברית + אנגלית + dateSetIds)
+     * מבצע פיצול פריט:
+     * 1. מוסיף פריט חדש ב-TOC (addPart עם שם עברית + אנגלית + dateSetIds)
      * 2. מעדכן partId/partName/partIdAndName/timestamp על הפריטים שעברו
      * 3. מרענן את הפריטים בתצוגה
      */
@@ -1836,7 +1836,7 @@ export function usePartEdit(context: PartEditContext) {
         if (!hasSplitItem) {
             snackbar.open({
                 type: "warning",
-                message: "לא נמצא פריט חתך במקטע, הפיצול לא בוצע",
+                message: "לא נמצא פריט חתך בפריט, הפיצול לא בוצע",
             });
             return;
         }
@@ -1844,7 +1844,7 @@ export function usePartEdit(context: PartEditContext) {
         // tocId נגזר ממזהה התרגום הנוכחי: "0-ashkenaz" → "ashkenaz"
         const tocId = selectedTocId;
 
-        // afterPartId לפי מיקום המקטע החדש
+        // afterPartId לפי מיקום הפריט החדש
         let afterPartId: string | null;
         if (insertBefore) {
             const idx = (currentParts ?? []).findIndex((p: any) => p.id === selectedGroupId);
@@ -1899,18 +1899,18 @@ export function usePartEdit(context: PartEditContext) {
                 savedToFirestore: true,
             });
 
-            snackbar.open({ type: "success", message: "המקטע פוצל בהצלחה" });
+            snackbar.open({ type: "success", message: "הפריט פוצל בהצלחה" });
             closeSplitPartModal();
             await fetchItemsWithEnhancements(selectedGroupId);
         } catch (err) {
             console.error(`${LOG_PREFIX} Split part failed`, err);
             const msg = err instanceof Error ? err.message : "";
             if (msg.includes("splitPartItems: split item not found")) {
-                snackbar.open({ type: "warning", message: "לא נמצא פריט חתך במקטע, הפיצול לא בוצע" });
+                snackbar.open({ type: "warning", message: "לא נמצא פריט חתך בפריט, הפיצול לא בוצע" });
             } else if (msg.includes("splitPartItems: no items selected for split")) {
                 snackbar.open({ type: "warning", message: "לא נמצאו פריטים להעברה בפיצול" });
             } else {
-                snackbar.open({ type: "error", message: "שגיאה בפיצול המקטע" });
+                snackbar.open({ type: "error", message: "שגיאה בפיצול הפריט" });
             }
         } finally {
             setSaving(false);
@@ -1925,7 +1925,7 @@ export function usePartEdit(context: PartEditContext) {
     };
     const closeMoveToPartModal = () => setMoveToPartModalOpen(false);
 
-    /** טוען פריטי מקטע יעד להצגה בבחירת מיקום הכנסה */
+    /** טוען פריטי פריט יעד להצגה בבחירת מיקום הכנסה */
     const loadMoveTargetPartItems = async (targetPartId: string) => {
         if (!selectedPrayerId || !currentTranslationData?.translationId) return;
         try {
@@ -1943,7 +1943,7 @@ export function usePartEdit(context: PartEditContext) {
     };
 
     /**
-     * מעביר פריטים ממקטע נוכחי למקטע יעד קיים.
+     * מעביר פריטים מפריט נוכחי לפריט יעד קיים.
      * מחשב mit_id חדשים לפי מיקום ההכנסה ומרענן את התצוגה.
      */
     const handleMoveItemsToPart = async (params: {
@@ -1997,8 +1997,12 @@ export function usePartEdit(context: PartEditContext) {
         } catch (err) {
             console.error(`${LOG_PREFIX} Move items to part failed`, err);
             const msg = err instanceof Error ? err.message : "";
-            if (msg.includes("moveItemsToPart: no matching source items found for movedItemIds")) {
+            if (err instanceof Error && err.message === NO_SPACE_BETWEEN_ITEMS) {
+                snackbar.open({ type: "error", message: "אין מקום פנוי בין הפריטים – לא ניתן להעביר ללא עקיפת הסדר." });
+            } else if (msg.includes("moveItemsToPart: no matching source items found for movedItemIds")) {
                 snackbar.open({ type: "warning", message: "לא נמצאו פריטים תואמים להעברה, הפעולה לא בוצעה" });
+            } else if (msg.includes("moveItemsToPart: insertAfterItemId")) {
+                snackbar.open({ type: "error", message: "פריט הייחוס להכנסה לא נמצא במקטע היעד – ייתכן שהנתונים השתנו. נסה לרענן ולנסות שוב." });
             } else {
                 snackbar.open({ type: "error", message: "שגיאה בהעברת הפריטים" });
             }
@@ -2029,7 +2033,7 @@ export function usePartEdit(context: PartEditContext) {
             snackbar.open({
                 type: "warning",
                 message:
-                    "המקטע השתנה ועדיין לא נשמר. לחץ «שמור מקטע» ואז נסה שוב להוסיף תרגום.",
+                    "הפריט השתנה ועדיין לא נשמר. לחץ «שמור פריט» ואז נסה שוב להוסיף תרגום.",
             });
             return;
         }
@@ -2110,7 +2114,7 @@ export function usePartEdit(context: PartEditContext) {
                     "";
                 const idNormSubmit = (v: unknown) =>
                     v != null && String(v).trim() !== "" ? String(v).trim() : "";
-                // בעריכת תרגום baseItems מגיע מהשרת — שורת בסיס new_* שלא נשמרה ב"שמור מקטע" לא מופיעה שם; ממזגים את הישות לסידור לפי itemId.
+                // בעריכת תרגום baseItems מגיע מהשרת — שורת בסיס new_* שלא נשמרה ב"שמור פריט" לא מופיעה שם; ממזגים את הישות לסידור לפי itemId.
                 let baseEntitiesForPartOrder: Entity<any>[] = [...baseItems];
                 if (
                     !baseEntitiesForPartOrder.some((b) => b.id === addTranslationBaseItem.id) &&
@@ -2282,12 +2286,12 @@ export function usePartEdit(context: PartEditContext) {
         enhancementLocalValues,
         enhancementChangedIds,
         enhancementTranslationIds,
-        // פיצול מקטע
+        // פיצול פריט
         splitPartModalOpen,
         openSplitPartModal,
         closeSplitPartModal,
         handleSplitPart,
-        // העברת פריטים למקטע
+        // העברת פריטים לפריט
         moveToPartModalOpen,
         openMoveToPartModal,
         closeMoveToPartModal,
@@ -2337,7 +2341,7 @@ export function usePartEdit(context: PartEditContext) {
                 : pendingAddKind === "addParagraphDateSetId"
                     ? "הגדר סט תאריכים לפסקה"
                 : pendingAddKind === "part"
-                  ? "הגדר סט תאריכים למקטע"
+                  ? "הגדר סט תאריכים לפריט"
                   : pendingAddKind === "instruction"
                     ? "הגדר סט תאריכים להוראה"
                     : pendingAddKind === "edit"

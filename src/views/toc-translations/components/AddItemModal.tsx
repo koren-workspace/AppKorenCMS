@@ -67,7 +67,7 @@ export const defaultAddItemForm = (isInstruction: boolean): AddItemFormValues =>
 export type AddItemModalProps = {
     open: boolean;
     onClose: () => void;
-    /** הוראה (instructions) או מקטע רגיל */
+    /** הוראה (instructions) או פריט רגיל */
     isInstruction: boolean;
     /** האם התרגום הנוכחי הוא תרגום בסיס (0-*) */
     isBaseTranslation: boolean;

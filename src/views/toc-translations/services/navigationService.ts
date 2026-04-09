@@ -5,7 +5,7 @@
  * כל prayer מכיל parts. הפונקציות מחזירות מערך לפי הבחירה הנוכחית.
  *
  * נוסח בסיסי (נוסח-0): תרגום שמזההו מתחיל ב־0- (למשל 0-ashkenaz).
- * רק בו מותר להוסיף קטגוריות, תפילות ומקטעים; שאר הנוסחים לעריכה בלבד.
+ * רק בו מותר להוסיף קטגוריות, תפילות ופריטים; שאר הנוסחים לעריכה בלבד.
  */
 
 /** מחזיר true אם זה נוסח בסיסי (מזהה שמתחיל ב־0-) – רק בו מותר להוסיף תוכן חדש */
@@ -14,7 +14,7 @@ export function isBaseTranslation(translationId: string | undefined): boolean {
 }
 
 /**
- * מחזיר true אם מותר לערוך שמות תפילות ומקטעים בתרגום הזה.
+ * מחזיר true אם מותר לערוך שמות תפילות ופריטים בתרגום הזה.
  * תרגומים (0-*, 1-*, 2-*, ...) – מותר; פירושים (10-*, 11-*, ...) – אסור.
  */
 export function isTranslationEditable(translationId: string | undefined): boolean {
@@ -38,7 +38,7 @@ export function getPrayersForCategory(categories: any[], selectedCategoryId: str
     return category.prayers;
 }
 
-/** מחזיר את רשימת המקטעים (parts) של התפילה הנבחרת (לפי id) */
+/** מחזיר את רשימת הפריטים (parts) של התפילה הנבחרת (לפי id) */
 export function getPartsForPrayer(categories: any[], selectedPrayerId: string | null): any[] {
     if (!selectedPrayerId) return [];
     const prayers = categories.flatMap((category: any) => category.prayers ?? []);

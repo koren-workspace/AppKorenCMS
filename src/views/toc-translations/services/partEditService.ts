@@ -1,10 +1,10 @@
 /**
- * partEditService – לוגיקת טעינה, שמירה ופרסום של מקטע
+ * partEditService – לוגיקת טעינה, שמירה ופרסום של פריט
  *
  * פונקציות "טהורות": מקבלות dataSource (ו-params) ומבצעות קריאות ל-Firestore/API.
  * אין כאן state או UI – רק פעולות. ה-hook usePartEdit קורא לפונקציות ומעדכן state + snackbar.
  *
- * - fetchPartWithEnhancements: טוען פריטי מקטע, ממיין לפי itemId, טוען תרגומים מקושרים במנות
+ * - fetchPartWithEnhancements: טוען פריטי פריט, ממיין לפי itemId, טוען תרגומים מקושרים במנות
  * - savePartItems: שומר רשימת פריטים (חדשים + קיימים) לפי path
  * - updateFirestoreTimestamp: מעדכן db-update-time ב-Firestore (Bagel SDK ב-bagelUpdateTimeService)
  */
@@ -27,7 +27,7 @@ type DataSource = {
     deleteEntity: (opts: any) => Promise<void>;
 };
 
-/** פרמטרים לטעינת מקטע: מזהה תרגום, תפילה, מקטע, ורשימת תרגומים (לשליפת enhancements) */
+/** פרמטרים לטעינת פריט: מזהה תרגום, תפילה, פריט, ורשימת תרגומים (לשליפת enhancements) */
 export type FetchPartParams = {
     translationId: string;
     selectedPrayerId: string;
@@ -41,7 +41,7 @@ export type FetchPartResult = {
     sorted: Entity<any>[];
     enhancementsMap: Record<string, Entity<any>[]>;
     initialValues: Record<string, any>;
-    /** פריטי הבסיס (0-*) של אותו מקטע – רק כשעורכים תרגום לא-בסיס */
+    /** פריטי הבסיס (0-*) של אותו פריט – רק כשעורכים תרגום לא-בסיס */
     baseItems?: Entity<any>[];
     /** מזההים של פריטים שמסומנים deleted: true – לא מוצגים אבל נספרים בחישוב itemId/mit_id לפריטים חדשים */
     deletedItemIds: string[];
@@ -49,7 +49,7 @@ export type FetchPartResult = {
 };
 
 /**
- * טוען פריטי מקטע (filter partId), ממיין לפי itemId.
+ * טוען פריטי פריט (filter partId), ממיין לפי itemId.
  * לכל תרגום אחר טוען פריטים עם linkedItem שמכיל את ה-itemIds (במנות של 30 בגלל מגבלת Firestore).
  */
 export async function fetchPartWithEnhancements(
@@ -90,7 +90,7 @@ export async function fetchPartWithEnhancements(
     const idChunks = chunkArray(sourceItemIds, 30);
     const enhancementsMap: Record<string, Entity<any>[]> = {};
 
-    // טוען מכל תרגום (חוץ מהנוכחי) פריטים שמקושרים ל-itemIds של המקטע
+    // טוען מכל תרגום (חוץ מהנוכחי) פריטים שמקושרים ל-itemIds של הפריט
     const enhancementPromises = translations.map(async (trans: any) => {
         if (trans.translationId === currentTranslationId) return;
         const tPath = `translations/${trans.translationId}/prayers/${selectedPrayerId}/items`;
@@ -111,7 +111,7 @@ export async function fetchPartWithEnhancements(
     const initialValues: Record<string, any> = {};
     sorted.forEach((item) => (initialValues[item.id] = { ...item.values }));
 
-    // כשעורכים תרגום (לא בסיס) – טוענים גם פריטי הבסיס של אותו מקטע
+    // כשעורכים תרגום (לא בסיס) – טוענים גם פריטי הבסיס של אותו פריט
     let baseItems: Entity<any>[] | undefined;
     const isCurrentBase = String(currentTranslationId ?? "").startsWith("0-");
     if (!isCurrentBase) {
@@ -207,7 +207,7 @@ export async function savePartItems(
 }
 
 /**
- * מסמן פריט מקטע כמחוק (deleted: true) בתרגום הנוכחי ובכל התרגומים המקושרים אליו (linkedItem).
+ * מסמן פריט פריט כמחוק (deleted: true) בתרגום הנוכחי ובכל התרגומים המקושרים אליו (linkedItem).
  * לא מוחק את הדוקומנט — מאפשר לאנדרואיד לזהות את המחיקה בסנכרון מבוסס-timestamp.
  */
 export type DeletePartItemParams = {
@@ -284,7 +284,7 @@ export async function deletePartItemAndRelatedTranslations(
 }
 
 /**
- * טוען פריטי מקטע של תרגום אחד (לפי partId), ממוינים לפי itemId.
+ * טוען פריטי פריט של תרגום אחד (לפי partId), ממוינים לפי itemId.
  */
 export async function fetchPartItems(
     dataSource: DataSource,
@@ -308,7 +308,7 @@ export async function fetchPartItems(
     );
 }
 
-/** רשימת מקטעים לתפילה מתוך מבנה ה-TOC (כמו ב-usePartEdit.getPartsFromToc) */
+/** רשימת פריטים לתפילה מתוך מבנה ה-TOC (כמו ב-usePartEdit.getPartsFromToc) */
 export function getPartsForPrayerInTranslation(
     translations: any[],
     translationId: string,
@@ -324,7 +324,7 @@ export function getPartsForPrayerInTranslation(
 }
 
 /**
- * itemId של הפריט האחרון במקטע הקודם והראשון במקטע הבא – אותו תרגום (כמו neighborBounds בטעינת מקטע).
+ * itemId של הפריט האחרון בפריט הקודם והראשון בפריט הבא – אותו תרגום (כמו neighborBounds בטעינת פריט).
  */
 export async function fetchNeighborItemIdBoundsForPart(
     dataSource: DataSource,
@@ -373,18 +373,18 @@ export type CreateTranslationItemParams = {
     targetTranslationId: string;
     selectedPrayerId: string;
     partId: string;
-    /** רשימת התרגומים מה-TOC – לחישוב מקטע קודם/הבא לאותו תרגום יעד */
+    /** רשימת התרגומים מה-TOC – לחישוב פריט קודם/הבא לאותו תרגום יעד */
     translations: any[];
     baseItemId: string;
     afterItemId: string | null;
     /**
-     * סדר itemId לכל שורת בסיס במקטע — באורך זהה ל-baseItems (מחרוזת ריקה אם חסר).
+     * סדר itemId לכל שורת בסיס בפריט — באורך זהה ל-baseItems (מחרוזת ריקה אם חסר).
      * סריקה לאחור: לכל שורה קודמת מחפשים תרגומים ש-linkedItem מצביע על itemId של אותה שורה.
      */
     baseItemIdsInPartOrder?: string[];
     /** אינדקס שורת הבסיס ב-baseItems (לפי entity.id) */
     currentBaseRowIndex?: number;
-    /** רצפל מזהי פריטים לפי תבנית אקסל (נגזר ממזהה המקטע) */
+    /** רצפל מזהי פריטים לפי תבנית אקסל (נגזר ממזהה הפריט) */
     minIdBefore?: string;
     content: string;
     type?: string;
@@ -411,7 +411,7 @@ export type CreateTranslationItemParams = {
     baseItemMitId?: string;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
     confirmUserWantsDecimalId?: () => boolean;
-    /** שם המקטע – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
+    /** שם הפריט – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
     partName?: string;
 };
 
@@ -467,7 +467,11 @@ export async function createTranslationItem(
     cmsIdDbg("[CMS-ID]   baseItemId=", baseItemId, "afterItemId=", afterItemId ?? "(ריק)", "minIdBefore=", minIdBeforeParam ?? "(ריק)");
     cmsIdDbg("[CMS-ID]   path=", path);
 
-    const [partEntities, neighborItemBounds] = await Promise.all([
+    const otherTranslations = (translations ?? []).filter(
+        (t: any) => t.translationId !== targetTranslationId
+    );
+
+    const [partEntities, neighborItemBounds, otherTranslationsEntities] = await Promise.all([
         dataSource.fetchCollection({
             path,
             collection: itemsCollection,
@@ -479,10 +483,28 @@ export async function createTranslationItem(
             partId,
             translations,
         }),
+        Promise.all(
+            otherTranslations.map((t: any) => {
+                const tPath = `translations/${t.translationId}/prayers/${selectedPrayerId}/items`;
+                return dataSource.fetchCollection({
+                    path: tPath,
+                    collection: itemsCollection,
+                    filter: { partId: ["==", partId] },
+                });
+            })
+        ),
     ]);
 
     cmsIdDbg("[CMS-ID]   partEntities נטענו: סה\"כ=", partEntities.length);
     cmsIdDbg("[CMS-ID]   neighborItemBounds=", JSON.stringify(neighborItemBounds));
+
+    const otherTranslationsItemIds: string[] = otherTranslationsEntities
+        .flat()
+        .filter((e: any) => e.values?.deleted !== true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
+    cmsIdDbg("[CMS-ID]   otherTranslationsItemIds (כל התרגומים האחרים):", otherTranslationsItemIds.length, otherTranslationsItemIds.length <= 20 ? JSON.stringify(otherTranslationsItemIds) : `[${otherTranslationsItemIds.length} IDs]`);
 
     const deletedItemIds: string[] = partEntities
         .filter((e: any) => e.values?.deleted === true)
@@ -528,7 +550,7 @@ export async function createTranslationItem(
             : rawItemRow.findIndex((id) => id === baseKey);
 
     /**
-     * אין afterItemId: עוגן = מקסימום itemId מבין כל פריטי התרגום במקטע שמקושרים לשורת בסיס כלשהי
+     * אין afterItemId: עוגן = מקסימום itemId מבין כל פריטי התרגום בפריט שמקושרים לשורת בסיס כלשהי
      * עם אינדקס < curBaseIdx (לא רק "השורה הקרובה ביותר עם תרגום") — כדי שלא ייבחר עוגן נמוך
      * כשיש שורת בסיס קודמת עם תרגום בעל itemId גבוה יותר (מיון גלובלי vs סדר שורות).
      */
@@ -629,7 +651,7 @@ export async function createTranslationItem(
         insertIndex >= orderedItemIds.length &&
         neighborItemBounds.nextFirstItemId == null
     ) {
-        cmsIdDbg("[CMS-ID]   הוספה בסוף + אין nextFirstItemId ממקטע סמוך → fetch כל התפילה");
+        cmsIdDbg("[CMS-ID]   הוספה בסוף + אין nextFirstItemId מפריט סמוך → fetch כל התפילה");
         const allPrayerItems = await dataSource.fetchCollection({
             path,
             collection: itemsCollection,
@@ -658,11 +680,12 @@ export async function createTranslationItem(
     const isNewPrayer = orderedItemIds.length === 0 && !neighborBoundsForInsert.prevLastItemId && !neighborBoundsForInsert.nextFirstItemId;
     cmsIdDbg("[CMS-ID]   neighborBoundsForInsert=", JSON.stringify(neighborBoundsForInsert));
     cmsIdDbg("[CMS-ID]   isNewPrayer=", isNewPrayer, "(orderedItemIds.length=", orderedItemIds.length, "prevLast=", neighborBoundsForInsert.prevLastItemId ?? "ריק", "nextFirst=", neighborBoundsForInsert.nextFirstItemId ?? "ריק", ")");
-    cmsIdDbg("[CMS-ID]   → קריאה ל-computeItemIdForInsert: orderedItemIds=", orderedItemIds.length, "insertIndex=", insertIndex, "extraTakenIds(deleted)=", deletedItemIds.length, "nextUpperCap=", nextUpperCapForInsert ?? "(ריק)", "minIdBefore=", isNewPrayer ? (minIdBeforeParam ?? "(ריק)") : "(לא רלוונטי – יש פריטים/שכנים)");
+    const allExtraTakenIds = [...deletedItemIds, ...otherTranslationsItemIds];
+    cmsIdDbg("[CMS-ID]   → קריאה ל-computeItemIdForInsert: orderedItemIds=", orderedItemIds.length, "insertIndex=", insertIndex, "extraTakenIds(deleted+otherTranslations)=", allExtraTakenIds.length, "nextUpperCap=", nextUpperCapForInsert ?? "(ריק)", "minIdBefore=", isNewPrayer ? (minIdBeforeParam ?? "(ריק)") : "(לא רלוונטי – יש פריטים/שכנים)");
 
     const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
         confirmUserWantsDecimalId,
-        extraTakenIds: deletedItemIds,
+        extraTakenIds: allExtraTakenIds,
         neighborBounds: neighborBoundsForInsert,
         ...(nextUpperCapForInsert != null
             ? { nextBaseLinkedMinItemId: nextUpperCapForInsert }
@@ -726,9 +749,9 @@ export async function createTranslationItem(
 // ─── Split Part ──────────────────────────────────────────────────────────────
 
 /**
- * פרמטרים לפיצול מקטע: מזהה פריט החתך קובע אילו פריטים עוברים למקטע החדש.
+ * פרמטרים לפיצול פריט: מזהה פריט החתך קובע אילו פריטים עוברים לפריט החדש.
  * insertBefore=false → פריט החתך ועד הסוף עוברים.
- * insertBefore=true  → מתחילת המקטע עד פריט החתך (כולל) עוברים.
+ * insertBefore=true  → מתחילת הפריט עד פריט החתך (כולל) עוברים.
  */
 export type SplitPartItemsParams = {
     currentTranslationId: string;
@@ -745,7 +768,7 @@ export type SplitPartItemsParams = {
 };
 
 /**
- * מעדכן partId / partName / partIdAndName / timestamp על פריטי המקטע המועברים,
+ * מעדכן partId / partName / partIdAndName / timestamp על פריטי הפריט המועברים,
  * כולל פריטים מקושרים בכל שאר התרגומים.
  * partName = שם עברי לכולם חוץ מתרגום "1-{tocId}", שם שמקבל שם אנגלי.
  */
@@ -841,11 +864,11 @@ export async function splitPartItems(
 export type MoveItemsToPartParams = {
     currentTranslationId: string;
     selectedPrayerId: string;
-    /** tocId – לא בשימוש כאן כי שם המקטע נלקח מה-TOC לכל תרגום */
+    /** tocId – לא בשימוש כאן כי שם הפריט נלקח מה-TOC לכל תרגום */
     movedItemIds: string[];
     sourcePartId: string;
     targetPartId: string;
-    /** itemId של הפריט שאחריו להכניס; null = תחילת המקטע היעד */
+    /** itemId של הפריט שאחריו להכניס; null = תחילת הפריט היעד */
     insertAfterItemId: string | null;
     /**
      * האם פריט בסיס הוא חלק מפסקה של הפריט שלפניו במיקום החדש.
@@ -858,8 +881,8 @@ export type MoveItemsToPartParams = {
 };
 
 /**
- * מעביר פריטים (רצף רציף) ממקטע מקור למקטע יעד באותה תפילה.
- * סדר הפריטים המועברים נשמר לפי itemId, ובמקביל מחושבים mit_id חדשים לפי מיקום ההכנסה במקטע היעד.
+ * מעביר פריטים (רצף רציף) מפריט מקור לפריט יעד באותה תפילה.
+ * סדר הפריטים המועברים נשמר לפי itemId, ובמקביל מחושבים mit_id חדשים לפי מיקום ההכנסה בפריט היעד.
  * partName לכל תרגום נלקח מעץ ה-TOC של אותו תרגום.
  */
 export async function moveItemsToPart(
@@ -905,38 +928,107 @@ export async function moveItemsToPart(
         throw new Error("moveItemsToPart: no matching source items found for movedItemIds");
     }
 
-    // פריטי יעד של הבסיס (ללא הפריטים המועברים, למקרה עתידי של source==target)
-    const rawTargetItems = await fetchPartItems(
-        dataSource,
-        currentTranslationId,
-        selectedPrayerId,
-        targetPartId
-    );
+    // פריטי יעד של הבסיס (כולל מחוקים, כדי לאסוף deleted IDs)
+    const basePath = `translations/${currentTranslationId}/prayers/${selectedPrayerId}/items`;
+    const allBaseTargetEntities = await dataSource.fetchCollection({
+        path: basePath,
+        collection: itemsCollection,
+        filter: { partId: ["==", targetPartId] },
+    });
+    const rawTargetItems = allBaseTargetEntities
+        .filter((e: any) => e.values?.deleted !== true)
+        .sort((a: any, b: any) =>
+            (a.values?.itemId || "").localeCompare(b.values?.itemId || "", undefined, {
+                numeric: true,
+            })
+        );
     const targetItems = rawTargetItems.filter(
         (e: any) => !movedIdSet.has(e.values?.itemId)
     );
+    const baseDeletedItemIds: string[] = allBaseTargetEntities
+        .filter((e: any) => e.values?.deleted === true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
 
+    const normalizedInsertAfterItemId =
+        insertAfterItemId == null ? null : String(insertAfterItemId);
     const insertAfterIdx =
-        insertAfterItemId === null
+        normalizedInsertAfterItemId === null
             ? -1
-            : targetItems.findIndex((e: any) => e.values?.itemId === insertAfterItemId);
-
-    const baseIdAfter =
-        insertAfterIdx + 1 < targetItems.length
-            ? (targetItems[insertAfterIdx + 1].values?.itemId ?? null)
-            : null;
+            : targetItems.findIndex(
+                (e: any) => String(e.values?.itemId ?? "") === normalizedInsertAfterItemId
+            );
+    if (normalizedInsertAfterItemId !== null && insertAfterIdx === -1) {
+        throw new Error(
+            `moveItemsToPart: insertAfterItemId "${normalizedInsertAfterItemId}" not found in target part "${targetPartId}"`
+        );
+    }
 
     const baseOrderedIds = targetItems.map((e: any) => e.values?.itemId ?? "");
     let baseInsertIdx = insertAfterIdx + 1;
+
+    const neighborBounds = await fetchNeighborItemIdBoundsForPart(dataSource, {
+        translationId: currentTranslationId,
+        selectedPrayerId,
+        partId: targetPartId,
+        translations,
+    });
+    const otherTranslationIds = translations
+        .map((t: any) => t?.translationId as string)
+        .filter((tid): tid is string => !!tid && tid !== currentTranslationId);
+
+    const [perTidNeighborBoundsArr, otherTranslationsEntities] = await Promise.all([
+        Promise.all(
+            otherTranslationIds.map(async (tid) => ({
+                tid,
+                bounds: await fetchNeighborItemIdBoundsForPart(dataSource, {
+                    translationId: tid,
+                    selectedPrayerId,
+                    partId: targetPartId,
+                    translations,
+                }),
+            }))
+        ),
+        Promise.all(
+            otherTranslationIds.map((tid) => {
+                const tPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+                return dataSource.fetchCollection({
+                    path: tPath,
+                    collection: itemsCollection,
+                    filter: { partId: ["==", targetPartId] },
+                });
+            })
+        ),
+    ]);
+    const neighborBoundsMap = new Map<string, { prevLastItemId?: string; nextFirstItemId?: string }>();
+    neighborBoundsMap.set(currentTranslationId, neighborBounds);
+    for (const { tid, bounds } of perTidNeighborBoundsArr) {
+        neighborBoundsMap.set(tid, bounds);
+    }
+    const otherTranslationsItemIds: string[] = otherTranslationsEntities
+        .flat()
+        .filter((e: any) => e.values?.deleted !== true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
 
     const oldToNewBaseItemId: Record<string, string> = {};
     const oldToNewBaseMitId: Record<string, string> = {};
     let prevBaseMitId: string | null =
         insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.mit_id ?? null) : null;
 
+    const movedBaseOldItemIds = movedEntities
+        .map((e: any) => String(e.values?.itemId ?? ""))
+        .filter((id) => id !== "");
+
     for (const item of movedEntities) {
         const oldBaseItemId = item.values?.itemId as string;
-        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {});
+        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
+            neighborBounds,
+            // Reserve old moved IDs too, so new entity IDs never collide before soft-delete.
+            extraTakenIds: [...baseDeletedItemIds, ...otherTranslationsItemIds, ...movedBaseOldItemIds],
+        });
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
         oldToNewBaseItemId[oldBaseItemId] = newBaseItemId;
@@ -954,7 +1046,7 @@ export async function moveItemsToPart(
 
     const now = Date.now();
 
-    // עוזר: שם המקטע היעד לפי עץ TOC של תרגום מסוים
+    // עוזר: שם הפריט היעד לפי עץ TOC של תרגום מסוים
     const getTargetPartName = (trans: any): string => {
         for (const cat of trans.categories ?? []) {
             const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
@@ -979,31 +1071,67 @@ export async function moveItemsToPart(
                 const oldItemId = item.values?.itemId as string;
                 const newItemId = oldToNewBaseItemId[oldItemId] ?? oldItemId;
                 const newMitId = oldToNewBaseMitId[oldItemId] ?? item.values?.mit_id;
-                await dataSource.saveEntity({
-                    path,
-                    entityId: item.id,
-                    values: {
-                        ...item.values,
-                        partId: targetPartId,
-                        partName,
-                        partIdAndName,
-                        itemId: newItemId,
-                        mit_id: newMitId,
-                        timestamp: now,
-                    },
-                    status: "existing",
-                    collection: itemsCollection,
-                });
+                if (newItemId === item.id) {
+                    await dataSource.saveEntity({
+                        path,
+                        entityId: item.id,
+                        values: {
+                            ...item.values,
+                            partId: targetPartId,
+                            partName,
+                            partIdAndName,
+                            itemId: newItemId,
+                            mit_id: newMitId,
+                            timestamp: now,
+                        },
+                        status: "existing",
+                        collection: itemsCollection,
+                    });
+                } else {
+                    await dataSource.saveEntity({
+                        path,
+                        entityId: newItemId,
+                        values: {
+                            ...item.values,
+                            partId: targetPartId,
+                            partName,
+                            partIdAndName,
+                            itemId: newItemId,
+                            mit_id: newMitId,
+                            timestamp: now,
+                        },
+                        status: "new",
+                        collection: itemsCollection,
+                    });
+                    await dataSource.saveEntity({
+                        path,
+                        entityId: item.id,
+                        values: { ...item.values, deleted: true, timestamp: now },
+                        status: "existing",
+                        collection: itemsCollection,
+                    });
+                }
             }
         } else {
-            const targetItemsForTranslation = await fetchPartItems(
-                dataSource,
-                tid,
-                selectedPrayerId,
-                targetPartId
-            );
+            const allTransTargetEntities = await dataSource.fetchCollection({
+                path,
+                collection: itemsCollection,
+                filter: { partId: ["==", targetPartId] },
+            });
+            const targetItemsForTranslation = allTransTargetEntities
+                .filter((e: any) => e.values?.deleted !== true)
+                .sort((a: any, b: any) =>
+                    (a.values?.itemId || "").localeCompare(b.values?.itemId || "", undefined, {
+                        numeric: true,
+                    })
+                );
+            const transDeletedItemIds: string[] = allTransTargetEntities
+                .filter((e: any) => e.values?.deleted === true)
+                .map((e: any) => e.values?.itemId)
+                .filter((id: any) => id != null && String(id).trim() !== "")
+                .map((id: any) => String(id));
             const chunks = chunkArray([...movedIdSet], 30);
-            const relatedToMove: Entity<any>[] = [];
+            const relatedToMoveMap = new Map<string, Entity<any>>();
             for (const chunk of chunks) {
                 const related = (
                     await dataSource.fetchCollection({
@@ -1012,8 +1140,11 @@ export async function moveItemsToPart(
                         filter: { linkedItem: ["array-contains-any", chunk] },
                     })
                 ).filter((e: any) => e.values?.deleted !== true);
-                relatedToMove.push(...related);
+                for (const item of related) {
+                    if (!relatedToMoveMap.has(item.id)) relatedToMoveMap.set(item.id, item);
+                }
             }
+            const relatedToMove: Entity<any>[] = [...relatedToMoveMap.values()];
 
             const relatedIds = new Set(relatedToMove.map((e: any) => e.id));
             const stableTargetItems = targetItemsForTranslation.filter(
@@ -1042,6 +1173,15 @@ export async function moveItemsToPart(
                 .map((e: any) => e.values?.itemId)
                 .filter((v: string | undefined) => !!v)
                 .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+            const tidNeighborBounds = neighborBoundsMap.get(tid) ?? {};
+            const movedTranslationOldItemIds = relatedToMove
+                .map((e: any) => String(e.values?.itemId ?? ""))
+                .filter((id: string) => id !== "");
+            const translationExtraTakenIds = [
+                ...transDeletedItemIds,
+                ...baseOrderedIds,
+                ...movedTranslationOldItemIds,
+            ];
 
             for (const oldBaseId of orderedOldBaseIds) {
                 const relatedItems = relatedByBaseId.get(oldBaseId) ?? [];
@@ -1051,7 +1191,12 @@ export async function moveItemsToPart(
                 const baseIsParagraph =
                     (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
 
-                cmsIdDbg("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "baseIsParagraph=", baseIsParagraph);
+                const baseIdx = baseOrderedIds.indexOf(newBaseId);
+                const nextBaseId = baseIdx >= 0 && baseIdx < baseOrderedIds.length - 1
+                    ? baseOrderedIds[baseIdx + 1]
+                    : undefined;
+
+                cmsIdDbg("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "nextBaseId=", nextBaseId ?? "(אין)", "baseIsParagraph=", baseIsParagraph);
 
                 // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
                 let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
@@ -1060,37 +1205,72 @@ export async function moveItemsToPart(
                 let insertPos = baseRefPos + 1;
 
                 for (const item of relatedItems) {
-                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {});
+                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {
+                        neighborBounds: tidNeighborBounds,
+                        extraTakenIds: translationExtraTakenIds,
+                        ...(nextBaseId != null ? { nextBaseLinkedMinItemId: nextBaseId } : {}),
+                    });
                     translationOrderedIds.splice(insertPos, 0, newTranslationItemId);
                     insertPos++;
 
-                    const updatedLinkedItem = replaceLinkedItemId(
+                    let updatedLinkedItem = replaceLinkedItemId(
                         item.values?.linkedItem,
                         oldBaseId,
                         newBaseId
                     );
+                    for (const [oldId, newId] of Object.entries(oldToNewBaseItemId)) {
+                        if (oldId !== oldBaseId) {
+                            updatedLinkedItem = replaceLinkedItemId(updatedLinkedItem, oldId, newId);
+                        }
+                    }
                     const newTranslationMitId = baseIsParagraph
                         ? (oldToNewBaseMitId[oldBaseId] ?? item.values?.mit_id)
                         : newTranslationItemId;
 
                     cmsIdDbg("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
 
-                    await dataSource.saveEntity({
-                        path,
-                        entityId: item.id,
-                        values: {
-                            ...item.values,
-                            linkedItem: updatedLinkedItem,
-                            itemId: newTranslationItemId,
-                            mit_id: newTranslationMitId,
-                            partId: targetPartId,
-                            partName,
-                            partIdAndName,
-                            timestamp: now,
-                        },
-                        status: "existing",
-                        collection: itemsCollection,
-                    });
+                    if (newTranslationItemId === item.id) {
+                        await dataSource.saveEntity({
+                            path,
+                            entityId: item.id,
+                            values: {
+                                ...item.values,
+                                linkedItem: updatedLinkedItem,
+                                itemId: newTranslationItemId,
+                                mit_id: newTranslationMitId,
+                                partId: targetPartId,
+                                partName,
+                                partIdAndName,
+                                timestamp: now,
+                            },
+                            status: "existing",
+                            collection: itemsCollection,
+                        });
+                    } else {
+                        await dataSource.saveEntity({
+                            path,
+                            entityId: newTranslationItemId,
+                            values: {
+                                ...item.values,
+                                linkedItem: updatedLinkedItem,
+                                itemId: newTranslationItemId,
+                                mit_id: newTranslationMitId,
+                                partId: targetPartId,
+                                partName,
+                                partIdAndName,
+                                timestamp: now,
+                            },
+                            status: "new",
+                            collection: itemsCollection,
+                        });
+                        await dataSource.saveEntity({
+                            path,
+                            entityId: item.id,
+                            values: { ...item.values, deleted: true, timestamp: now },
+                            status: "existing",
+                            collection: itemsCollection,
+                        });
+                    }
                 }
             }
         }
@@ -1107,7 +1287,7 @@ export type UpdatePartMetadataParams = {
 };
 
 /**
- * מעדכן partName ו-partIdAndName על כל הפריטים במקטע, בכל התרגומים.
+ * מעדכן partName ו-partIdAndName על כל הפריטים בפריט, בכל התרגומים.
  * השם לכל תרגום נלקח מעץ ה-TOC של אותו תרגום.
  */
 export async function updatePartMetadataInItems(

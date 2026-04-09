@@ -1,13 +1,13 @@
 /**
- * MoveToPartModal – מודל העברת פריטים למקטע אחר
+ * MoveToPartModal – מודל העברת פריטים לפריט אחר
  *
  * בשונה מפיצול (שדורש חתך רציף), כאן בוחרים פריטים בודדים בחירה חופשית (checkboxes).
- * הסיבה: המקטע היעד כבר קיים, ואין מניעה שפריטים בודדים יועברו אליו.
+ * הסיבה: הפריט היעד כבר קיים, ואין מניעה שפריטים בודדים יועברו אליו.
  *
  * תהליך:
- *  1. בחירת מקטע יעד (dropdown)
+ *  1. בחירת פריט יעד (dropdown)
  *  2. סימון פריטים להעברה (checkboxes – בחירה חופשית)
- *  3. בחירת מיקום הכנסה במקטע היעד (תחילה / סוף / אחרי פריט מסוים)
+ *  3. בחירת מיקום הכנסה בפריט היעד (תחילה / סוף / אחרי פריט מסוים)
  */
 
 import React, { useEffect, useState } from "react";
@@ -16,15 +16,15 @@ import { Entity } from "@firecms/core";
 export type MoveToPartModalProps = {
     open: boolean;
     onClose: () => void;
-    /** פריטי המקטע הנוכחי (ממוינים לפי itemId) */
+    /** פריטי הפריט הנוכחי (ממוינים לפי itemId) */
     items: Entity<any>[];
     /** ערכים מקומיים (לתצוגת content) */
     localValues: Record<string, any>;
-    /** רשימת המקטעים בתפילה (לבחירת יעד) */
+    /** רשימת הפריטים בתפילה (לבחירת יעד) */
     currentParts: any[];
-    /** המקטע הנוכחי */
+    /** הפריט הנוכחי */
     currentPartId: string | null;
-    /** פריטי מקטע היעד (נטענים בבחירת יעד) */
+    /** פריטי פריט היעד (נטענים בבחירת יעד) */
     targetPartItems: Entity<any>[];
     onLoadTargetPartItems: (partId: string) => Promise<void>;
     onSubmit: (params: {
@@ -132,23 +132,23 @@ export function MoveToPartModal({
             <div className="bg-white rounded-lg shadow-xl w-[640px] max-h-[90vh] flex flex-col overflow-hidden">
                 {/* כותרת */}
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                    <h2 className="font-bold text-sm">העברת פריטים למקטע אחר</h2>
+                    <h2 className="font-bold text-sm">העברת פריטים לפריט אחר</h2>
                     <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {/* בחירת מקטע יעד */}
+                    {/* בחירת פריט יעד */}
                     <div>
-                        <label className="block text-[10px] font-semibold mb-1">מקטע יעד *</label>
+                        <label className="block text-[10px] font-semibold mb-1">פריט יעד *</label>
                         {otherParts.length === 0 ? (
-                            <div className="text-gray-400 text-[10px]">אין מקטעים אחרים בתפילה זו</div>
+                            <div className="text-gray-400 text-[10px]">אין פריטים אחרים בתפילה זו</div>
                         ) : (
                             <select
                                 className="border rounded px-2 py-1 text-[11px] w-full"
                                 value={targetPartId ?? ""}
                                 onChange={(e) => setTargetPartId(e.target.value || null)}
                             >
-                                <option value="">— בחר מקטע יעד —</option>
+                                <option value="">— בחר פריט יעד —</option>
                                 {otherParts.map((p: any) => (
                                     <option key={p.id} value={p.id}>{p.id} – {p.name}</option>
                                 ))}
@@ -156,10 +156,10 @@ export function MoveToPartModal({
                         )}
                     </div>
 
-                    {/* מיקום הכנסה במקטע היעד */}
+                    {/* מיקום הכנסה בפריט היעד */}
                     {targetPartId && (
                         <div>
-                            <label className="block text-[10px] font-semibold mb-1">מיקום הכנסה במקטע היעד</label>
+                            <label className="block text-[10px] font-semibold mb-1">מיקום הכנסה בפריט היעד</label>
                             <select
                                 className="border rounded px-2 py-1 text-[11px] w-full"
                                 value={insertAfterItemId ?? "__beginning__"}
@@ -171,7 +171,7 @@ export function MoveToPartModal({
                                     )
                                 }
                             >
-                                <option value="__beginning__">בתחילת המקטע</option>
+                                <option value="__beginning__">בתחילת הפריט</option>
                                 {targetPartItems.map((item) => {
                                     const vals = item.values ?? {};
                                     const iId = vals.itemId ?? item.id;
@@ -182,7 +182,7 @@ export function MoveToPartModal({
                                         </option>
                                     );
                                 })}
-                                <option value="__end__">בסוף המקטע</option>
+                                <option value="__end__">בסוף הפריט</option>
                             </select>
                         </div>
                     )}
@@ -204,7 +204,7 @@ export function MoveToPartModal({
                             )}
                         </div>
                         {items.length === 0 ? (
-                            <div className="text-gray-400 text-[10px]">אין פריטים במקטע</div>
+                            <div className="text-gray-400 text-[10px]">אין פריטים בפריט</div>
                         ) : (
                             <div className="border rounded overflow-hidden divide-y max-h-64 overflow-y-auto">
                                 {items.map((item) => {
@@ -270,7 +270,7 @@ export function MoveToPartModal({
                         {selectedItemIds.size > 0 && (
                             <div className="mt-1 text-[10px] text-orange-700 font-medium">
                                 {selectedItemIds.size} פריטים נבחרו להעברה
-                                {targetPartId ? ` למקטע ${targetPartId}` : ""}
+                                {targetPartId ? ` לפריט ${targetPartId}` : ""}
                             </div>
                         )}
                     </div>

@@ -3,7 +3,7 @@
  *
  * תפקיד:
  *   - טוען את רשימת הנוסחים (TOC) מה-collection "toc"
- *   - שומר את הבחירות: נוסח נבחר, תרגום, קטגוריה, תפילה (מקטע נבחר מגיע מ-usePartEdit)
+ *   - שומר את הבחירות: נוסח נבחר, תרגום, קטגוריה, תפילה (פריט נבחר מגיע מ-usePartEdit)
  *   - מחשב מתוך הנתונים: currentTocData, currentTranslationData, currentCategories,
  *     currentPrayers, currentParts (להצגה בעמודות הניווט)
  *
@@ -1290,7 +1290,7 @@ export function useTocNavigation() {
     };
 
     /**
-     * מוסיף מקטע אחרי afterPartId (או בסוף אם null). רק בנוסח הבסיסי מעדכן את כל התרגומים.
+     * מוסיף פריט אחרי afterPartId (או בסוף אם null). רק בנוסח הבסיסי מעדכן את כל התרגומים.
      * אפשרויות נוספות (לפיצול): nameEn לתרגום 1-{tocId}, dateSetIds/hazan/minyan.
      * מחזיר את newPartId שנוצר, או null אם הפעולה נכשלה / הוחמצה.
      */
@@ -1349,7 +1349,7 @@ export function useTocNavigation() {
             newPartId
         );
 
-        // בסיס המקטע החדש עם שדות תצוגה
+        // בסיס הפריט החדש עם שדות תצוגה
         const basePart = {
             id: newPartId,
             dateSetIds: options?.dateSetIds ?? ["100"],
@@ -1395,7 +1395,7 @@ export function useTocNavigation() {
               );
 
         setIsSaving(true);
-        setSavingMessage("מוסיף מקטע...");
+        setSavingMessage("מוסיף פריט...");
         try {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
@@ -1414,11 +1414,11 @@ export function useTocNavigation() {
                 details: { newPartId, partName: name, afterPartId: afterPartId },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "מקטע נוסף" });
+            snackbar.open({ type: "success", message: "פריט נוסף" });
             return newPartId;
         } catch (err) {
             console.error(`${LOG_PREFIX} Add part failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה בהוספת מקטע" });
+            snackbar.open({ type: "error", message: "שגיאה בהוספת פריט" });
             return null;
         } finally {
             setIsSaving(false);
@@ -1427,7 +1427,7 @@ export function useTocNavigation() {
     };
 
     /**
-     * מעדכן מקטע קיים.
+     * מעדכן פריט קיים.
      * בבסיס (0-*): שם עברית/אנגלית, dateSetIds, hazan, minyan – מעדכן את כולם.
      * בתרגום (1-*, 2-*): מעדכן רק את השם בתרגום הנוכחי.
      */
@@ -1528,7 +1528,7 @@ export function useTocNavigation() {
         const updatedTranslations = currentTocData.translations.map(updateTranslation);
 
         setIsSaving(true);
-        setSavingMessage("מעדכן מקטע...");
+        setSavingMessage("מעדכן פריט...");
         try {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
@@ -1554,11 +1554,11 @@ export function useTocNavigation() {
                 details: { partId, nameHe, nameEn },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "המקטע עודכן" });
+            snackbar.open({ type: "success", message: "הפריט עודכן" });
             return true;
         } catch (err) {
             console.error(`${LOG_PREFIX} Update part failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה בעדכון המקטע" });
+            snackbar.open({ type: "error", message: "שגיאה בעדכון הפריט" });
             return false;
         } finally {
             setIsSaving(false);
@@ -1567,7 +1567,7 @@ export function useTocNavigation() {
     };
 
     /**
-     * משנה את סדר המקטעים בתפילה הנבחרת לפי orderedPartIds.
+     * משנה את סדר הפריטים בתפילה הנבחרת לפי orderedPartIds.
      * מעדכן את כל התרגומים ב-TOC (סדר אחיד בכולם).
      */
     const reorderParts = async (orderedPartIds: string[]) => {
@@ -1598,7 +1598,7 @@ export function useTocNavigation() {
         }));
 
         setIsSaving(true);
-        setSavingMessage("מסדר מקטעים...");
+        setSavingMessage("מסדר פריטים...");
         try {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
@@ -1632,17 +1632,17 @@ export function useTocNavigation() {
                 details: { orderedPartIds },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "סדר המקטעים עודכן" });
+            snackbar.open({ type: "success", message: "סדר הפריטים עודכן" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Reorder parts failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה בסידור מחדש של מקטעים" });
+            snackbar.open({ type: "error", message: "שגיאה בסידור מחדש של פריטים" });
         } finally {
             setIsSaving(false);
             setSavingMessage(null);
         }
     };
 
-    /** מוחק מקטע: רק בנוסח הבסיסי (0-*). מוציא את המקטע מכל התרגומים ב-TOC ומסמן פריטים כמחוקים. */
+    /** מוחק פריט: רק בנוסח הבסיסי (0-*). מוציא את הפריט מכל התרגומים ב-TOC ומסמן פריטים כמחוקים. */
     const deletePart = async (partId: string) => {
         if (
             !selectedTocId ||
@@ -1670,7 +1670,7 @@ export function useTocNavigation() {
         }));
 
         setIsSaving(true);
-        setSavingMessage("מוחק מקטע...");
+        setSavingMessage("מוחק פריט...");
         try {
             for (const t of currentTocData.translations ?? []) {
                 const tid = t.translationId;
@@ -1708,17 +1708,17 @@ export function useTocNavigation() {
                 details: { deletedId: partId, deletedName: partName },
                 savedToFirestore: true,
             });
-            snackbar.open({ type: "success", message: "מקטע נמחק מכל התרגומים" });
+            snackbar.open({ type: "success", message: "פריט נמחק מכל התרגומים" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete part failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה במחיקת מקטע" });
+            snackbar.open({ type: "error", message: "שגיאה במחיקת פריט" });
         } finally {
             setIsSaving(false);
             setSavingMessage(null);
         }
     };
 
-    /** מחזיר נתוני מקטע לעריכה: בבסיס nameHe+nameEn+מאפיינים; בתרגום (1-*, 2-*) שם בלבד */
+    /** מחזיר נתוני פריט לעריכה: בבסיס nameHe+nameEn+מאפיינים; בתרגום (1-*, 2-*) שם בלבד */
     const getPartForEdit = (partId: string) => {
         if (!currentTocData?.translations?.length || !selectedTocId || !selectedPrayerId) return null;
         const baseTrans = currentTocData.translations.find((t: any) =>

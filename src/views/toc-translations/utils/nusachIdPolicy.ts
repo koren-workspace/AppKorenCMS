@@ -14,17 +14,17 @@ export function prayerMinFloor(digitMillions: number): number {
     return digitMillions * 1_000_000 + 15_010;
 }
 
-/** סף מקטע בלוק 11 / 12 */
+/** סף פריט בלוק 11 / 12 */
 export function partMinFloor(digitMillions: number, block: "11" | "12"): number {
     const mid = block === "11" ? 11 : 12;
     return digitMillions * 1_000_000 + mid * 1_000 + 10;
 }
 
 /**
- * רצפל מספרי לפריט ריק: מבוסס על דפוס 12 ספרות (20100… בנוסח 2) + זנב מזהה המקטע,
- * נמוך מכל פריט אמיתי באותו מקטע כדי ש-minIdBefore יזניק את idBetween.
+ * רצפל מספרי לפריט ריק: מבוסס על דפוס 12 ספרות (20100… בנוסח 2) + זנב מזהה הפריט,
+ * נמוך מכל פריט אמיתי באותו פריט כדי ש-minIdBefore יזניק את idBetween.
  */
-/** 12 ספרות: (X01)*1e9 + מרווח + "1"+זנב4 של המקטע — נמוך מפריטים אמיתיים באותו מקטע */
+/** 12 ספרות: (X01)*1e9 + מרווח + "1"+זנב4 של הפריט — נמוך מפריטים אמיתיים באותו פריט */
 export function itemMinIdBefore(digitMillions: number, partId: string): string {
     const p = Number(partId);
     if (!Number.isFinite(p) || p <= 0) {
@@ -59,7 +59,7 @@ export function isCategoryIdInBand(idStr: string, digitMillions: number): boolea
     return n >= lo && n <= hi;
 }
 
-/** בלוק מקטע 11 או 12 לפי מזהה 7 ספרות */
+/** בלוק פריט 11 או 12 לפי מזהה 7 ספרות */
 export function partBlockOf(partId: string, digitMillions: number): "11" | "12" | null {
     const n = num(partId);
     if (Number.isNaN(n)) return null;
@@ -129,7 +129,7 @@ export function allocateIdWithCollision(
 }
 
 /**
- * מסיק ספרת מיליונים 1/2/3 ממזהה TOC ראשון (קטגוריה / תפילה / מקטע).
+ * מסיק ספרת מיליונים 1/2/3 ממזהה TOC ראשון (קטגוריה / תפילה / פריט).
  */
 export function inferDigitMillionsFromBaseTranslation(baseTrans: any): number | null {
     const cats = baseTrans?.categories ?? [];
@@ -167,7 +167,7 @@ export function resolveDigitMillions(baseTrans: any, tocDocumentId: string): num
     return inferDigitMillionsFromBaseTranslation(baseTrans) ?? inferDigitMillionsFallback(tocDocumentId);
 }
 
-/** מקטעים באותו בלוק ובאותה תפילה */
+/** פריטים באותו בלוק ובאותה תפילה */
 export function filterPartsInBlock(
     parts: Array<{ id?: string }>,
     digitMillions: number,

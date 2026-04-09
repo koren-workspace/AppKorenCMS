@@ -21,7 +21,7 @@ export type DateSetIdConfigModalProps = {
     dataSource: { fetchCollection: (opts: any) => Promise<any[]>; saveEntity: (opts: any) => Promise<any> };
     /** לאחר resolve: מחזיר את ה-dateSetId */
     onSelect: (dateSetId: string) => void;
-    /** כותרת מודל (למשל "הגדר סט תאריכים למקטע") */
+    /** כותרת מודל (למשל "הגדר סט תאריכים לפריט") */
     title?: string;
     /** כשמוגדר – טוען את רשומת הלוח עם ה-ID ומציג את המאפיינים לעריכה */
     initialDateSetId?: string;

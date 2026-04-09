@@ -1614,7 +1614,6 @@ export function usePartEdit(context: PartEditContext) {
         reference: "",
         specialSign: "",
         dateSetId: "100",
-        isStartOfParagraph: false,
         translationMode: "regular",
     });
 
@@ -1671,8 +1670,29 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
+        const baseVals = { ...canonical.values, ...localValues[canonical.id] };
         setAddTranslationForm({
             ...defaultAddTranslationForm(),
+            type: baseVals.type ?? "body",
+            titleType: baseVals.titleType ?? "",
+            title: baseVals.title ?? "",
+            fontTanach: !!baseVals.fontTanach,
+            bold: !!baseVals.bold,
+            centerAlign: !!baseVals.centerAlign,
+            lineLine: !!baseVals.lineLine,
+            red: !!baseVals.red,
+            justifyBlock: !!baseVals.justifyBlock,
+            noSpace: !!baseVals.noSpace,
+            block: !!baseVals.block,
+            firstInPage: !!baseVals.firstInPage,
+            specialDate: !!baseVals.specialDate,
+            cohanim: baseVals.cohanim ?? null,
+            hazan: baseVals.hazan ?? null,
+            minyan: baseVals.minyan ?? null,
+            role: baseVals.role ?? "",
+            reference: baseVals.reference ?? "",
+            specialSign: baseVals.specialSign ?? "",
+            dateSetId: baseVals.dateSetId != null && String(baseVals.dateSetId).trim() !== "" ? String(baseVals.dateSetId).trim() : "100",
             translationMode: pendingFromState.isParagraph ? "paragraph" : "regular",
         });
         setAddTranslationBaseIsParagraph(pendingFromState.isParagraph);
@@ -2146,7 +2166,6 @@ export function usePartEdit(context: PartEditContext) {
                     specialSign: form.specialSign,
                     dateSetId: form.dateSetId?.trim() || "100",
                     baseItemMitId: baseItemMitId != null && String(baseItemMitId).trim() !== "" ? String(baseItemMitId).trim() : undefined,
-                    isStartOfParagraph: !!form.isStartOfParagraph,
                     partName: currentPartName || undefined,
                     confirmUserWantsDecimalId: () =>
                         window.confirm(

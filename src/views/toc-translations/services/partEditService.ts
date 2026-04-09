@@ -407,10 +407,8 @@ export type CreateTranslationItemParams = {
     reference?: string;
     specialSign?: string;
     dateSetId?: string;
-    /** mit_id של פריט הבסיס המקושר – לחישוב mit_id של התרגום (פסקה / תחילת פסקה / itemId) */
+    /** mit_id של פריט הבסיס המקושר – לחישוב mit_id של התרגום (פסקה / itemId) */
     baseItemMitId?: string;
-    /** האם פריט התרגום הוא "תחילת פסקה" – רלוונטי רק כשפריט הבסיס אינו חלק מפסקה (itemId === mit_id) */
-    isStartOfParagraph?: boolean;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
     confirmUserWantsDecimalId?: () => boolean;
     /** שם המקטע – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
@@ -457,7 +455,6 @@ export async function createTranslationItem(
         specialSign,
         dateSetId,
         baseItemMitId: baseItemMitIdParam,
-        isStartOfParagraph,
         confirmUserWantsDecimalId,
         translations,
         partName,
@@ -673,22 +670,15 @@ export async function createTranslationItem(
         ...(isNewPrayer && minIdBeforeParam ? { minIdBefore: minIdBeforeParam } : {}),
     });
 
-    // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
+    // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אחרת → itemId של התרגום
     const baseItemMitId = baseItemMitIdParam != null && String(baseItemMitIdParam).trim() !== "" ? String(baseItemMitIdParam).trim() : null;
     const baseIsPartOfParagraph =
         baseItemMitId != null && baseKey !== idNorm(baseItemMitId);
-    let newMitId: string;
-    if (baseIsPartOfParagraph) {
-        newMitId = baseItemMitId;
-    } else if (isStartOfParagraph && baseItemMitId != null) {
-        newMitId = baseItemMitId;
-    } else {
-        newMitId = newItemId;
-    }
+    const newMitId = baseIsPartOfParagraph ? baseItemMitId : newItemId;
     cmsIdDbg("[CMS-ID] ◀◀◀ createTranslationItem – תוצאה סופית:");
     cmsIdDbg("[CMS-ID]   newItemId=", newItemId, "newMitId=", newMitId);
-    cmsIdDbg("[CMS-ID]   baseItemMitId=", baseItemMitId ?? "(ריק)", "baseIsPartOfParagraph=", baseIsPartOfParagraph, "isStartOfParagraph=", isStartOfParagraph);
-    cmsIdDbg("[CMS-ID]   mit_id חישוב:", baseIsPartOfParagraph ? "בסיס חלק מפסקה → mit_id=baseItemMitId" : isStartOfParagraph && baseItemMitId != null ? "תחילת פסקה → mit_id=baseItemMitId" : "רגיל → mit_id=newItemId");
+    cmsIdDbg("[CMS-ID]   baseItemMitId=", baseItemMitId ?? "(ריק)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
+    cmsIdDbg("[CMS-ID]   mit_id חישוב:", baseIsPartOfParagraph ? "בסיס חלק מפסקה → mit_id=baseItemMitId" : "רגיל → mit_id=newItemId");
 
     const values: Record<string, any> = {
         content: content ?? "",

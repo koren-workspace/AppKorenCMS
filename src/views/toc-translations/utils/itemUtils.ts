@@ -37,8 +37,15 @@ export function idBetween(
 
     if (!Number.isNaN(before) && !Number.isNaN(after)) {
         const mid = (before + after) / 2;
-        result = mid === Math.floor(mid) ? String(Math.floor(mid)) : String(mid);
-        formula = `(idBefore + idAfter) / 2 = (${before} + ${after}) / 2 = ${mid} ${mid === Math.floor(mid) ? "→ עיגול לשלם " + Math.floor(mid) : "→ נשאר עשרוני"}`;
+        const isConsecutive = Math.abs(after - before) === 1;
+        if (isConsecutive) {
+            result = String(mid);
+            formula = `(idBefore + idAfter) / 2 = (${before} + ${after}) / 2 = ${mid} → IDs צמודים (פער 1), נשאר עשרוני`;
+        } else {
+            const rounded = Math.round(mid);
+            result = String(rounded);
+            formula = `(idBefore + idAfter) / 2 = (${before} + ${after}) / 2 = ${mid} → יש מרווח, עיגול למספר שלם ${rounded}`;
+        }
     } else if (!Number.isNaN(before)) {
         result = String(before + MIT_ID_GAP);
         formula = `רק idBefore קיים → idBefore + MIT_ID_GAP = ${before} + ${MIT_ID_GAP} = ${result} (הוספה בסוף)`;

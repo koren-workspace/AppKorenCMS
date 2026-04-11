@@ -105,7 +105,10 @@ export function midIdBetweenWithGap(
     const after = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
     if (!Number.isNaN(before) && !Number.isNaN(after)) {
         const mid = (before + after) / 2;
-        return mid === Math.floor(mid) ? String(Math.floor(mid)) : String(mid);
+        if (Math.abs(after - before) === 1) {
+            return String(mid);
+        }
+        return String(Math.round(mid));
     }
     if (!Number.isNaN(before)) {
         return String(before + gap);

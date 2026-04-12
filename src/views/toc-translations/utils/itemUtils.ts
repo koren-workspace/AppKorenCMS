@@ -493,7 +493,7 @@ export function getItemStyle(
     fontTanach?: boolean
 ): string {
     let baseStyle =
-        "w-full p-4 border rounded-b-md shadow-sm outline-none transition-all ";
+        "w-full p-4 border rounded-b-md shadow-sm outline-none transition-all whitespace-pre-wrap ";
     if (fontTanach)
         baseStyle += "font-serif text-2xl border-r-8 border-amber-200 pr-4 ";
     else baseStyle += "font-sans text-lg ";
@@ -502,5 +502,5 @@ export function getItemStyle(
         return baseStyle + "font-bold bg-gray-50 border-r-4 border-gray-400";
     if (type === "instructions")
         return baseStyle + "text-base italic text-blue-700 bg-blue-50/50";
-    return baseStyle + "leading-relaxed bg-white border-gray-200 min-h-[80px]";
+    return baseStyle + "leading-relaxed bg-white border-gray-200 min-h-[120px]";
 }

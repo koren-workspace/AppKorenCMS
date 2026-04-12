@@ -80,8 +80,8 @@ export type PartEditPanelProps = {
     currentTranslationId?: string | null;
     /** מזהה הפריט שנוסף לאחרונה – להעברת פוקוס לשדה התוכן */
     lastAddedItemId?: string | null;
-    /** פותח מודל הגדרת/עריכת dateSetId בלחיצה על השדה במאפיינים */
-    onOpenDateSetIdForItem?: (entityId: string, currentDateSetId: string) => void;
+    /** פותח מודל הגדרת/עריכת dateSetId (פרמטר שלישי = תרגום מקושר) */
+    onOpenDateSetIdForItem?: (entityId: string, currentDateSetId: string, enhancementTranslationId?: string) => void;
     /** כפתורי פיצול והעברה – רק בנוסח הבסיסי */
     allowSplitAndMove?: boolean;
     onSplitPart?: () => void;

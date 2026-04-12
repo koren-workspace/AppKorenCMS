@@ -117,7 +117,7 @@ export function AddTranslationModal({
                     {/* פריט בסיס */}
                     <div>
                         <div className="text-[10px] text-gray-500 mb-1">פריט בסיס (itemId: {baseItemId})</div>
-                        <div className="p-2 bg-gray-50 rounded border text-gray-700 max-h-20 overflow-auto">
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700 max-h-40 overflow-auto whitespace-pre-wrap break-words">
                             {baseContentPreview || "(ללא תוכן)"}
                         </div>
                     </div>
@@ -240,7 +240,7 @@ export function AddTranslationModal({
                         <textarea
                             value={form.content ?? ""}
                             onChange={(e) => onFormFieldChange("content", e.target.value)}
-                            className="w-full border border-gray-300 rounded p-2 min-h-[80px]"
+                            className="w-full border border-gray-300 rounded p-2 min-h-[80px] whitespace-pre-wrap"
                             dir="rtl"
                             placeholder="הזן את התרגום"
                         />

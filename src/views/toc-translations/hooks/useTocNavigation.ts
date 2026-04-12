@@ -57,13 +57,6 @@ export function useTocNavigation() {
         const unsubscribe = onSnapshot(
             tocRef,
             (snapshot) => {
-                const deletedFlags = snapshot.docs.map((d) => ({
-                    id: d.id,
-                    deleted: d.data().deleted ?? null,
-                }));
-                // #region agent log
-                fetch('http://127.0.0.1:7546/ingest/542c87dd-94e1-4df9-ad84-3d68d6d9bf83',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2168c8'},body:JSON.stringify({sessionId:'2168c8',runId:'pre-fix',hypothesisId:'H3',location:'useTocNavigation.ts:onSnapshot',message:'TOC snapshot received',data:{rawCount:snapshot.docs.length,deletedFlags},timestamp:Date.now()})}).catch(()=>{});
-                // #endregion
                 const items: Entity<any>[] = snapshot.docs
                     .filter((d) => !isSoftDeletedToc(d.data()))
                     .map((d) => ({
@@ -71,9 +64,6 @@ export function useTocNavigation() {
                         path: "toc",
                         values: d.data(),
                     }));
-                // #region agent log
-                fetch('http://127.0.0.1:7546/ingest/542c87dd-94e1-4df9-ad84-3d68d6d9bf83',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2168c8'},body:JSON.stringify({sessionId:'2168c8',runId:'pre-fix',hypothesisId:'H3',location:'useTocNavigation.ts:onSnapshot',message:'TOC snapshot filtered',data:{filteredCount:items.length,filteredIds:items.map((i)=>i.id)},timestamp:Date.now()})}).catch(()=>{});
-                // #endregion
                 setTocItems(items);
             },
             (error) => {
@@ -141,13 +131,6 @@ export function useTocNavigation() {
         () => getPartsForPrayer(currentCategories, selectedPrayerId),
         [currentCategories, selectedPrayerId]
     );
-
-    useEffect(() => {
-        const categoryById = currentCategories.find((c: any) => c.id === selectedCategoryId);
-        // #region agent log
-        fetch('http://127.0.0.1:7546/ingest/542c87dd-94e1-4df9-ad84-3d68d6d9bf83',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2168c8'},body:JSON.stringify({sessionId:'2168c8',runId:'pre-fix',hypothesisId:'H1',location:'useTocNavigation.ts:category-selection',message:'Category selection state',data:{selectedCategoryId,matchedCategoryName:categoryById?.name ?? null,categoriesCount:currentCategories.length,currentPrayersCount:currentPrayers.length},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-    }, [selectedCategoryId, currentCategories, currentPrayers]);
 
     /** מוסיף שמות להקשר (לצד IDs) לתיעוד באקסל. override – שמות ידניים (למשל partName למקטע חדש) */
     const withNames = (ctx: Record<string, any>, override?: Record<string, string | undefined>) => {
@@ -764,9 +747,6 @@ export function useTocNavigation() {
                 translationId,
                 path: `translations/${translationId}/prayers`,
             }));
-        // #region agent log
-        fetch('http://127.0.0.1:7546/ingest/542c87dd-94e1-4df9-ad84-3d68d6d9bf83',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2168c8'},body:JSON.stringify({sessionId:'2168c8',runId:'pre-fix',hypothesisId:'H2',location:'useTocNavigation.ts:addPrayer',message:'Add prayer target paths',data:{isBase,currentTranslationId:currentTranslationData.translationId,translationsInToc:(currentTocData.translations ?? []).map((t:any)=>t.translationId),targetWritePaths:prayerPaths,newPrayerId},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setIsSaving(true);
         setSavingMessage("מוסיף תפילה...");
         try {
@@ -789,9 +769,6 @@ export function useTocNavigation() {
                     status: "new",
                     collection: baseColl,
                 });
-                // #region agent log
-                fetch('http://127.0.0.1:7546/ingest/542c87dd-94e1-4df9-ad84-3d68d6d9bf83',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2168c8'},body:JSON.stringify({sessionId:'2168c8',runId:'pre-fix',hypothesisId:'H2',location:'useTocNavigation.ts:addPrayer',message:'Prayer document created',data:{createdPath:target.path,createdPrayerId:newPrayerId,translationId:target.translationId},timestamp:Date.now()})}).catch(()=>{});
-                // #endregion
             }
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);

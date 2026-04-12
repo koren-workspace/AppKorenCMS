@@ -10,6 +10,8 @@
  */
 
 import { Entity } from "@firecms/core";
+import { getFirestore, doc as firestoreDoc, writeBatch } from "firebase/firestore";
+import { getFirebaseApp } from "../../../firebase_config";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import { chunkArray, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
 import { cmsDebugItemIdsEnabled } from "../utils/debugFlags";
@@ -26,6 +28,28 @@ type DataSource = {
     saveEntity: (opts: any) => Promise<any>;
     deleteEntity: (opts: any) => Promise<void>;
 };
+
+type PendingWrite = { collectionPath: string; docId: string; data: Record<string, any> };
+
+const FIRESTORE_BATCH_LIMIT = 500;
+
+/**
+ * Commits all writes atomically using Firestore writeBatch.
+ * If > 500 ops, splits into multiple batches (each individually atomic).
+ */
+async function commitAtomicWrites(writes: PendingWrite[]): Promise<void> {
+    if (writes.length === 0) return;
+    const db = getFirestore(getFirebaseApp());
+    const batches = chunkArray(writes, FIRESTORE_BATCH_LIMIT);
+    for (const batchOps of batches) {
+        const batch = writeBatch(db);
+        for (const op of batchOps) {
+            const ref = firestoreDoc(db, op.collectionPath, op.docId);
+            batch.set(ref, op.data);
+        }
+        await batch.commit();
+    }
+}
 
 /** פרמטרים לטעינת מקטע: מזהה תרגום, תפילה, מזהה מקטע, ורשימת תרגומים (לשליפת enhancements) */
 export type FetchPartParams = {
@@ -817,6 +841,8 @@ export async function splitPartItems(
     const getPartName = (translationId: string): string =>
         translationId === `1-${tocId}` ? newPartNameEn : newPartNameHe;
 
+    const pendingWrites: PendingWrite[] = [];
+
     for (const trans of translations) {
         const tid = trans?.translationId as string | undefined;
         if (!tid) continue;
@@ -827,12 +853,10 @@ export async function splitPartItems(
 
         if (tid === currentTranslationId) {
             for (const item of movedItems) {
-                await dataSource.saveEntity({
-                    path,
-                    entityId: item.id,
-                    values: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
-                    status: "existing",
-                    collection: itemsCollection,
+                pendingWrites.push({
+                    collectionPath: path,
+                    docId: item.id,
+                    data: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
                 });
             }
         } else {
@@ -846,17 +870,17 @@ export async function splitPartItems(
                     })
                 ).filter((e: any) => e.values?.deleted !== true);
                 for (const item of related) {
-                    await dataSource.saveEntity({
-                        path,
-                        entityId: item.id,
-                        values: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
-                        status: "existing",
-                        collection: itemsCollection,
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: item.id,
+                        data: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
                     });
                 }
             }
         }
     }
+
+    await commitAtomicWrites(pendingWrites);
 }
 
 // ─── Move Items to Part ───────────────────────────────────────────────────────
@@ -1045,6 +1069,7 @@ export async function moveItemsToPart(
     }
 
     const now = Date.now();
+    const pendingWrites: PendingWrite[] = [];
 
     // עוזר: שם מקטע היעד לפי עץ TOC של תרגום מסוים
     const getTargetPartName = (trans: any): string => {
@@ -1072,10 +1097,10 @@ export async function moveItemsToPart(
                 const newItemId = oldToNewBaseItemId[oldItemId] ?? oldItemId;
                 const newMitId = oldToNewBaseMitId[oldItemId] ?? item.values?.mit_id;
                 if (newItemId === item.id) {
-                    await dataSource.saveEntity({
-                        path,
-                        entityId: item.id,
-                        values: {
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: item.id,
+                        data: {
                             ...item.values,
                             partId: targetPartId,
                             partName,
@@ -1084,14 +1109,12 @@ export async function moveItemsToPart(
                             mit_id: newMitId,
                             timestamp: now,
                         },
-                        status: "existing",
-                        collection: itemsCollection,
                     });
                 } else {
-                    await dataSource.saveEntity({
-                        path,
-                        entityId: newItemId,
-                        values: {
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: newItemId,
+                        data: {
                             ...item.values,
                             partId: targetPartId,
                             partName,
@@ -1100,15 +1123,11 @@ export async function moveItemsToPart(
                             mit_id: newMitId,
                             timestamp: now,
                         },
-                        status: "new",
-                        collection: itemsCollection,
                     });
-                    await dataSource.saveEntity({
-                        path,
-                        entityId: item.id,
-                        values: { ...item.values, deleted: true, timestamp: now },
-                        status: "existing",
-                        collection: itemsCollection,
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: item.id,
+                        data: { ...item.values, deleted: true, timestamp: now },
                     });
                 }
             }
@@ -1150,7 +1169,6 @@ export async function moveItemsToPart(
             const stableTargetItems = targetItemsForTranslation.filter(
                 (e: any) => !relatedIds.has(e.id)
             );
-            // קיבוץ לפי פריט בסיס מקורי, כדי לחשב itemId בנפרד לכל תרגום ובהתאם למיקום הבסיס
             const relatedByBaseId = new Map<string, Entity<any>[]>();
             relatedToMove.forEach((item: any) => {
                 const link = item.values?.linkedItem;
@@ -1198,7 +1216,6 @@ export async function moveItemsToPart(
 
                 cmsIdDbg("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "nextBaseId=", nextBaseId ?? "(אין)", "baseIsParagraph=", baseIsParagraph);
 
-                // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
                 let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
                 if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
                 translationOrderedIds.splice(baseRefPos, 0, newBaseId);
@@ -1230,10 +1247,10 @@ export async function moveItemsToPart(
                     cmsIdDbg("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
 
                     if (newTranslationItemId === item.id) {
-                        await dataSource.saveEntity({
-                            path,
-                            entityId: item.id,
-                            values: {
+                        pendingWrites.push({
+                            collectionPath: path,
+                            docId: item.id,
+                            data: {
                                 ...item.values,
                                 linkedItem: updatedLinkedItem,
                                 itemId: newTranslationItemId,
@@ -1243,14 +1260,12 @@ export async function moveItemsToPart(
                                 partIdAndName,
                                 timestamp: now,
                             },
-                            status: "existing",
-                            collection: itemsCollection,
                         });
                     } else {
-                        await dataSource.saveEntity({
-                            path,
-                            entityId: newTranslationItemId,
-                            values: {
+                        pendingWrites.push({
+                            collectionPath: path,
+                            docId: newTranslationItemId,
+                            data: {
                                 ...item.values,
                                 linkedItem: updatedLinkedItem,
                                 itemId: newTranslationItemId,
@@ -1260,21 +1275,19 @@ export async function moveItemsToPart(
                                 partIdAndName,
                                 timestamp: now,
                             },
-                            status: "new",
-                            collection: itemsCollection,
                         });
-                        await dataSource.saveEntity({
-                            path,
-                            entityId: item.id,
-                            values: { ...item.values, deleted: true, timestamp: now },
-                            status: "existing",
-                            collection: itemsCollection,
+                        pendingWrites.push({
+                            collectionPath: path,
+                            docId: item.id,
+                            data: { ...item.values, deleted: true, timestamp: now },
                         });
                     }
                 }
             }
         }
     }
+
+    await commitAtomicWrites(pendingWrites);
 }
 
 // ─── Update Part Metadata in Items ────────────────────────────────────────────

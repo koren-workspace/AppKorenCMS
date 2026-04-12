@@ -66,8 +66,8 @@ type PartItemRowProps = {
     restrictTypeToInstructions?: boolean;
     /** העברת פוקוס לשדה התוכן (לפריט שנוסף זה עתה) */
     autoFocus?: boolean;
-    /** פותח מודל הגדרת/עריכת dateSetId (לחיצה על שדה dateSetId) */
-    onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string) => void;
+    /** פותח מודל הגדרת/עריכת dateSetId; אם enhancementTranslationId – עריכה בפריט תרגום מקושר */
+    onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string, enhancementTranslationId?: string) => void;
     // ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
     // /** props לידית גרירה */
     // dragHandleProps?: {
@@ -417,23 +417,22 @@ export function PartItemRow({
                                 className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
                             />
                         </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.dateSetId}>
+                        <label className="flex items-center gap-1 col-span-2 flex-wrap" title={ITEM_FIELD_HELP.dateSetId}>
                             <span className="text-gray-600 w-20 shrink-0">dateSetId</span>
-                            {onOpenDateSetIdConfig ? (
+                            <input
+                                type="text"
+                                value={localVal.dateSetId ?? ""}
+                                onChange={(e) => onFieldChange(entityId, "dateSetId", e.target.value)}
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                            />
+                            {onOpenDateSetIdConfig && (
                                 <button
                                     type="button"
                                     onClick={() => onOpenDateSetIdConfig(entityId, localVal.dateSetId ?? "")}
-                                    className="border border-gray-300 rounded px-2 py-0.5 flex-1 min-w-0 text-right bg-white hover:bg-blue-50 text-gray-700"
+                                    className="shrink-0 px-2 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
                                 >
-                                    {localVal.dateSetId ? localVal.dateSetId : "לחץ להגדרה"}
+                                    הגדר סט תאריכים
                                 </button>
-                            ) : (
-                                <input
-                                    type="text"
-                                    value={localVal.dateSetId ?? ""}
-                                    onChange={(e) => onFieldChange(entityId, "dateSetId", e.target.value)}
-                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                />
                             )}
                         </label>
                     </div>
@@ -650,11 +649,25 @@ export function PartItemRow({
                                                 </label>
                                             </>
                                         )}
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.dateSetId}>
+                                        <label className="flex items-center gap-1 col-span-2 flex-wrap" title={ITEM_FIELD_HELP.dateSetId}>
                                             <span className="text-gray-600 w-20 shrink-0">dateSetId</span>
-                                            <input type="text" value={displayVal.dateSetId ?? ""}
+                                            <input
+                                                type="text"
+                                                value={displayVal.dateSetId ?? ""}
                                                 onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "dateSetId", e.target.value)}
-                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0" />
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            />
+                                            {onOpenDateSetIdConfig && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        onOpenDateSetIdConfig(enh.id, displayVal.dateSetId ?? "", enh.tId)
+                                                    }
+                                                    className="shrink-0 px-2 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                                >
+                                                    הגדר סט תאריכים
+                                                </button>
+                                            )}
                                         </label>
                                     </div>
                                 )}
@@ -662,11 +675,11 @@ export function PartItemRow({
                                     <textarea
                                         value={displayVal?.content ?? ""}
                                         onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "content", e.target.value)}
-                                        className="w-full p-1.5 border border-gray-200 rounded text-[10px] min-h-[60px]"
+                                        className="w-full p-1.5 border border-gray-200 rounded text-[10px] min-h-[60px] whitespace-pre-wrap"
                                         dir="rtl"
                                     />
                                 ) : (
-                                    <div>{displayVal?.content}</div>
+                                    <div className="whitespace-pre-wrap break-words">{displayVal?.content}</div>
                                 )}
                             </div>
                         );

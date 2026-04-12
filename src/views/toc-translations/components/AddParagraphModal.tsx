@@ -76,7 +76,7 @@ export function AddParagraphModal({
                         <textarea
                             value={form.paragraphText}
                             onChange={(e) => setField("paragraphText", e.target.value)}
-                            className="w-full border border-gray-300 rounded px-2 py-1 min-h-[120px]"
+                            className="w-full border border-gray-300 rounded px-2 py-1 min-h-[120px] whitespace-pre-wrap"
                             dir="rtl"
                             placeholder="הדבק כאן את כל הטקסט. פיצול למשפטים מתבצע לפי שורות (Enter)."
                         />

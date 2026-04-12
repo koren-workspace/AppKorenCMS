@@ -5,6 +5,8 @@
  */
 
 import { Entity } from "@firecms/core";
+import { getFirestore, doc as firestoreDoc, runTransaction } from "firebase/firestore";
+import { getFirebaseApp } from "../../../firebase_config";
 import { calendarCollection } from "../collections";
 import {
     type CalendarEntryPayload,
@@ -77,15 +79,10 @@ export function getNextDateSetId(calendarEntities: Entity<any>[]): string {
     return String(max + 1);
 }
 
-/**
- * שומר רשומת לוח חדשה ב-Firestore.
- * path = "calendar", entityId = dateSetId, values = השדות (בלי deleted).
- */
-export async function saveCalendarEntry(
-    dataSource: DataSource,
+function buildCalendarEntryValues(
     dateSetId: string,
     payload: CalendarEntryPayload
-): Promise<void> {
+): Record<string, any> {
     const values: Record<string, any> = {
         dateSetId,
         timestamp: Date.now(),
@@ -104,7 +101,19 @@ export async function saveCalendarEntry(
     if (payload.dates_when_we_dont_say_prayer_abroad?.length)
         values.dates_when_we_dont_say_prayer_abroad = payload.dates_when_we_dont_say_prayer_abroad;
     if (payload.weekdays?.length) values.weekdays = payload.weekdays;
+    return values;
+}
 
+/**
+ * שומר רשומת לוח חדשה ב-Firestore.
+ * path = "calendar", entityId = dateSetId, values = השדות (בלי deleted).
+ */
+export async function saveCalendarEntry(
+    dataSource: DataSource,
+    dateSetId: string,
+    payload: CalendarEntryPayload
+): Promise<void> {
+    const values = buildCalendarEntryValues(dateSetId, payload);
     await dataSource.saveEntity({
         path: CALENDAR_PATH,
         entityId: dateSetId,
@@ -114,18 +123,51 @@ export async function saveCalendarEntry(
     });
 }
 
+const CONFLICT_SENTINEL = "__CALENDAR_ID_CONFLICT__";
+const MAX_RESOLVE_ATTEMPTS = 3;
+
 /**
  * מחזיר dateSetId מוכן לשימוש: או קיים תואם, או יוצר רשומה חדשה עם ID הבא.
+ *
+ * משתמש ב-Firestore transaction כדי למנוע race condition:
+ * אם שני משתמשים יוצרים רשומה בו-זמנית, רק אחד יצליח –
+ * השני יקבל retry אוטומטי ויראה את הרשומה שנוצרה (או יבחר ID חדש).
  */
 export async function resolveDateSetId(
     dataSource: DataSource,
     form: DateSetIdFormValues
 ): Promise<{ dateSetId: string; created: boolean }> {
     const payload = formValuesToPayload(form);
-    const all = await fetchAllCalendar(dataSource);
-    const existing = findMatchingDateSetId(all, payload);
-    if (existing) return { dateSetId: existing, created: false };
-    const nextId = getNextDateSetId(all);
-    await saveCalendarEntry(dataSource, nextId, payload);
-    return { dateSetId: nextId, created: true };
+    const db = getFirestore(getFirebaseApp());
+
+    for (let attempt = 0; attempt < MAX_RESOLVE_ATTEMPTS; attempt++) {
+        const all = await fetchAllCalendar(dataSource);
+        const existing = findMatchingDateSetId(all, payload);
+        if (existing) return { dateSetId: existing, created: false };
+
+        const nextId = getNextDateSetId(all);
+        const docRef = firestoreDoc(db, CALENDAR_PATH, nextId);
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(docRef);
+                if (snap.exists()) {
+                    throw new Error(CONFLICT_SENTINEL);
+                }
+                const values = buildCalendarEntryValues(nextId, payload);
+                transaction.set(docRef, values);
+            });
+            return { dateSetId: nextId, created: true };
+        } catch (err: any) {
+            const isConflict =
+                err?.message === CONFLICT_SENTINEL ||
+                err?.code === "already-exists";
+            if (isConflict && attempt < MAX_RESOLVE_ATTEMPTS - 1) continue;
+            throw err;
+        }
+    }
+
+    throw new Error(
+        "resolveDateSetId: failed to allocate dateSetId after concurrent-modification retries"
+    );
 }

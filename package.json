@@ -16,7 +16,9 @@
     "stage-revert": "node scripts/revert-stage-test.mjs",
     "migrate-1x-item-second-digit": "node scripts/migrate-translation1-item-second-digit.mjs",
     "migrate-item-ids": "python scripts/migrate_translation_item_ids.py",
-    "validate-item-base-interval": "python scripts/validate_base_interval_invariant.py"
+    "validate-item-base-interval": "python scripts/validate_base_interval_invariant.py",
+    "fix-interval-violations": "python scripts/fix_interval_violations.py",
+    "replay-interval-fix": "python scripts/replay_interval_fix.py"
   },
   "dependencies": {
     "@bageldb/bagel-db": "^0.4.39",
@@ -39,7 +41,6 @@
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "firebase-admin": "^13.0.0",
-    "googleapis": "^171.4.0",
     "npm-run-all": "^4.1.5",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",

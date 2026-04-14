@@ -15,6 +15,7 @@ import {
     supportsHebrewBodyOnlyFields,
     supportsNoSpace,
 } from "../constants/itemFields";
+import { splitParagraphSentences } from "../utils/itemUtils";
 
 export type AddItemFormValues = {
     dateSetId: string;
@@ -105,6 +106,7 @@ export function AddItemModal({
     const showNoSpace = supportsNoSpace(currentType);
     const showFirstInPage = supportsFirstInPage(currentType);
     const showAttachedMeta = supportsAttachedMeta(currentType);
+    const paragraphSentences = splitParagraphSentences(form.content);
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" dir="rtl">
@@ -338,6 +340,28 @@ export function AddItemModal({
                             dir="rtl"
                             placeholder="ניתן להשאיר ריק ולהוסיף אחרי הוספת הפריט"
                         />
+                        {form.block && (
+                            <div className="mt-2 border border-gray-200 rounded p-2 bg-gray-50">
+                                <div className="text-[10px] text-gray-600 mb-1">
+                                    תצוגת משפטים לפסקה ({paragraphSentences.length})
+                                </div>
+                                <div className="space-y-1 max-h-28 overflow-auto text-[10px]">
+                                    {paragraphSentences.length === 0 ? (
+                                        <div className="text-gray-400">אין משפטים (פיצול לפי שורות)</div>
+                                    ) : (
+                                        paragraphSentences.map((sentence, index) => (
+                                            <div
+                                                key={`${index}_${sentence.slice(0, 10)}`}
+                                                className="px-2 py-1 rounded bg-white border border-gray-200"
+                                            >
+                                                <span className="text-gray-500 ml-1">{index + 1}.</span>
+                                                <span>{sentence}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </label>
                 </div>
                 <div className="p-4 border-t flex justify-end gap-2 flex-wrap">

@@ -10,13 +10,13 @@ import {
     ITEM_TYPE_OPTIONS,
     TITLE_TYPE_OPTIONS,
     ITEM_FIELD_HELP,
+    isBodyLikeType,
     showDiburHamatkhilField,
     supportsAttachedMeta,
     supportsFirstInPage,
-    supportsHebrewBodyOnlyFields,
     supportsNoSpace,
 } from "../constants/itemFields";
-import { splitParagraphSentences } from "../services/googleSheetsService";
+import { splitParagraphSentences } from "../utils/itemUtils";
 
 export type TranslationOption = { translationId: string; [k: string]: any };
 
@@ -41,8 +41,6 @@ export type AddTranslationModalProps = {
     /** טופס מלא: content + type, titleType, title, וכל המאפיינים */
     form: Record<string, any>;
     onFormFieldChange: (field: string, value: unknown) => void;
-    baseIsParagraphFromSheets?: boolean;
-    paragraphLookupLoading?: boolean;
     onSubmit: () => void;
     saving: boolean;
     /** פותח מודל להגדרת סט תאריכים (מצוא או צור) – התוצאה מוזנת ל־form.dateSetId */
@@ -65,8 +63,6 @@ export function AddTranslationModal({
     onInsertAfterChange,
     form,
     onFormFieldChange,
-    baseIsParagraphFromSheets = false,
-    paragraphLookupLoading = false,
     onSubmit,
     saving,
     onOpenDateSetIdConfig,
@@ -93,11 +89,12 @@ export function AddTranslationModal({
     const content = (form.content ?? "").toString().trim();
     const isParagraphMode = form.translationMode === "paragraph";
     const paragraphSentences = splitParagraphSentences(form.content ?? "");
+    const baseSentencesCount = splitParagraphSentences(baseContentPreview ?? "").length;
     const canSubmit =
         !!targetTranslationId &&
         (isParagraphMode ? paragraphSentences.length > 0 : content.length > 0);
     const currentType = (form.type ?? "body") as string;
-    const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, false);
+    const showBodyFields = isBodyLikeType(currentType);
     const showNoSpace = supportsNoSpace(currentType);
     const showFirstInPage = supportsFirstInPage(currentType);
     const showAttachedMeta = supportsAttachedMeta(currentType);
@@ -208,9 +205,6 @@ export function AddTranslationModal({
                         <div className="mb-2 p-2 border border-gray-200 rounded bg-gray-50">
                             <div className="flex items-center gap-2 text-[11px] text-gray-700 mb-1">
                                 <span className="font-semibold">מצב תרגום</span>
-                                {paragraphLookupLoading && (
-                                    <span className="text-[10px] text-gray-500">בודק פסקה ב-Sheets...</span>
-                                )}
                             </div>
                             <div className="flex items-center gap-3 text-[11px]">
                                 <label className="flex items-center gap-1">
@@ -233,7 +227,7 @@ export function AddTranslationModal({
                                 </label>
                             </div>
                             <div className="text-[10px] text-gray-600 mt-1">
-                                זיהוי מה-Sheets: {baseIsParagraphFromSheets ? "פריט בסיס מסומן כפסקה" : "פריט בסיס לא מסומן כפסקה"}
+                                הפריט מכיל {baseSentencesCount} משפטים
                             </div>
                         </div>
                         <label className="block text-[10px] text-gray-600 mb-1">תוכן התרגום</label>
@@ -318,16 +312,8 @@ export function AddTranslationModal({
                                         )}
                                     </>
                                 )}
-                                {showHebrewBodyOnly && (
+                                {showBodyFields && (
                                     <>
-                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
-                                            <input
-                                                type="checkbox"
-                                                checked={!!form.fontTanach}
-                                                onChange={(e) => onFormFieldChange("fontTanach", e.target.checked)}
-                                            />
-                                            <span className="text-gray-600">גופן תנ"ך</span>
-                                        </label>
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.bold}>
                                             <input
                                                 type="checkbox"

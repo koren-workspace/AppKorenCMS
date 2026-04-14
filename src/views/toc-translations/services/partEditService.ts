@@ -175,11 +175,34 @@ const SAVE_CHUNK_SIZE = 50;
 /** שדות סינון שיש להסיר מהנתונים כש-null – כדי שלא יישמרו ב-Firestore ולא יפעילו סינון באפליקציה */
 const NULLABLE_FILTER_FIELDS = ["cohanim", "hazan", "minyan"] as const;
 
-/** מנקה שדות סינון שערכם null – מסיר את השדה כדי שלא יגיע ל-Firestore */
-function stripNullFilterFields(values: Record<string, any>): Record<string, any> {
+/** שדות בוליאניים אופציונליים – נשמרים רק כש-true; false/undefined = ברירת מחדל, אין לשמור */
+const BOOLEAN_ITEM_FIELDS = [
+    "fontTanach", "bold", "centerAlign", "lineLine", "red",
+    "justifyBlock", "block", "noSpace", "firstInPage", "specialDate",
+] as const;
+
+/** שדות מחרוזת אופציונליים – נשמרים רק כשיש ערך; ריק = ברירת מחדל, אין לשמור */
+const OPTIONAL_STRING_FIELDS = ["titleType", "title", "role", "reference", "specialSign"] as const;
+
+/**
+ * מנקה ערכי ברירת מחדל לפני שמירה ל-Firestore:
+ * - שדות nullable (cohanim/hazan/minyan): מוסר אם null/undefined
+ * - שדות בוליאניים: מוסר אם false/undefined (היעדר = false באפליקציה)
+ * - שדות מחרוזת אופציונליים: מוסר אם ריק
+ */
+function stripDefaultFields(values: Record<string, any>): Record<string, any> {
     const cleaned = { ...values };
     for (const field of NULLABLE_FILTER_FIELDS) {
         if (cleaned[field] === null || cleaned[field] === undefined) {
+            delete cleaned[field];
+        }
+    }
+    for (const field of BOOLEAN_ITEM_FIELDS) {
+        if (!cleaned[field]) delete cleaned[field];
+    }
+    for (const field of OPTIONAL_STRING_FIELDS) {
+        const v = cleaned[field];
+        if (v == null || (typeof v === "string" && v.trim() === "")) {
             delete cleaned[field];
         }
     }
@@ -221,7 +244,7 @@ export async function savePartItems(
             return dataSource.saveEntity({
                 path,
                 entityId,
-                values: stripNullFilterFields({ ...values, timestamp: now }),
+                values: stripDefaultFields({ ...values, timestamp: now }),
                 status: isNew ? "new" : "existing",
                 collection: itemsCollection,
             });
@@ -740,24 +763,24 @@ export async function createTranslationItem(
         values.partName = partName;
         values.partIdAndName = `${partId} ${partName}`;
     }
-    if (titleType !== undefined) values.titleType = titleType;
-    if (title !== undefined) values.title = title;
-    if (fontTanach !== undefined) values.fontTanach = fontTanach;
-    if (bold !== undefined) values.bold = bold;
-    if (centerAlign !== undefined) values.centerAlign = centerAlign;
-    if (lineLine !== undefined) values.lineLine = lineLine;
-    if (red !== undefined) values.red = red;
-    if (justifyBlock !== undefined) values.justifyBlock = justifyBlock;
-    if (noSpace !== undefined) values.noSpace = noSpace;
-    if (block !== undefined) values.block = block;
-    if (firstInPage !== undefined) values.firstInPage = firstInPage;
-    if (specialDate !== undefined) values.specialDate = specialDate;
+    if (titleType) values.titleType = titleType;
+    if (title) values.title = title;
+    if (fontTanach === true) values.fontTanach = true;
+    if (bold === true) values.bold = true;
+    if (centerAlign === true) values.centerAlign = true;
+    if (lineLine === true) values.lineLine = true;
+    if (red === true) values.red = true;
+    if (justifyBlock === true) values.justifyBlock = true;
+    if (noSpace === true) values.noSpace = true;
+    if (block === true) values.block = true;
+    if (firstInPage === true) values.firstInPage = true;
+    if (specialDate === true) values.specialDate = true;
     if (cohanim != null) values.cohanim = cohanim;
     if (hazan != null) values.hazan = hazan;
     if (minyan != null) values.minyan = minyan;
-    if (role !== undefined) values.role = role;
-    if (reference !== undefined) values.reference = reference;
-    if (specialSign !== undefined) values.specialSign = specialSign;
+    if (role) values.role = role;
+    if (reference) values.reference = reference;
+    if (specialSign) values.specialSign = specialSign;
     if (dateSetId !== undefined) values.dateSetId = dateSetId;
 
     await dataSource.saveEntity({

@@ -54,13 +54,11 @@ type PartItemRowProps = {
     currentTranslationId?: string | null;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
-    /** מוצג רק בנוסח הבסיסי: הוסף פסקה אחרי שורה זו */
-    onAddParagraphAfter?: () => void;
     /** מוצג רק בתרגום: הוסף פריט הוראה אחרי שורה זו */
     onAddInstructionAfter?: () => void;
     /** פותח מודל הוספת תרגום לפריט הזה */
     onAddTranslation?: (item: Entity<any>) => void;
-    /** מנוטרל עד שמירת פריט (פריט חדש / פסקה ממתינה ל-Sheets) */
+    /** מנוטרל עד שמירת פריט (פריט חדש) */
     isAddTranslationBlocked?: boolean;
     /** בתרגום (לא בסיס): במאפיינים סוג ניתן לשינוי רק בין סוגי הוראות */
     restrictTypeToInstructions?: boolean;
@@ -92,7 +90,6 @@ export function PartItemRow({
     isBaseTranslation = false,
     currentTranslationId = null,
     onAddAfter,
-    onAddParagraphAfter,
     onAddInstructionAfter,
     onAddTranslation,
     isAddTranslationBlocked = false,
@@ -723,15 +720,6 @@ export function PartItemRow({
                     className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
                 >
                     + הוסף פריט
-                </button>
-            )}
-            {onAddParagraphAfter && (
-                <button
-                    type="button"
-                    onClick={onAddParagraphAfter}
-                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-colors shadow-sm"
-                >
-                    + הוסף פסקה כאן
                 </button>
             )}
             {onAddInstructionAfter && (

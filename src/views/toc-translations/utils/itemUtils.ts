@@ -483,6 +483,13 @@ export function chunkArray<T>(arr: T[], size: number): T[][] {
     );
 }
 
+export function splitParagraphSentences(text: string): string[] {
+    return (text ?? "")
+        .split(/\r?\n/g)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+}
+
 /**
  * מחזיר מחרוזת classNames ל־textarea של פריט (תוכן / כותרת / הוראות).
  * type: "title" | "instructions" | אחר = body

@@ -26,18 +26,10 @@ import {
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
-import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS, splitParagraphSentences } from "../utils/itemUtils";
 import { itemMinIdBefore, resolveDigitMillions } from "../utils/nusachIdPolicy";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
-import { defaultAddParagraphForm, type AddParagraphFormValues } from "../components/AddParagraphModal";
-import {
-    saveParagraphToSheets,
-    saveParagraphTranslationToSheets,
-    splitParagraphSentences,
-    type ParagraphLookupResult,
-    type SaveParagraphToSheetsParams,
-} from "../services/googleSheetsService";
 import { cmsSimpleBaseIntervalEnabled, cmsDebugItemIdsEnabled } from "../utils/debugFlags";
 
 function cmsIdDbg(...args: unknown[]) {
@@ -69,39 +61,6 @@ export type PartEditContext = {
 };
 
 const LOG_PREFIX = "[TocTranslations]";
-
-type PendingParagraphSheetsWrite = {
-    entityId: string;
-    payload: SaveParagraphToSheetsParams;
-};
-
-function matchesPendingParagraphWrite(
-    w: PendingParagraphSheetsWrite,
-    baseEntityId: string,
-    baseItemId: string
-): boolean {
-    if (w.entityId === baseEntityId) return true;
-    const pid = String(w.payload.itemId ?? "").trim();
-    const bid = String(baseItemId ?? "").trim();
-    return Boolean(pid && bid && pid === bid);
-}
-
-/** מיזוג תוצאת Sheets עם פסקה שעדיין בתור ל-Sheets (עד "שמור מקטע") – ללא כתיבה מוקדמת לגיליון */
-function mergeParagraphLookupWithPending(
-    sheetsLookup: ParagraphLookupResult,
-    pendingWrites: PendingParagraphSheetsWrite[],
-    baseEntityId: string,
-    baseItemId: string
-): ParagraphLookupResult {
-    const pending = pendingWrites.find((w) =>
-        matchesPendingParagraphWrite(w, baseEntityId, baseItemId)
-    );
-    const sentences = pending?.payload?.sentences;
-    if (Array.isArray(sentences) && sentences.length > 0) {
-        return { isParagraph: true, baseSentences: [...sentences] };
-    }
-    return sheetsLookup;
-}
 
 /**
  * itemId לשורת בסיס לסידור מקטע / אינדקס שורה: ערך itemId מהתא או מהמסמך;
@@ -242,12 +201,6 @@ export function usePartEdit(context: PartEditContext) {
     /** מודל "הוסף פריט" – נפתח תחילה עם כל המאפיינים + dateSetId (ברירת מחדל 100) */
     const [addItemModalOpen, setAddItemModalOpen] = useState(false);
     const [addItemForm, setAddItemForm] = useState<AddItemFormValues>(defaultAddItemForm(false));
-    const [addParagraphModalOpen, setAddParagraphModalOpen] = useState(false);
-    const [addParagraphForm, setAddParagraphForm] = useState<AddParagraphFormValues>(defaultAddParagraphForm());
-    const [pendingParagraphSheetsWrites, setPendingParagraphSheetsWrites] = useState<PendingParagraphSheetsWrite[]>([]);
-    /** לקריאה בעת השלמת lookup אסינכרוני – state ב-closure עלול להיות מיושן */
-    const pendingParagraphSheetsWritesRef = useRef<PendingParagraphSheetsWrite[]>([]);
-    pendingParagraphSheetsWritesRef.current = pendingParagraphSheetsWrites;
 
     /** מונע מרוץ בטעינת מקטע: תשובה מאיחור ממקטע קודם לא דורסת את המקטע הנוכחי */
     const partFetchGenRef = useRef(0);
@@ -257,7 +210,7 @@ export function usePartEdit(context: PartEditContext) {
 
     /** מודל הגדרת dateSetId לפני הוספת פריט/הוראה או בעריכת פריט קיים */
     const [dateSetIdModalOpen, setDateSetIdModalOpen] = useState(false);
-    const [pendingAddKind, setPendingAddKind] = useState<"part" | "instruction" | "paragraph" | "addTranslation" | "edit" | "addItemDateSetId" | "addParagraphDateSetId" | null>(null);
+    const [pendingAddKind, setPendingAddKind] = useState<"part" | "instruction" | "addTranslation" | "edit" | "addItemDateSetId" | null>(null);
     const [pendingAddIndex, setPendingAddIndex] = useState(0);
     /** בעריכת dateSetId של פריט קיים: מזהה הפריט וה-dateSetId הנוכחי (לטעינה במודל) */
     const [pendingEditEntityId, setPendingEditEntityId] = useState<string | null>(null);
@@ -284,8 +237,6 @@ export function usePartEdit(context: PartEditContext) {
     const [addTranslationInsertAfterId, setAddTranslationInsertAfterId] = useState<string | null>(null);
     const [addTranslationContent, setAddTranslationContent] = useState("");
     const [addTranslationTargetLinkedItems, setAddTranslationTargetLinkedItems] = useState<Entity<any>[]>([]);
-    const [addTranslationBaseIsParagraph, setAddTranslationBaseIsParagraph] = useState<boolean>(false);
-    const [addTranslationParagraphLookupLoading, setAddTranslationParagraphLookupLoading] = useState<boolean>(false);
     /** טופס מלא לפריט התרגום החדש (תוכן + כל המאפיינים כמו בפריט רגיל) */
     const [addTranslationForm, setAddTranslationForm] = useState<Record<string, any>>({
         content: "",
@@ -331,8 +282,6 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
-        setAddTranslationBaseIsParagraph(false);
-        setAddTranslationParagraphLookupLoading(false);
         setAddTranslationForm({
             content: "",
             type: "body",
@@ -359,9 +308,6 @@ export function usePartEdit(context: PartEditContext) {
         });
         setPendingDeletes([]);
         setAddItemModalOpen(false);
-        setAddParagraphModalOpen(false);
-        setAddParagraphForm(defaultAddParagraphForm());
-        setPendingParagraphSheetsWrites([]);
         setPendingAddKind(null);
         setAddItemDateSetIdSource(null);
         setDateSetIdModalOpen(false);
@@ -589,19 +535,6 @@ export function usePartEdit(context: PartEditContext) {
                     changedIds: changedIdList,
                     localValues,
                 });
-            }
-            if (pendingParagraphSheetsWrites.length > 0) {
-                const writesToRun = pendingParagraphSheetsWrites.filter((w) =>
-                    changedIdList.includes(w.entityId)
-                );
-                if (writesToRun.length > 0) {
-                    for (const write of writesToRun) {
-                        await saveParagraphToSheets(write.payload);
-                    }
-                    setPendingParagraphSheetsWrites((prev) =>
-                        prev.filter((w) => !writesToRun.some((r) => r.entityId === w.entityId))
-                    );
-                }
             }
             if (enhancementChangedIds.size > 0 && selectedPrayerId) {
                 const byTid: Record<string, string[]> = {};
@@ -903,7 +836,6 @@ export function usePartEdit(context: PartEditContext) {
             return;
         if (item.id.startsWith("new_")) {
             setAllItems((prev) => prev.filter((e) => e.id !== item.id));
-            setPendingParagraphSheetsWrites((prev) => prev.filter((w) => w.entityId !== item.id));
             setLocalValues((prev) => {
                 const next = { ...prev };
                 delete next[item.id];
@@ -1392,24 +1324,24 @@ export function usePartEdit(context: PartEditContext) {
         }
         if (dateSetId) newItemValues.dateSetId = dateSetId;
         if (form) {
-            if (form.titleType !== undefined) newItemValues.titleType = form.titleType;
-            if (form.title !== undefined) newItemValues.title = form.title;
-            if (form.fontTanach !== undefined) newItemValues.fontTanach = form.fontTanach;
-            if (form.bold !== undefined) newItemValues.bold = form.bold;
-            if (form.centerAlign !== undefined) newItemValues.centerAlign = form.centerAlign;
-            if (form.lineLine !== undefined) newItemValues.lineLine = form.lineLine;
-            if (form.red !== undefined) newItemValues.red = form.red;
-            if (form.justifyBlock !== undefined) newItemValues.justifyBlock = form.justifyBlock;
-            if (form.noSpace !== undefined) newItemValues.noSpace = form.noSpace;
-            if (form.block !== undefined) newItemValues.block = form.block;
-            if (form.firstInPage !== undefined) newItemValues.firstInPage = form.firstInPage;
-            if (form.specialDate !== undefined) newItemValues.specialDate = form.specialDate;
+            if (form.titleType) newItemValues.titleType = form.titleType;
+            if (form.title) newItemValues.title = form.title;
+            if (form.fontTanach === true) newItemValues.fontTanach = true;
+            if (form.bold === true) newItemValues.bold = true;
+            if (form.centerAlign === true) newItemValues.centerAlign = true;
+            if (form.lineLine === true) newItemValues.lineLine = true;
+            if (form.red === true) newItemValues.red = true;
+            if (form.justifyBlock === true) newItemValues.justifyBlock = true;
+            if (form.noSpace === true) newItemValues.noSpace = true;
+            if (form.block === true) newItemValues.block = true;
+            if (form.firstInPage === true) newItemValues.firstInPage = true;
+            if (form.specialDate === true) newItemValues.specialDate = true;
             if (form.cohanim != null) newItemValues.cohanim = form.cohanim;
             if (form.hazan != null) newItemValues.hazan = form.hazan;
             if (form.minyan != null) newItemValues.minyan = form.minyan;
-            if (form.role !== undefined) newItemValues.role = form.role;
-            if (form.reference !== undefined) newItemValues.reference = form.reference;
-            if (form.specialSign !== undefined) newItemValues.specialSign = form.specialSign;
+            if (form.role) newItemValues.role = form.role;
+            if (form.reference) newItemValues.reference = form.reference;
+            if (form.specialSign) newItemValues.specialSign = form.specialSign;
         }
         const updated = [...allItems];
         updated.splice(index, 0, {
@@ -1444,22 +1376,9 @@ export function usePartEdit(context: PartEditContext) {
         setAddItemModalOpen(true);
     };
 
-    const addNewParagraphAt = (index: number) => {
-        setPendingAddKind("paragraph");
-        setPendingAddIndex(index);
-        setAddParagraphForm(defaultAddParagraphForm());
-        setAddParagraphModalOpen(true);
-    };
-
     const closeAddItemModal = () => {
         setAddItemModalOpen(false);
         setPendingAddKind((k) => (k === "part" || k === "instruction" ? null : k));
-        setPendingAddIndex(0);
-    };
-
-    const closeAddParagraphModal = () => {
-        setAddParagraphModalOpen(false);
-        setPendingAddKind((k) => (k === "paragraph" ? null : k));
         setPendingAddIndex(0);
     };
 
@@ -1473,61 +1392,6 @@ export function usePartEdit(context: PartEditContext) {
         if (added !== false) closeAddItemModal();
     };
 
-    const confirmAddParagraphModal = async () => {
-        if (!selectedGroupId) return;
-        const dateSetId = addParagraphForm.dateSetId?.trim() || "100";
-        const sentences = splitParagraphSentences(addParagraphForm.paragraphText ?? "");
-        if (sentences.length === 0) {
-            snackbar.open({ type: "error", message: "יש להזין לפחות משפט אחד בפסקה" });
-            return;
-        }
-        const fullParagraphText = addParagraphForm.paragraphText ?? "";
-        const added = doAddNewItemAt(
-            pendingAddIndex,
-            dateSetId,
-            { ...addParagraphForm, content: fullParagraphText },
-            "body"
-        );
-        if (added === false) return;
-        try {
-            const partName =
-                (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
-                (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
-                "";
-            setPendingParagraphSheetsWrites((prev) => [
-                ...prev,
-                {
-                    entityId: added.entityId,
-                    payload: {
-                        tocId: selectedTocId,
-                        translationId: currentTranslationData.translationId,
-                        partIdAndName: partName ? `${selectedGroupId} ${partName}` : selectedGroupId,
-                        partId: selectedGroupId,
-                        partName,
-                        itemId: added.itemId,
-                        mitId: added.itemId,
-                        type: addParagraphForm.type,
-                        specialSign: addParagraphForm.specialSign,
-                        role: addParagraphForm.role,
-                        sentences,
-                        hazan: addParagraphForm.hazan,
-                        cohanim: addParagraphForm.cohanim,
-                        minyan: addParagraphForm.minyan,
-                        dateSetId,
-                        timestamp: Date.now(),
-                    },
-                },
-            ]);
-        } catch (err) {
-            console.error(`${LOG_PREFIX} Save paragraph to sheets failed`, err);
-            snackbar.open({
-                type: "warning",
-                message: "הפסקה נוספה לעריכה מקומית, אבל נכשלה הכנת הכתיבה ל-Sheets",
-            });
-        }
-        closeAddParagraphModal();
-    };
-
     /** פותח מודל הגדרת dateSetId מתוך חלון הוספת פריט (הערך מתעדכן בטופס) */
     const openDateSetIdFromAddItemModal = () => {
         setAddItemDateSetIdSource(pendingAddKind === "part" || pendingAddKind === "instruction" ? pendingAddKind : null);
@@ -1536,19 +1400,12 @@ export function usePartEdit(context: PartEditContext) {
         setDateSetIdModalOpen(true);
     };
 
-    const openDateSetIdFromAddParagraphModal = () => {
-        setPendingAddKind("addParagraphDateSetId");
-        setDateSetIdInitialForEdit(addParagraphForm.dateSetId?.trim() || undefined);
-        setDateSetIdModalOpen(true);
-    };
 
     const closeDateSetIdModal = () => {
         setDateSetIdModalOpen(false);
         if (pendingAddKind === "addItemDateSetId") {
             setPendingAddKind(addItemDateSetIdSource);
             setAddItemDateSetIdSource(null);
-        } else if (pendingAddKind === "addParagraphDateSetId") {
-            setPendingAddKind("paragraph");
         } else {
             setPendingAddKind(null);
         }
@@ -1562,12 +1419,6 @@ export function usePartEdit(context: PartEditContext) {
             setAddItemForm((prev) => ({ ...prev, dateSetId }));
             setPendingAddKind(addItemDateSetIdSource);
             setAddItemDateSetIdSource(null);
-            setDateSetIdModalOpen(false);
-            return;
-        }
-        if (pendingAddKind === "addParagraphDateSetId") {
-            setAddParagraphForm((prev) => ({ ...prev, dateSetId }));
-            setPendingAddKind("paragraph");
             setDateSetIdModalOpen(false);
             return;
         }
@@ -1646,18 +1497,9 @@ export function usePartEdit(context: PartEditContext) {
         })() ??
         item;
 
-    /**
-     * חסימת "הוסף תרגום" עד שמירת המקטע: פריט new_* לא בשרת, או פסקה בתור ל-Sheets.
-     * מונע פער Firebase / Sheets לפני תרגום (במיוחד תרגום פסקה).
-     */
+    /** חסימת "הוסף תרגום" עד שמירת המקטע: פריט new_* לא בשרת. */
     const isAddTranslationBlockedForBaseItem = (item: Entity<any>): boolean => {
-        const canonical = resolveCanonicalBaseItemForTranslation(item);
-        if (canonical.id.startsWith("new_")) return true;
-        const bid =
-            getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues) || "";
-        return pendingParagraphSheetsWrites.some((w) =>
-            matchesPendingParagraphWrite(w, canonical.id, bid)
-        );
+        return resolveCanonicalBaseItemForTranslation(item).id.startsWith("new_");
     };
 
     /** פותח מודל הוספת תרגום לפריט בסיס */
@@ -1666,21 +1508,15 @@ export function usePartEdit(context: PartEditContext) {
             snackbar.open({
                 type: "warning",
                 message:
-                    "הוספת תרגום אפשרית רק אחרי שמירת המקטע. לחץ על «שמור מקטע» בראש המסך — עד אז הפריט (והפסקה, אם יש) לא בשרת/בגיליון.",
+                    "הוספת תרגום אפשרית רק אחרי שמירת המקטע. לחץ על «שמור מקטע» בראש המסך — עד אז הפריט עדיין לא נשמר בשרת.",
             });
             return;
         }
         const canonical = resolveCanonicalBaseItemForTranslation(item);
         const baseItemId =
             getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues);
-        const baseEntityId = canonical.id;
-        /** מיד לפי state (לא ref) – מונע race שבו lookup מהיר מסתיים לפני commit של pending אחרי "הוסף פסקה" */
-        const pendingFromState = mergeParagraphLookupWithPending(
-            { isParagraph: false, baseSentences: [] },
-            pendingParagraphSheetsWrites,
-            baseEntityId,
-            baseItemId || ""
-        );
+        const baseVals = { ...canonical.values, ...localValues[canonical.id] };
+        const isParagraph = !!(baseVals.block);
 
         setAddTranslationBaseItem(canonical);
         setAddTranslationOpen(true);
@@ -1688,7 +1524,6 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
-        const baseVals = { ...canonical.values, ...localValues[canonical.id] };
         setAddTranslationForm({
             ...defaultAddTranslationForm(),
             type: baseVals.type ?? "body",
@@ -1711,34 +1546,9 @@ export function usePartEdit(context: PartEditContext) {
             reference: baseVals.reference ?? "",
             specialSign: baseVals.specialSign ?? "",
             dateSetId: baseVals.dateSetId != null && String(baseVals.dateSetId).trim() !== "" ? String(baseVals.dateSetId).trim() : "100",
-            translationMode: pendingFromState.isParagraph ? "paragraph" : "regular",
+            translationMode: isParagraph ? "paragraph" : "regular",
         });
-        setAddTranslationBaseIsParagraph(pendingFromState.isParagraph);
-        if (!baseItemId) {
-            setAddTranslationParagraphLookupLoading(false);
-            return;
-        }
-        {
-            const baseContent = String(baseVals.content ?? "");
-            const baseSentences = splitParagraphSentences(baseContent);
-            const fromFirestore: ParagraphLookupResult = {
-                isParagraph: baseSentences.length > 0,
-                baseSentences,
-            };
-            const merged = mergeParagraphLookupWithPending(
-                fromFirestore,
-                pendingParagraphSheetsWritesRef.current,
-                baseEntityId,
-                baseItemId
-            );
-            const isParagraph = merged.isParagraph === true;
-            setAddTranslationBaseIsParagraph(isParagraph);
-            setAddTranslationForm((prev) => ({
-                ...prev,
-                translationMode: isParagraph ? "paragraph" : "regular",
-            }));
-            setAddTranslationParagraphLookupLoading(false);
-        }
+        if (!baseItemId) return;
     };
 
     const closeAddTranslation = () => {
@@ -1748,8 +1558,6 @@ export function usePartEdit(context: PartEditContext) {
         setAddTranslationInsertAfterId(null);
         setAddTranslationContent("");
         setAddTranslationTargetLinkedItems([]);
-        setAddTranslationBaseIsParagraph(false);
-        setAddTranslationParagraphLookupLoading(false);
         setAddTranslationForm(defaultAddTranslationForm());
     };
 
@@ -2052,37 +1860,25 @@ export function usePartEdit(context: PartEditContext) {
                     : undefined) ?? ""
             );
             const baseItemSentences = splitParagraphSentences(baseContent);
-            let lookup: ParagraphLookupResult = {
-                isParagraph: baseItemSentences.length > 0,
-                baseSentences: baseItemSentences,
-            };
-            lookup = mergeParagraphLookupWithPending(
-                lookup,
-                pendingParagraphSheetsWritesRef.current,
-                addTranslationBaseItem.id,
-                baseItemId
-            );
+            const isBaseParagraph = baseItemSentences.length > 0;
             const requestedParagraph = form.translationMode === "paragraph";
             const paragraphSentences = splitParagraphSentences(translationContent);
-            const useParagraphFlow = requestedParagraph && lookup.isParagraph;
-            if (requestedParagraph && !lookup.isParagraph) {
+            if (requestedParagraph && !isBaseParagraph) {
                 snackbar.open({
                     type: "warning",
                     message: "הפריט לא מסומן כפסקה, ממשיך כתרגום רגיל",
                 });
             }
-            let continueWithoutSheets = false;
-            if (useParagraphFlow) {
+            if (requestedParagraph && isBaseParagraph) {
                 if (paragraphSentences.length === 0) {
                     snackbar.open({ type: "error", message: "יש להזין לפחות משפט תרגום אחד" });
                     return;
                 }
-                if (lookup.baseSentences.length !== paragraphSentences.length) {
-                    const shouldContinue = window.confirm(
-                        `מספר המשפטים בתרגום (${paragraphSentences.length}) לא תואם לבסיס (${lookup.baseSentences.length}). להמשיך ולשמור ל-Firebase בלבד?`
-                    );
-                    if (!shouldContinue) return;
-                    continueWithoutSheets = true;
+                if (baseItemSentences.length !== paragraphSentences.length) {
+                    snackbar.open({
+                        type: "warning",
+                        message: `מספר המשפטים בתרגום (${paragraphSentences.length}) לא תואם לבסיס (${baseItemSentences.length}).`,
+                    });
                 }
             }
             // אם הפריט הבסיס עדיין לא נשמר (new_xxx) – שומרים אותו קודם לנוסח הבסיס (0-*) כדי שהתרגום יתקשר לפריט קיים בשרת.
@@ -2199,39 +1995,6 @@ export function usePartEdit(context: PartEditContext) {
                     message: "התרגום נוסף עם מזהה עשרוני בשל צפיפות בין פריטים.",
                 });
             }
-            if (useParagraphFlow && !continueWithoutSheets) {
-                try {
-                    const partName =
-                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
-                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
-                        "";
-                    await saveParagraphTranslationToSheets({
-                        tocId: selectedTocId,
-                        translationId: addTranslationTargetId,
-                        partIdAndName: partName ? `${selectedGroupId} ${partName}` : selectedGroupId,
-                        partId: selectedGroupId,
-                        partName,
-                        itemId: newItemId,
-                        mitId: newMitId,
-                        baseItId: baseItemId,
-                        type: form.type,
-                        specialSign: form.specialSign,
-                        role: form.role,
-                        sentences: paragraphSentences,
-                        hazan: form.hazan,
-                        cohanim: form.cohanim,
-                        minyan: form.minyan,
-                        dateSetId: form.dateSetId?.trim() || "100",
-                        timestamp: Date.now(),
-                    });
-                } catch (err) {
-                    console.error(`${LOG_PREFIX} Save paragraph translation to sheets failed`, err);
-                    const shouldContinue = window.confirm(
-                        "נכשלה הכתיבה ל-Sheets עבור תרגום פסקה. הפריט נשמר ב-Firebase. להמשיך?"
-                    );
-                    if (!shouldContinue) return;
-                }
-            }
             const newItemContentVal = (form.content ?? addTranslationContent ?? "").toString().trim().slice(0, 200);
             appendChangeLog({
                 timestamp: Date.now(),
@@ -2283,7 +2046,6 @@ export function usePartEdit(context: PartEditContext) {
         handleFinalPublish,
         addNewItemAt,
         addNewInstructionAt,
-        addNewParagraphAt,
         reorderItemsWithinPart,
         lastAddedItemId,
         handleDeleteItem,
@@ -2309,8 +2071,6 @@ export function usePartEdit(context: PartEditContext) {
         addTranslationInsertAfterId,
         addTranslationContent,
         addTranslationTargetLinkedItems,
-        addTranslationBaseIsParagraph,
-        addTranslationParagraphLookupLoading,
         openAddTranslation,
         isAddTranslationBlockedForBaseItem,
         closeAddTranslation,
@@ -2329,13 +2089,6 @@ export function usePartEdit(context: PartEditContext) {
         closeAddItemModal,
         confirmAddItemModal,
         openDateSetIdFromAddItemModal,
-        addParagraphModalOpen,
-        addParagraphForm,
-        setAddParagraphFormField: (field: keyof AddParagraphFormValues, value: unknown) =>
-            setAddParagraphForm((prev) => ({ ...prev, [field]: value })),
-        closeAddParagraphModal,
-        confirmAddParagraphModal,
-        openDateSetIdFromAddParagraphModal,
         addItemIsInstruction: pendingAddKind === "instruction",
         dateSetIdModalOpen,
         closeDateSetIdModal,
@@ -2343,8 +2096,6 @@ export function usePartEdit(context: PartEditContext) {
         dateSetIdModalTitle:
             pendingAddKind === "addItemDateSetId"
                 ? "הגדר סט תאריכים לפריט"
-                : pendingAddKind === "addParagraphDateSetId"
-                    ? "הגדר סט תאריכים לפסקה"
                 : pendingAddKind === "part"
                   ? "הגדר סט תאריכים לפריט"
                   : pendingAddKind === "instruction"

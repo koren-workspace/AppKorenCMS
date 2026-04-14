@@ -55,7 +55,6 @@ export type PartEditPanelProps = {
     /** עדכון שדה של תרגום מקושר (entityId, translationId, field, value) */
     onEnhancementFieldChange?: (entityId: string, translationId: string, field: string, value: unknown) => void;
     onAddNewItemAt: (index: number) => void;
-    onAddNewParagraphAt?: (index: number) => void;
     /** מוחק פריט ואת כל התרגומים המקושרים (סימון למחיקה בשמירה) */
     onDeleteItem?: (item: Entity<any>, itemId: string) => void;
     /** פריטים שסומנו למחיקה – מוצגים עם עיצוב "ימוחק בשמירה" וכפתור החזר */
@@ -70,7 +69,7 @@ export type PartEditPanelProps = {
     onAddNewInstructionAt?: (index: number) => void;
     /** פותח מודל הוספת תרגום לפריט */
     onAddTranslation?: (item: Entity<any>) => void;
-    /** true = כפתור הוספת תרגום מנוטרל (פריט לא נשמר / פסקה ממתינה לגיליון) */
+    /** true = כפתור הוספת תרגום מנוטרל (פריט לא נשמר) */
     isAddTranslationBlockedForItem?: (item: Entity<any>) => boolean;
     /** בתרגום (לא בסיס): במאפיינים לשנות סוג רק בין סוגי הוראות */
     restrictTypeToInstructions?: boolean;
@@ -134,7 +133,6 @@ export function PartEditPanel({
     onFieldChange,
     onEnhancementFieldChange,
     onAddNewItemAt,
-    onAddNewParagraphAt,
     onDeleteItem,
     pendingDeletes = [],
     onRestoreItem,
@@ -189,7 +187,7 @@ export function PartEditPanel({
                     <div className="overflow-auto space-y-4 px-2 pb-10">
                         {/* הוספת פריט בתחילת הרשימה – רק בנוסח הבסיסי (0-*) */}
                         {allowAddPart && (
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 gap-2">
                                 <button
                                     type="button"
                                     onClick={() => onAddNewItemAt(0)}
@@ -197,15 +195,6 @@ export function PartEditPanel({
                                 >
                                     + הוסף פריט
                                 </button>
-                                {onAddNewParagraphAt && (
-                                    <button
-                                        type="button"
-                                        onClick={() => onAddNewParagraphAt(0)}
-                                        className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 hover:border-violet-300 transition-colors shadow-sm"
-                                    >
-                                        + הוסף פסקה
-                                    </button>
-                                )}
                             </div>
                         )}
                         {/* הוספת הוראה – רק בתרגום (לא בבסיס); הוראות לא מקושרות לבסיס */}
@@ -253,11 +242,6 @@ export function PartEditPanel({
                                     onAddAfter={
                                         allowAddPart
                                             ? () => onAddNewItemAt(index + 1)
-                                            : undefined
-                                    }
-                                    onAddParagraphAfter={
-                                        allowAddPart && onAddNewParagraphAt
-                                            ? () => onAddNewParagraphAt(index + 1)
                                             : undefined
                                     }
                                     onAddInstructionAfter={

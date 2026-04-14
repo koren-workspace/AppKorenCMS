@@ -17,5 +17,6 @@ export function getFirebaseApp(): FirebaseApp {
     if (!firebaseApp) {
         firebaseApp = initializeApp(firebaseConfig);
     }
+ 
     return firebaseApp;
 }

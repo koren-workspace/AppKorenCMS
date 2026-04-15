@@ -145,14 +145,14 @@ export function PartItemRow({
                         )}
                     </div>
                 )}
-                <div className="flex justify-between items-center text-[7px] text-gray-400 mb-1 uppercase tracking-tighter">
+                <div className="flex justify-between items-center text-[9px] text-gray-500 mb-1 uppercase tracking-tight">
                     <span>itemId: {curId} | MIT: {localVal.mit_id}</span>
                     <div className="flex items-center gap-2">
                         {onFieldChange && (
                             <button
                                 type="button"
                                 onClick={() => setShowProps((p) => !p)}
-                                className="px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-[8px]"
+                                className="px-2 py-0.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-[10px]"
                             >
                                 {showProps ? "הסתר מאפיינים" : "מאפיינים"}
                             </button>
@@ -183,7 +183,7 @@ export function PartItemRow({
                                     if (window.confirm(msg))
                                         onDelete(item, curId ?? item.id);
                                 }}
-                                className="px-1.5 py-0.5 text-red-500 hover:bg-red-50 border border-red-200 rounded text-[8px] font-bold"
+                                className="px-2 py-0.5 text-red-600 hover:bg-red-50 border border-red-200 rounded text-[10px] font-bold"
                                 title={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
                             >
                                 מחק פריט

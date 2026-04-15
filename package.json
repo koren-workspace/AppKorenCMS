@@ -7,13 +7,28 @@
     "dev": "vite --port 5001",
     "build": "vite build",
     "serve": "vite preview --port 5001",
-    "deploy": "run-s build && firecms deploy --project=koren-stage-b",
-    "login": "firecms login",
-    "logout": "firecms logout"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "stage-test": "node scripts/run-stage-test.mjs",
+    "stage-test-suite": "node scripts/run-stage-test-suite.mjs",
+    "stage-test-suite-1": "node scripts/run-stage-test-suite.mjs 1",
+    "stage-test-suite-2": "node scripts/run-stage-test-suite.mjs 2",
+    "stage-revert": "node scripts/revert-stage-test.mjs",
+    "migrate-1x-item-second-digit": "node scripts/migrate-translation1-item-second-digit.mjs",
+    "migrate-item-ids": "python scripts/migrate_translation_item_ids.py",
+    "validate-item-base-interval": "python scripts/validate_base_interval_invariant.py",
+    "fix-interval-violations": "python scripts/fix_interval_violations.py",
+    "replay-interval-fix": "python scripts/replay_interval_fix.py"
   },
   "dependencies": {
+    "@bageldb/bagel-db": "^0.4.39",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@firebase/auth": "^1.12.0",
-    "@firecms/cloud": "^3.0.0",
+    "@firecms/core": "^3.0.0",
+    "@firecms/firebase": "^3.0.0",
+    "@firecms/ui": "^3.0.0",
     "firebase": "^12.7.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -25,10 +40,13 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
+    "firebase-admin": "^13.0.0",
     "npm-run-all": "^4.1.5",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.7.3",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "vitest": "^2.1.0",
+    "xlsx": "^0.20.2"
   }
 }

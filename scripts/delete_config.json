@@ -1,0 +1,15 @@
+{
+  "project_id": "koren-stage",
+  "scope": {
+    "nusachId": "ashkenaz",
+    "translationId": "0-ashkenaz",
+    "prayerId": "1015010"
+  },
+  "_comment": "delete_candidates: כללים לבחירת פריטים למחיקה. when = תנאי על הפריט (type, partId וכו'), limit = מקסימום פריטים לכל הרשימה (לבדיקה בטוחה).",
+  "delete_candidates": [
+    {
+      "when": { "type": "instructions" },
+      "limit": 2
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "project_id": "koren-stage",
+  "scope": {
+    "nusachId": "ashkenaz",
+    "translationId": "0-ashkenaz"
+  },
+  "rules": [
+    {
+      "field": "content",
+      "type": "append",
+      "value": "*"
+    }
+  ],
+  "limit": 50
+}

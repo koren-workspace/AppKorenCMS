@@ -1,6 +1,6 @@
 /**
  * AddItemModal – חלון הוספת פריט: נפתח תחילה עם כל הפרטים והמאפיינים.
- * במרכז: כפתור/תצוגת "המשך פסקה של הפריט הקודם", כפתור להגדרת dateSetId (ברירת מחדל 100).
+ * במרכז: כפתור להגדרת dateSetId (ברירת מחדל 100).
  */
 
 import React from "react";
@@ -9,16 +9,26 @@ import {
     INSTRUCTION_TYPE_OPTIONS,
     TITLE_TYPE_OPTIONS,
     ITEM_FIELD_HELP,
+    showDiburHamatkhilField,
+    supportsAttachedMeta,
+    supportsFirstInPage,
+    supportsHebrewBodyOnlyFields,
+    supportsNoSpace,
 } from "../constants/itemFields";
+import { splitParagraphSentences } from "../utils/itemUtils";
 
 export type AddItemFormValues = {
     dateSetId: string;
-    isContinuation: boolean;
     content: string;
     type: string;
     titleType: string;
     title: string;
     fontTanach: boolean;
+    bold: boolean;
+    centerAlign: boolean;
+    lineLine: boolean;
+    red: boolean;
+    justifyBlock: boolean;
     noSpace: boolean;
     block: boolean;
     firstInPage: boolean;
@@ -33,12 +43,16 @@ export type AddItemFormValues = {
 
 export const defaultAddItemForm = (isInstruction: boolean): AddItemFormValues => ({
     dateSetId: "100",
-    isContinuation: false,
     content: "",
     type: isInstruction ? "instructions" : "body",
     titleType: "",
     title: "",
     fontTanach: false,
+    bold: false,
+    centerAlign: false,
+    lineLine: false,
+    red: false,
+    justifyBlock: false,
     noSpace: false,
     block: false,
     firstInPage: false,
@@ -54,13 +68,14 @@ export const defaultAddItemForm = (isInstruction: boolean): AddItemFormValues =>
 export type AddItemModalProps = {
     open: boolean;
     onClose: () => void;
-    /** הוראה (instructions) או מקטע רגיל */
+    /** הוראה (instructions) או פריט רגיל */
     isInstruction: boolean;
+    /** האם התרגום הנוכחי הוא תרגום בסיס (0-*) */
+    isBaseTranslation: boolean;
+    /** מזהה התרגום הנוכחי – דיבור המתחיל רק בתרגומי פירוש (2 ספרות) */
+    translationId?: string | null;
     form: AddItemFormValues;
     onFormChange: (field: keyof AddItemFormValues, value: unknown) => void;
-    /** להצגת "המשך פסקה" במרכז החלון */
-    showParagraphQuestion: boolean;
-    prevItemContent: string;
     onConfirm: () => void;
     /** פותח את מודל הגדרת dateSetId (תמיד/מתקדם) */
     onOpenDateSetIdConfig: () => void;
@@ -71,10 +86,10 @@ export function AddItemModal({
     open,
     onClose,
     isInstruction,
+    isBaseTranslation,
+    translationId = null,
     form,
     onFormChange,
-    showParagraphQuestion,
-    prevItemContent,
     onConfirm,
     onOpenDateSetIdConfig,
     saving = false,
@@ -86,6 +101,12 @@ export function AddItemModal({
     };
 
     const typeOptions = isInstruction ? INSTRUCTION_TYPE_OPTIONS : ITEM_TYPE_OPTIONS;
+    const currentType = form.type ?? (isInstruction ? "instructions" : "body");
+    const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, isBaseTranslation);
+    const showNoSpace = supportsNoSpace(currentType);
+    const showFirstInPage = supportsFirstInPage(currentType);
+    const showAttachedMeta = supportsAttachedMeta(currentType);
+    const paragraphSentences = splitParagraphSentences(form.content);
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" dir="rtl">
@@ -94,28 +115,8 @@ export function AddItemModal({
                     {isInstruction ? "הוסף הוראה" : "הוסף פריט"}
                 </div>
                 <div className="p-4 overflow-auto space-y-4 flex-1 text-sm">
-                    {/* חלון מרכזי: המשך פסקה + תצוגת הפריט הקודם */}
+                    {/* חלון מרכזי: כפתור הגדרת dateSetId */}
                     <div className="flex flex-col items-center justify-center py-4">
-                        {showParagraphQuestion && (
-                            <div className="w-full max-w-md bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                                {prevItemContent && (
-                                    <p className="text-xs text-gray-500 mb-3 line-clamp-2">
-                                        פריט קודם: <span className="italic text-gray-700">{prevItemContent}</span>
-                                    </p>
-                                )}
-                                <label className="flex items-center justify-center gap-2 cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.isContinuation}
-                                        onChange={(e) => setField("isContinuation", e.target.checked)}
-                                        className="w-4 h-4 accent-blue-600"
-                                    />
-                                    <span className="text-sm font-medium text-blue-800">
-                                        המשך פסקה של הפריט הקודם
-                                    </span>
-                                </label>
-                            </div>
-                        )}
                         {/* כפתור הגדרת dateSetId – ברירת מחדל 100 */}
                         <div className="mt-4 flex flex-col items-center gap-1">
                             <span className="text-xs text-gray-600">סט תאריכים (dateSetId)</span>
@@ -160,9 +161,9 @@ export function AddItemModal({
                                 </select>
                             </label>
                         )}
-                        {(["title", "commentary"].includes(form.type)) && (
-                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.title}>
-                                <span className="text-gray-600 w-20 shrink-0">כותרת</span>
+                        {showDiburHamatkhilField(form.type, translationId) && (
+                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.titleCommentary}>
+                                <span className="text-gray-600 w-20 shrink-0">דיבור המתחיל</span>
                                 <input
                                     type="text"
                                     value={form.title}
@@ -172,38 +173,86 @@ export function AddItemModal({
                                 />
                             </label>
                         )}
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
-                            <input
-                                type="checkbox"
-                                checked={form.fontTanach}
-                                onChange={(e) => setField("fontTanach", e.target.checked)}
-                            />
-                            <span className="text-gray-600">גופן תנ"ך</span>
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
-                            <input
-                                type="checkbox"
-                                checked={form.noSpace}
-                                onChange={(e) => setField("noSpace", e.target.checked)}
-                            />
-                            <span className="text-gray-600">ללא רווח</span>
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
-                            <input
-                                type="checkbox"
-                                checked={form.block}
-                                onChange={(e) => setField("block", e.target.checked)}
-                            />
-                            <span className="text-gray-600">בלוק</span>
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
-                            <input
-                                type="checkbox"
-                                checked={form.firstInPage}
-                                onChange={(e) => setField("firstInPage", e.target.checked)}
-                            />
-                            <span className="text-gray-600">ראשון בעמוד</span>
-                        </label>
+                        {showHebrewBodyOnly && (
+                            <>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.fontTanach}
+                                        onChange={(e) => setField("fontTanach", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">גופן תנ"ך</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.bold}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.bold}
+                                        onChange={(e) => setField("bold", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">גופן מודגש</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.centerAlign}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.centerAlign}
+                                        onChange={(e) => setField("centerAlign", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">מיושר לאמצע</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.lineLine}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.lineLine}
+                                        onChange={(e) => setField("lineLine", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">שורה שורה</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.red}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.red}
+                                        onChange={(e) => setField("red", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">טקסט אדום</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.justifyBlock}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.justifyBlock}
+                                        onChange={(e) => setField("justifyBlock", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">יישור בלוק</span>
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.block}
+                                        onChange={(e) => setField("block", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">פיסקה</span>
+                                </label>
+                            </>
+                        )}
+                        {showNoSpace && (
+                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
+                                <input
+                                    type="checkbox"
+                                    checked={form.noSpace}
+                                    onChange={(e) => setField("noSpace", e.target.checked)}
+                                />
+                                <span className="text-gray-600">ללא רווח</span>
+                            </label>
+                        )}
+                        {showFirstInPage && (
+                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
+                                <input
+                                    type="checkbox"
+                                    checked={form.firstInPage}
+                                    onChange={(e) => setField("firstInPage", e.target.checked)}
+                                />
+                                <span className="text-gray-600">ראשון בעמוד</span>
+                            </label>
+                        )}
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialDate}>
                             <input
                                 type="checkbox"
@@ -248,34 +297,38 @@ export function AddItemModal({
                                 <option value="false">לא</option>
                             </select>
                         </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
-                            <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
-                            <input
-                                type="text"
-                                value={form.role}
-                                onChange={(e) => setField("role", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                dir="rtl"
-                            />
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.reference}>
-                            <span className="text-gray-600 w-20 shrink-0">reference</span>
-                            <input
-                                type="text"
-                                value={form.reference}
-                                onChange={(e) => setField("reference", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                            />
-                        </label>
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialSign}>
-                            <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
-                            <input
-                                type="text"
-                                value={form.specialSign}
-                                onChange={(e) => setField("specialSign", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                            />
-                        </label>
+                        {showAttachedMeta && (
+                            <>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.role}>
+                                    <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
+                                    <input
+                                        type="text"
+                                        value={form.role}
+                                        onChange={(e) => setField("role", e.target.value)}
+                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                        dir="rtl"
+                                    />
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.reference}>
+                                    <span className="text-gray-600 w-20 shrink-0">מקורות</span>
+                                    <input
+                                        type="text"
+                                        value={form.reference}
+                                        onChange={(e) => setField("reference", e.target.value)}
+                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                    />
+                                </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialSign}>
+                                    <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
+                                    <input
+                                        type="text"
+                                        value={form.specialSign}
+                                        onChange={(e) => setField("specialSign", e.target.value)}
+                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                    />
+                                </label>
+                            </>
+                        )}
                     </div>
 
                     <label className="block">
@@ -283,10 +336,32 @@ export function AddItemModal({
                         <textarea
                             value={form.content}
                             onChange={(e) => setField("content", e.target.value)}
-                            className="w-full border border-gray-300 rounded px-2 py-1 min-h-[80px]"
+                            className="w-full border border-gray-300 rounded px-2 py-1 min-h-[80px] whitespace-pre-wrap"
                             dir="rtl"
                             placeholder="ניתן להשאיר ריק ולהוסיף אחרי הוספת הפריט"
                         />
+                        {form.block && (
+                            <div className="mt-2 border border-gray-200 rounded p-2 bg-gray-50">
+                                <div className="text-[10px] text-gray-600 mb-1">
+                                    תצוגת משפטים לפסקה ({paragraphSentences.length})
+                                </div>
+                                <div className="space-y-1 max-h-28 overflow-auto text-[10px]">
+                                    {paragraphSentences.length === 0 ? (
+                                        <div className="text-gray-400">אין משפטים (פיצול לפי שורות)</div>
+                                    ) : (
+                                        paragraphSentences.map((sentence, index) => (
+                                            <div
+                                                key={`${index}_${sentence.slice(0, 10)}`}
+                                                className="px-2 py-1 rounded bg-white border border-gray-200"
+                                            >
+                                                <span className="text-gray-500 ml-1">{index + 1}.</span>
+                                                <span>{sentence}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </label>
                 </div>
                 <div className="p-4 border-t flex justify-end gap-2 flex-wrap">

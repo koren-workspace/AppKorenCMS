@@ -37,9 +37,9 @@ export function EditorGuideBanner({
                 <div className="flex-1 min-w-0 space-y-1">
                     <div className="font-bold text-emerald-900">נוסח בסיסי ({translationId}) – כאן מותר גם להוסיף</div>
                     <ul className="list-disc list-inside space-y-0.5 text-emerald-700 mr-1">
-                        <li><strong>לערוך:</strong> תוכן קיים בכל רמה (קטגוריות, תפילות, מקטעים).</li>
-                        <li><strong>להוסיף:</strong> קטגוריות חדשות, תפילות חדשות ומקטעים (פריטים) חדשים.</li>
-                        <li><strong>איך:</strong> השתמש בכפתורי „הוסף קטגוריה“, „הוסף תפילה“ ו„הוסף מקטע כאן“ / „הוסף בראש המקטע“. שאר הנוסחים מקושרים לנוסח הבסיסי.</li>
+                        <li><strong>לערוך:</strong> תוכן קיים בכל רמה (קטגוריות, תפילות, מקטעים ושורות תוכן).</li>
+                        <li><strong>להוסיף:</strong> קטגוריות חדשות, תפילות חדשות ומקטעים (בעמודת הניווט) ופריטי תוכן באזור העריכה.</li>
+                        <li><strong>איך:</strong> השתמש בכפתורי „הוסף קטגוריה“, „הוסף תפילה“ ו„הוסף מקטע כאן“ בעמודה 5; בתוך המקטע — „הוסף פריט“ / „הוסף בראש הרשימה“. שאר הנוסחים מקושרים לנוסח הבסיסי.</li>
                     </ul>
                 </div>
             </div>
@@ -52,9 +52,9 @@ export function EditorGuideBanner({
             <div className="flex-1 min-w-0 space-y-1">
                 <div className="font-bold text-amber-900">נוסח משני ({translationId}) – עריכה בלבד</div>
                 <ul className="list-disc list-inside space-y-0.5 text-amber-700 mr-1">
-                    <li><strong>לערוך:</strong> תוכן קיים – טקסט במקטעים, שמירה ופרסום.</li>
+                    <li><strong>לערוך:</strong> תוכן קיים – טקסט בפריטים, שמירה ופרסום.</li>
                     <li><strong>לא להוסיף:</strong> קטגוריות, תפילות או מקטעים חדשים – אין כפתורי הוספה.</li>
-                    <li><strong>איך להוסיף תוכן חדש:</strong> עבור לנוסח הבסיסי (זה שמזההו מתחיל ב־0-, למשל 0-ashkenaz), הוסף שם את הקטגוריה/תפילה/מקטע, ואז קשר או העתק לנוסח הזה.</li>
+                    <li><strong>איך להוסיף תוכן חדש:</strong> עבור לנוסח הבסיסי (זה שמזההו מתחיל ב־0-, למשל 0-ashkenaz), הוסף שם את הקטגוריה/תפילה/מקטע (ובתוכו פריטים), ואז קשר או העתק לנוסח הזה.</li>
                 </ul>
             </div>
         </div>

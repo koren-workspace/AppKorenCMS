@@ -30,10 +30,10 @@ export function getPrayerCategoriesFromTranslation(translation: any): any[] {
     return translation.categories;
 }
 
-/** מחזיר את רשימת התפילות של הקטגוריה הנבחרת (לפי שם) */
-export function getPrayersForCategory(categories: any[], selectedCategoryName: string | null): any[] {
-    if (!selectedCategoryName) return [];
-    const category = categories.find((item: any) => item.name === selectedCategoryName);
+/** מחזיר את רשימת התפילות של הקטגוריה הנבחרת (לפי id יציב) */
+export function getPrayersForCategory(categories: any[], selectedCategoryId: string | null): any[] {
+    if (!selectedCategoryId) return [];
+    const category = categories.find((item: any) => item.id === selectedCategoryId);
     if (!category || !Array.isArray(category.prayers)) return [];
     return category.prayers;
 }

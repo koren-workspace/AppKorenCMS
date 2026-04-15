@@ -13,7 +13,12 @@
     "stage-test-suite": "node scripts/run-stage-test-suite.mjs",
     "stage-test-suite-1": "node scripts/run-stage-test-suite.mjs 1",
     "stage-test-suite-2": "node scripts/run-stage-test-suite.mjs 2",
-    "stage-revert": "node scripts/revert-stage-test.mjs"
+    "stage-revert": "node scripts/revert-stage-test.mjs",
+    "migrate-1x-item-second-digit": "node scripts/migrate-translation1-item-second-digit.mjs",
+    "migrate-item-ids": "python scripts/migrate_translation_item_ids.py",
+    "validate-item-base-interval": "python scripts/validate_base_interval_invariant.py",
+    "fix-interval-violations": "python scripts/fix_interval_violations.py",
+    "replay-interval-fix": "python scripts/replay_interval_fix.py"
   },
   "dependencies": {
     "@bageldb/bagel-db": "^0.4.39",
@@ -22,8 +27,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@firebase/auth": "^1.12.0",
     "@firecms/core": "^3.0.0",
-    "@firecms/ui": "^3.0.0",
     "@firecms/firebase": "^3.0.0",
+    "@firecms/ui": "^3.0.0",
     "firebase": "^12.7.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

@@ -22,6 +22,7 @@ import {
     deletePartItemAndRelatedTranslations,
     splitPartItems,
     moveItemsToPart,
+    createTranslationItem,
     type DeletePartItemParams,
     type SplitPartItemsParams,
     type MoveItemsToPartParams,
@@ -138,6 +139,33 @@ describe("partEditService – עדכון פריטים (savePartItems)", () => {
             expect(saveEntity.mock.calls[i][0].entityId).toBe(id);
             expect(saveEntity.mock.calls[i][0].values.content).toBe(`תוכן ${i + 1}`);
         });
+    });
+
+    it("פריט new_* בלי itemId תקף – זורק לפני saveEntity", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const dataSource = {
+            fetchCollection: vi.fn(),
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        await expect(
+            savePartItems(dataSource, {
+                path: basePath,
+                changedIds: ["new_abc"],
+                localValues: {},
+            })
+        ).rejects.toThrow("savePartItems: new item missing valid itemId");
+
+        await expect(
+            savePartItems(dataSource, {
+                path: basePath,
+                changedIds: ["new_abc"],
+                localValues: { new_abc: { content: "x", partId: "p1" } },
+            })
+        ).rejects.toThrow("savePartItems: new item missing valid itemId");
+
+        expect(saveEntity).not.toHaveBeenCalled();
     });
 });
 
@@ -271,6 +299,58 @@ describe("partEditService – מחיקות (deletePartItemAndRelatedTranslations
         expect(saveEntity).toHaveBeenCalledTimes(1);
         expect(saveEntity.mock.calls[0][0].values.deleted).toBe(true);
     });
+
+    it("כשמחיקת תרגום מקושר אחת נכשלת – מנסים את כולן ואז נזרקת שגיאת מצטברת", async () => {
+        const relatedOk = {
+            id: "item_ok",
+            path: "translations/0-sefard/prayers/p1/items",
+            values: { linkedItem: ["item_200"], itemId: "item_ok" },
+        };
+        const relatedFail = {
+            id: "item_bad",
+            path: "translations/0-sefard/prayers/p1/items",
+            values: { linkedItem: ["item_200"], itemId: "item_bad" },
+        };
+        const fetchCollection = vi.fn().mockResolvedValue([relatedOk, relatedFail]);
+        const saveEntity = vi.fn().mockImplementation((opts: any) => {
+            if (opts.entityId === "item_bad") {
+                return Promise.reject(new Error("network"));
+            }
+            return Promise.resolve(undefined);
+        });
+        const dataSource = {
+            fetchCollection,
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        const itemEntity = {
+            id: "item_200",
+            path: "translations/0-ashkenaz/prayers/p1/items",
+            values: { content: "בסיס", itemId: "item_200", partId: "part1" },
+        };
+
+        const params: DeletePartItemParams = {
+            itemEntity: itemEntity as any,
+            itemId: "item_200",
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p1",
+            translations: [
+                { translationId: "0-ashkenaz" },
+                { translationId: "0-sefard" },
+            ],
+        };
+
+        await expect(
+            deletePartItemAndRelatedTranslations(dataSource, params)
+        ).rejects.toThrow(/deletePartItemAndRelatedTranslations/);
+
+        expect(saveEntity).toHaveBeenCalledTimes(3);
+        const savedIds = saveEntity.mock.calls.map((c: any) => c[0].entityId);
+        expect(savedIds).toContain("item_200");
+        expect(savedIds).toContain("item_ok");
+        expect(savedIds).toContain("item_bad");
+    });
 });
 
 // ─── splitPartItems ───────────────────────────────────────────────────────────
@@ -334,7 +414,7 @@ describe("partEditService – splitPartItems", () => {
         expect(typeof e2Call.values.timestamp).toBe("number");
     });
 
-    it("insertBefore=true – מהתחלה עד פריט החתך (כולל) עוברים", async () => {
+    it("insertBefore=true – מהתחלה עד פריט החתך (כולל) עוברים למקטע החדש", async () => {
         const items = [
             { id: "e1", values: { itemId: "1", mit_id: "10", partId: "p1", partName: "ישן", content: "א" } },
             { id: "e2", values: { itemId: "2", mit_id: "20", partId: "p1", partName: "ישן", content: "ב" } },
@@ -403,6 +483,32 @@ describe("partEditService – splitPartItems", () => {
         const baseCall = ds.saveEntity.mock.calls.find((c: any) => c[0].entityId === "e1")?.[0];
         expect(baseCall?.values.partName).toBe("חדש");
     });
+
+    it("זורק שגיאה כשפריט החתך לא נמצא", async () => {
+        const items = [
+            { id: "e1", values: { itemId: "1", partId: "p1" } },
+            { id: "e2", values: { itemId: "2", partId: "p1" } },
+        ];
+        const ds = makeDataSource(items);
+
+        const params: SplitPartItemsParams = {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "prayer1",
+            tocId: "ashkenaz",
+            currentPartId: "p1",
+            splitAtItemId: "999",
+            insertBefore: false,
+            newPartId: "p2",
+            newPartNameHe: "חדש",
+            newPartNameEn: "New",
+            translations: [{ translationId: "0-ashkenaz" }],
+        };
+
+        await expect(splitPartItems(ds as any, params)).rejects.toThrow(
+            "splitPartItems: split item not found: 999"
+        );
+        expect(ds.saveEntity).not.toHaveBeenCalled();
+    });
 });
 
 // ─── moveItemsToPart ──────────────────────────────────────────────────────────
@@ -430,7 +536,7 @@ describe("partEditService – moveItemsToPart", () => {
         const ds = {
             fetchCollection: vi.fn().mockImplementation(({ filter }: any) => {
                 if (filter?.partId?.[1] === "src") return Promise.resolve([sourceItem]);
-                return Promise.resolve([]); // מקטע יעד ריק
+                return Promise.resolve([]); // פריט יעד ריק
             }),
             saveEntity: vi.fn().mockResolvedValue(undefined),
             deleteEntity: vi.fn(),
@@ -448,14 +554,22 @@ describe("partEditService – moveItemsToPart", () => {
 
         await moveItemsToPart(ds, params);
 
-        expect(ds.saveEntity).toHaveBeenCalledTimes(1);
-        const call = ds.saveEntity.mock.calls[0][0];
-        expect(call.values.partId).toBe("tgt");
-        expect(call.values.partName).toBe("יעד");
-        expect(call.values.partIdAndName).toBe("tgt יעד");
-        expect(call.values.itemId).toBe("0"); // idBetween(null, null) -> "0"
-        expect(call.values.mit_id).toBe("0");
-        expect(typeof call.values.timestamp).toBe("number");
+        expect(ds.saveEntity).toHaveBeenCalledTimes(2);
+        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
+        const createCall = saveCalls.find((c: any) => c.status === "new");
+        const softDeleteCall = saveCalls.find(
+            (c: any) => c.status === "existing" && c.values?.deleted === true
+        );
+        expect(createCall).toBeTruthy();
+        expect(softDeleteCall).toBeTruthy();
+        expect(createCall.values.partId).toBe("tgt");
+        expect(createCall.values.partName).toBe("יעד");
+        expect(createCall.values.partIdAndName).toBe("tgt יעד");
+        expect(createCall.values.itemId).toBe("1100"); // moved old ID "100" נשמר ב-extraTakenIds, לכן מתקדם ל-1100
+        expect(createCall.values.mit_id).toBe("1100");
+        expect(createCall.entityId).toBe(createCall.values.itemId);
+        expect(softDeleteCall.entityId).toBe("e1");
+        expect(typeof createCall.values.timestamp).toBe("number");
     });
 
     it("העברת שני פריטי בסיס – itemId מחושב לפי מיקום יעד, ו-mit_id לפי כלל הפסקה", async () => {
@@ -496,10 +610,19 @@ describe("partEditService – moveItemsToPart", () => {
 
         await moveItemsToPart(ds, params);
 
-        expect(ds.saveEntity).toHaveBeenCalledTimes(2);
+        expect(ds.saveEntity).toHaveBeenCalledTimes(4);
 
-        const call1 = ds.saveEntity.mock.calls[0][0];
-        const call2 = ds.saveEntity.mock.calls[1][0];
+        const createCalls = ds.saveEntity.mock.calls
+            .map((c: any) => c[0])
+            .filter((c: any) => c.status === "new")
+            .sort((a: any, b: any) =>
+                (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, {
+                    numeric: true,
+                })
+            );
+        expect(createCalls.length).toBe(2);
+        const call1 = createCalls[0];
+        const call2 = createCalls[1];
         const i1 = Number(call1.values.itemId);
         const i2 = Number(call2.values.itemId);
 
@@ -561,20 +684,303 @@ describe("partEditService – moveItemsToPart", () => {
         await moveItemsToPart(ds, params);
 
         const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
-        const baseCall = saveCalls.find((c: any) => c.path.includes("translations/0-ashkenaz") && c.entityId === "b1");
-        const relCalls = saveCalls.filter((c: any) => c.path.includes("translations/1-ashkenaz"));
+        const baseCreateCalls = saveCalls.filter(
+            (c: any) =>
+                c.path.includes("translations/0-ashkenaz") &&
+                c.status === "new"
+        );
+        const baseCall = baseCreateCalls[0];
+        const relCreateCalls = saveCalls.filter(
+            (c: any) =>
+                c.path.includes("translations/1-ashkenaz") &&
+                c.status === "new"
+        );
+        const relSoftDeleteCalls = saveCalls.filter(
+            (c: any) =>
+                c.path.includes("translations/1-ashkenaz") &&
+                c.status === "existing" &&
+                c.values?.deleted === true
+        );
 
         expect(baseCall).toBeTruthy();
-        // idBefore=100, idAfter=null (פריט יחיד ביעד) → 100+MIT_ID_GAP=1100
-        expect(baseCall.values.itemId).toBe("1100");
+        // idBefore=100, idAfter=null + extraTakenIds=[105] → 1100 תפוס, לכן 1105
+        expect(baseCall.values.itemId).toBe("1105");
         expect(baseCall.values.mit_id).toBe("100");
+        expect(baseCall.entityId).toBe("1105");
 
-        expect(relCalls.length).toBe(2);
-        relCalls.forEach((c: any) => {
+        expect(relCreateCalls.length).toBe(2);
+        expect(relSoftDeleteCalls.length).toBe(2);
+        relCreateCalls.forEach((c: any) => {
             expect(c.values.partId).toBe("tgt");
-            expect(c.values.linkedItem).toContain("1100"); // linkedItem עודכן ל-itemId החדש של הבסיס
+            expect(c.values.linkedItem).toContain("1105"); // linkedItem עודכן ל-itemId החדש של הבסיס
             expect(c.values.mit_id).toBe("100"); // הבסיס חלק מפסקה -> אותו mit_id לתרגומים
-            expect(c.values.itemId).not.toBe("1100"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
+            expect(c.values.itemId).not.toBe("1105"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
+            expect(c.entityId).toBe(c.values.itemId);
         });
+    });
+
+    it("תרגום לא חורג מ-ID של פריט הבסיס הבא (nextBaseLinkedMinItemId cap)", async () => {
+        const srcBase1 = { id: "10", values: { itemId: "10", mit_id: "10", partId: "src" } };
+        const srcBase2 = { id: "20", values: { itemId: "20", mit_id: "20", partId: "src" } };
+        const tgtItem1 = { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt" } };
+        const tgtItem2 = { id: "200", values: { itemId: "200", mit_id: "200", partId: "tgt" } };
+
+        const trRel1 = { id: "tr1", values: { itemId: "11", mit_id: "11", partId: "src", linkedItem: ["10"] } };
+        const trRel2 = { id: "tr2", values: { itemId: "21", mit_id: "21", partId: "src", linkedItem: ["20"] } };
+
+        const translations = [
+            {
+                translationId: "0-base",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "יעד" }] }] }],
+            },
+            {
+                translationId: "1-trans",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "Target" }] }] }],
+            },
+        ];
+
+        const ds = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                const pid = filter?.partId?.[1];
+                if (path.includes("0-base") && pid === "src") return Promise.resolve([srcBase1, srcBase2]);
+                if (path.includes("0-base") && pid === "tgt") return Promise.resolve([tgtItem1, tgtItem2]);
+                if (path.includes("1-trans") && pid === "tgt") return Promise.resolve([]);
+                if (path.includes("1-trans") && filter?.linkedItem) return Promise.resolve([trRel1, trRel2]);
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const params: MoveItemsToPartParams = {
+            currentTranslationId: "0-base",
+            selectedPrayerId: "p",
+            movedItemIds: ["10", "20"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: "100",
+            translations,
+        };
+
+        await moveItemsToPart(ds, params);
+
+        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
+        const baseNewCalls = saveCalls.filter(
+            (c: any) => c.path.includes("0-base") && c.status === "new"
+        );
+        const transNewCalls = saveCalls.filter(
+            (c: any) => c.path.includes("1-trans") && c.status === "new"
+        );
+
+        // Base items: inserted between 100 and 200 → e.g. 150, 175
+        expect(baseNewCalls.length).toBe(2);
+        const baseId1 = Number(baseNewCalls[0].values.itemId);
+        const baseId2 = Number(baseNewCalls[1].values.itemId);
+        expect(baseId1).toBeGreaterThan(100);
+        expect(baseId1).toBeLessThan(200);
+        expect(baseId2).toBeGreaterThan(baseId1);
+        expect(baseId2).toBeLessThan(200);
+
+        // Translation for base1: must be between baseId1 and baseId2 (capped by nextBaseId)
+        expect(transNewCalls.length).toBe(2);
+        const trForBase1 = transNewCalls.find(
+            (c: any) => c.values.linkedItem?.includes(String(baseId1))
+        );
+        const trForBase2 = transNewCalls.find(
+            (c: any) => c.values.linkedItem?.includes(String(baseId2))
+        );
+        expect(trForBase1).toBeTruthy();
+        expect(trForBase2).toBeTruthy();
+
+        const trId1 = Number(trForBase1!.values.itemId);
+        const trId2 = Number(trForBase2!.values.itemId);
+
+        // Critical: translation ID must stay below the NEXT base item
+        expect(trId1).toBeGreaterThan(baseId1);
+        expect(trId1).toBeLessThan(baseId2);
+        expect(trId2).toBeGreaterThan(baseId2);
+    });
+
+    it("תרגום מקושר לשני בסיסים מועברים – כל הפניות ב-linkedItem מתעדכנות", async () => {
+        const srcBase1 = { id: "10", values: { itemId: "10", mit_id: "10", partId: "src" } };
+        const srcBase2 = { id: "20", values: { itemId: "20", mit_id: "20", partId: "src" } };
+        const tgtItem1 = { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt" } };
+
+        // תרגום מקושר לשני פריטי בסיס מועברים
+        const trMultiLink = { id: "tr_multi", values: { itemId: "15", mit_id: "15", partId: "src", linkedItem: ["10", "20"] } };
+
+        const translations = [
+            {
+                translationId: "0-base",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "יעד" }] }] }],
+            },
+            {
+                translationId: "1-trans",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "Target" }] }] }],
+            },
+        ];
+
+        const ds = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                const pid = filter?.partId?.[1];
+                if (path.includes("0-base") && pid === "src") return Promise.resolve([srcBase1, srcBase2]);
+                if (path.includes("0-base") && pid === "tgt") return Promise.resolve([tgtItem1]);
+                if (path.includes("1-trans") && pid === "tgt") return Promise.resolve([]);
+                if (path.includes("1-trans") && filter?.linkedItem) return Promise.resolve([trMultiLink]);
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const params: MoveItemsToPartParams = {
+            currentTranslationId: "0-base",
+            selectedPrayerId: "p",
+            movedItemIds: ["10", "20"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: "100",
+            translations,
+        };
+
+        await moveItemsToPart(ds, params);
+
+        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
+        const baseNewCalls = saveCalls.filter(
+            (c: any) => c.path.includes("0-base") && c.status === "new"
+        );
+        const transNewCalls = saveCalls.filter(
+            (c: any) => c.path.includes("1-trans") && c.status === "new"
+        );
+
+        const newBaseId1 = baseNewCalls[0].values.itemId;
+        const newBaseId2 = baseNewCalls[1].values.itemId;
+
+        // Translation is only created once (no duplicates despite multi-link)
+        expect(transNewCalls.length).toBe(1);
+
+        // BOTH old base IDs replaced in linkedItem
+        const savedLinkedItem = transNewCalls[0].values.linkedItem;
+        expect(savedLinkedItem).toContain(newBaseId1);
+        expect(savedLinkedItem).toContain(newBaseId2);
+        expect(savedLinkedItem).not.toContain("10");
+        expect(savedLinkedItem).not.toContain("20");
+    });
+
+    it("זורק שגיאה כשאין התאמה בין movedItemIds לפריטי המקור", async () => {
+        const srcBase = { id: "b1", values: { itemId: "10", mit_id: "10", partId: "src" } };
+        const translations = [
+            {
+                translationId: "0-ashkenaz",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "יעד" }] }] }],
+            },
+        ];
+        const ds = {
+            fetchCollection: vi.fn().mockImplementation(({ filter }: any) => {
+                const pid = filter?.partId?.[1];
+                if (pid === "src") return Promise.resolve([srcBase]);
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const params: MoveItemsToPartParams = {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            movedItemIds: ["999"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: null,
+            translations,
+        };
+
+        await expect(moveItemsToPart(ds as any, params)).rejects.toThrow(
+            "moveItemsToPart: no matching source items found for movedItemIds"
+        );
+        expect(ds.saveEntity).not.toHaveBeenCalled();
+    });
+
+    it("זורק שגיאה כש-insertAfterItemId לא נמצא במקטע היעד", async () => {
+        const srcItem = { id: "10", values: { itemId: "10", mit_id: "10", partId: "src" } };
+        const tgtItem = { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt" } };
+        const translations = [
+            {
+                translationId: "0-ashkenaz",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "src", name: "מקור" }, { id: "tgt", name: "יעד" }] }] }],
+            },
+        ];
+        const ds = {
+            fetchCollection: vi.fn().mockImplementation(({ filter }: any) => {
+                const pid = filter?.partId?.[1];
+                if (pid === "src") return Promise.resolve([srcItem]);
+                if (pid === "tgt") return Promise.resolve([tgtItem]);
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const params: MoveItemsToPartParams = {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            movedItemIds: ["10"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: "999",
+            translations,
+        };
+
+        await expect(moveItemsToPart(ds as any, params)).rejects.toThrow(
+            /insertAfterItemId "999" not found in target part/
+        );
+        expect(ds.saveEntity).not.toHaveBeenCalled();
+    });
+});
+
+describe("partEditService – createTranslationItem", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it("caps new translation item below next base id (B_{i+1})", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const fetchCollection = vi.fn().mockImplementation(({ filter }: any) => {
+            if (filter?.partId?.[1] === "part-a") {
+                return Promise.resolve([
+                    {
+                        id: "150",
+                        values: { itemId: "150", linkedItem: ["100"] },
+                    },
+                    {
+                        id: "250",
+                        values: { itemId: "250", linkedItem: ["200"] },
+                    },
+                ]);
+            }
+            return Promise.resolve([]);
+        });
+        const dataSource = {
+            fetchCollection,
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await createTranslationItem(dataSource as any, {
+            targetTranslationId: "0-sefard",
+            selectedPrayerId: "p1",
+            partId: "part-a",
+            baseItemId: "100",
+            afterItemId: null,
+            baseItemIdsInPartOrder: ["100", "200"],
+            currentBaseRowIndex: 0,
+            translations: [],
+            content: "new",
+            minIdBefore: "100",
+        });
+
+        expect(Number(result.newItemId)).toBeGreaterThan(150);
+        expect(Number(result.newItemId)).toBeLessThan(200);
+        expect(saveEntity).toHaveBeenCalledTimes(1);
     });
 });

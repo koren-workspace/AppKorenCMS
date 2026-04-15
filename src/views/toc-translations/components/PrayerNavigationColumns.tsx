@@ -29,8 +29,8 @@ import { CSS } from "@dnd-kit/utilities";
 
 type PrayerNavigationColumnsProps = {
     currentCategories: any[];
-    selectedCategoryName: string | null;
-    onSelectCategory: (categoryName: string) => void;
+    selectedCategoryId: string | null;
+    onSelectCategory: (categoryId: string) => void;
     /** נקרא בלחיצה על "הוסף קטגוריה" – פותח מודל להזנת שם עברית + אנגלית. afterCategoryId = null = בסוף הרשימה */
     onAddCategoryClick?: (afterCategoryId: string | null) => void;
     onEditCategory?: (categoryId: string) => void;
@@ -63,7 +63,7 @@ type PrayerNavigationColumnsProps = {
     isSaving?: boolean;
 };
 
-/** פריט מקטע יחיד הניתן לגרירה */
+/** מקטע יחיד ברשימה הניתן לגרירה */
 function SortablePartItem({
     part,
     selectedGroupId,
@@ -105,7 +105,7 @@ function SortablePartItem({
                     {...attributes}
                     {...listeners}
                     className="shrink-0 px-0.5 py-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
-                    title="גרור לשינוי סדר"
+                    title="גרירה משנה רק את סדר המקטעים בתפריט — לא את סדר הפריטים בתוך המקטע"
                     tabIndex={-1}
                 >
                     ⠿
@@ -147,7 +147,7 @@ function SortablePartItem({
 
 export function PrayerNavigationColumns({
     currentCategories,
-    selectedCategoryName,
+    selectedCategoryId,
     onSelectCategory,
     onAddCategoryClick,
     onEditCategory,
@@ -242,9 +242,9 @@ export function PrayerNavigationColumns({
                         <div className="flex items-center gap-0.5">
                             <button
                                 type="button"
-                                onClick={() => onSelectCategory(category.name)}
+                                onClick={() => onSelectCategory(category.id)}
                                 disabled={isSaving}
-                                className={`flex-1 text-right p-1.5 rounded border ${selectedCategoryName === category.name ? "bg-indigo-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
+                                className={`flex-1 text-right p-1.5 rounded border ${selectedCategoryId === category.id ? "bg-indigo-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
                             >
                                 {category.name}
                             </button>
@@ -347,6 +347,15 @@ export function PrayerNavigationColumns({
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
                 <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
+                {activeDragId && (
+                    <p
+                        className="text-[8px] leading-snug font-semibold text-orange-950 mb-1 rounded px-1.5 py-1 bg-orange-100 border border-orange-300 shadow-sm"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        רק סדר המקטעים בתפריט משתנה כאן — לא סדר הפריטים בתוך מקטע.
+                    </p>
+                )}
                 {currentParts.length === 0 && onAddPartClick && showAddPart && (
                     <button
                         type="button"

@@ -1,19 +1,26 @@
 /**
- * partEditService – לוגיקת טעינה, שמירה ופרסום של מקטע
+ * partEditService – לוגיקת טעינה, שמירה ופרסום של מקטע (ורשימת הפריטים בו)
  *
  * פונקציות "טהורות": מקבלות dataSource (ו-params) ומבצעות קריאות ל-Firestore/API.
  * אין כאן state או UI – רק פעולות. ה-hook usePartEdit קורא לפונקציות ומעדכן state + snackbar.
  *
- * - fetchPartWithEnhancements: טוען פריטי מקטע, ממיין לפי itemId, טוען תרגומים מקושרים במנות
+ * - fetchPartWithEnhancements: טוען פריטי המקטע, ממיין לפי itemId, טוען תרגומים מקושרים במנות
  * - savePartItems: שומר רשימת פריטים (חדשים + קיימים) לפי path
  * - updateFirestoreTimestamp: מעדכן db-update-time ב-Firestore (Bagel SDK ב-bagelUpdateTimeService)
  */
 
 import { Entity } from "@firecms/core";
+import { getFirestore, doc as firestoreDoc, writeBatch } from "firebase/firestore";
+import { getFirebaseApp } from "../../../firebase_config";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import { chunkArray, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import { cmsDebugItemIdsEnabled } from "../utils/debugFlags";
 
 export { NO_SPACE_BETWEEN_ITEMS };
+
+function cmsIdDbg(...args: unknown[]) {
+    if (cmsDebugItemIdsEnabled()) console.log(...args);
+}
 
 /** ממשק מינימלי ל-DataSource (fetchCollection, saveEntity, deleteEntity) – מאפשר טסטים עם mock */
 type DataSource = {
@@ -22,7 +29,29 @@ type DataSource = {
     deleteEntity: (opts: any) => Promise<void>;
 };
 
-/** פרמטרים לטעינת מקטע: מזהה תרגום, תפילה, מקטע, ורשימת תרגומים (לשליפת enhancements) */
+type PendingWrite = { collectionPath: string; docId: string; data: Record<string, any> };
+
+const FIRESTORE_BATCH_LIMIT = 500;
+
+/**
+ * Commits all writes atomically using Firestore writeBatch.
+ * If > 500 ops, splits into multiple batches (each individually atomic).
+ */
+async function commitAtomicWrites(writes: PendingWrite[]): Promise<void> {
+    if (writes.length === 0) return;
+    const db = getFirestore(getFirebaseApp());
+    const batches = chunkArray(writes, FIRESTORE_BATCH_LIMIT);
+    for (const batchOps of batches) {
+        const batch = writeBatch(db);
+        for (const op of batchOps) {
+            const ref = firestoreDoc(db, op.collectionPath, op.docId);
+            batch.set(ref, op.data);
+        }
+        await batch.commit();
+    }
+}
+
+/** פרמטרים לטעינת מקטע: מזהה תרגום, תפילה, מזהה מקטע, ורשימת תרגומים (לשליפת enhancements) */
 export type FetchPartParams = {
     translationId: string;
     selectedPrayerId: string;
@@ -44,7 +73,7 @@ export type FetchPartResult = {
 };
 
 /**
- * טוען פריטי מקטע (filter partId), ממיין לפי itemId.
+ * טוען פריטי המקטע (filter partId), ממיין לפי itemId.
  * לכל תרגום אחר טוען פריטים עם linkedItem שמכיל את ה-itemIds (במנות של 30 בגלל מגבלת Firestore).
  */
 export async function fetchPartWithEnhancements(
@@ -146,11 +175,34 @@ const SAVE_CHUNK_SIZE = 50;
 /** שדות סינון שיש להסיר מהנתונים כש-null – כדי שלא יישמרו ב-Firestore ולא יפעילו סינון באפליקציה */
 const NULLABLE_FILTER_FIELDS = ["cohanim", "hazan", "minyan"] as const;
 
-/** מנקה שדות סינון שערכם null – מסיר את השדה כדי שלא יגיע ל-Firestore */
-function stripNullFilterFields(values: Record<string, any>): Record<string, any> {
+/** שדות בוליאניים אופציונליים – נשמרים רק כש-true; false/undefined = ברירת מחדל, אין לשמור */
+const BOOLEAN_ITEM_FIELDS = [
+    "fontTanach", "bold", "centerAlign", "lineLine", "red",
+    "justifyBlock", "block", "noSpace", "firstInPage", "specialDate",
+] as const;
+
+/** שדות מחרוזת אופציונליים – נשמרים רק כשיש ערך; ריק = ברירת מחדל, אין לשמור */
+const OPTIONAL_STRING_FIELDS = ["titleType", "title", "role", "reference", "specialSign"] as const;
+
+/**
+ * מנקה ערכי ברירת מחדל לפני שמירה ל-Firestore:
+ * - שדות nullable (cohanim/hazan/minyan): מוסר אם null/undefined
+ * - שדות בוליאניים: מוסר אם false/undefined (היעדר = false באפליקציה)
+ * - שדות מחרוזת אופציונליים: מוסר אם ריק
+ */
+function stripDefaultFields(values: Record<string, any>): Record<string, any> {
     const cleaned = { ...values };
     for (const field of NULLABLE_FILTER_FIELDS) {
         if (cleaned[field] === null || cleaned[field] === undefined) {
+            delete cleaned[field];
+        }
+    }
+    for (const field of BOOLEAN_ITEM_FIELDS) {
+        if (!cleaned[field]) delete cleaned[field];
+    }
+    for (const field of OPTIONAL_STRING_FIELDS) {
+        const v = cleaned[field];
+        if (v == null || (typeof v === "string" && v.trim() === "")) {
             delete cleaned[field];
         }
     }
@@ -168,6 +220,21 @@ export async function savePartItems(
     const { path, changedIds, localValues } = params;
     const now = Date.now();
 
+    for (const id of changedIds) {
+        if (!id.startsWith("new_")) continue;
+        const values = localValues[id];
+        const rawItemId = values?.itemId;
+        const itemIdStr =
+            rawItemId != null && String(rawItemId).trim() !== ""
+                ? String(rawItemId).trim()
+                : "";
+        if (!itemIdStr) {
+            throw new Error(
+                `savePartItems: new item missing valid itemId (changedId=${id})`
+            );
+        }
+    }
+
     const chunks = chunkArray(changedIds, SAVE_CHUNK_SIZE);
     for (const chunkIds of chunks) {
         const savePromises = chunkIds.map((id) => {
@@ -177,7 +244,7 @@ export async function savePartItems(
             return dataSource.saveEntity({
                 path,
                 entityId,
-                values: stripNullFilterFields({ ...values, timestamp: now }),
+                values: stripDefaultFields({ ...values, timestamp: now }),
                 status: isNew ? "new" : "existing",
                 collection: itemsCollection,
             });
@@ -187,7 +254,7 @@ export async function savePartItems(
 }
 
 /**
- * מסמן פריט מקטע כמחוק (deleted: true) בתרגום הנוכחי ובכל התרגומים המקושרים אליו (linkedItem).
+ * מסמן פריט כמחוק (deleted: true) בתרגום הנוכחי ובכל התרגומים המקושרים אליו (linkedItem).
  * לא מוחק את הדוקומנט — מאפשר לאנדרואיד לזהות את המחיקה בסנכרון מבוסס-timestamp.
  */
 export type DeletePartItemParams = {
@@ -221,23 +288,50 @@ export async function deletePartItemAndRelatedTranslations(
 
     await softDeleteEntity(dataSource, itemEntity);
 
-    for (const trans of translations) {
-        const tid = trans?.translationId;
-        if (!tid || tid === currentTranslationId) continue;
-        const itemsPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
-        const related = await dataSource.fetchCollection({
-            path: itemsPath,
-            collection: itemsCollection,
-            filter: { linkedItem: ["array-contains", itemId] },
-        });
-        for (const entity of related) {
-            await softDeleteEntity(dataSource, entity);
-        }
+    const otherTranslations = translations.filter(
+        (t) => t?.translationId && t.translationId !== currentTranslationId
+    );
+
+    const relatedLists = await Promise.all(
+        otherTranslations.map((trans: any) => {
+            const tid = trans.translationId as string;
+            const itemsPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+            return dataSource.fetchCollection({
+                path: itemsPath,
+                collection: itemsCollection,
+                filter: { linkedItem: ["array-contains", itemId] },
+            });
+        })
+    );
+
+    const relatedFlat = relatedLists.flat();
+    const results = await Promise.allSettled(
+        relatedFlat.map((entity) => softDeleteEntity(dataSource, entity))
+    );
+
+    const failures = results.flatMap((r, i) =>
+        r.status === "rejected"
+            ? [
+                  {
+                      entityId: relatedFlat[i]?.id,
+                      reason: r.reason,
+                  },
+              ]
+            : []
+    );
+
+    if (failures.length > 0) {
+        const detail = failures
+            .map((f) => `${f.entityId ?? "?"}: ${f.reason}`)
+            .join("; ");
+        throw new Error(
+            `deletePartItemAndRelatedTranslations: ${failures.length} related soft-delete(s) failed (${detail})`
+        );
     }
 }
 
 /**
- * טוען פריטי מקטע של תרגום אחד (לפי partId), ממוינים לפי itemId.
+ * טוען פריטי המקטע של תרגום אחד (לפי partId), ממוינים לפי itemId.
  */
 export async function fetchPartItems(
     dataSource: DataSource,
@@ -261,18 +355,94 @@ export async function fetchPartItems(
     );
 }
 
+/** רשימת מקטעים לתפילה מתוך מבנה ה-TOC (כמו ב-usePartEdit.getPartsFromToc) */
+export function getPartsForPrayerInTranslation(
+    translations: any[],
+    translationId: string,
+    prayerId: string
+): any[] {
+    const trans = (translations ?? []).find((t: any) => t.translationId === translationId);
+    if (!trans) return [];
+    for (const cat of trans.categories ?? []) {
+        const prayer = (cat.prayers ?? []).find((p: any) => p.id === prayerId);
+        if (prayer) return prayer.parts ?? [];
+    }
+    return [];
+}
+
+/**
+ * itemId של הפריט האחרון במקטע הקודם והראשון במקטע הבא – אותו תרגום (כמו neighborBounds בטעינת מקטע).
+ */
+export async function fetchNeighborItemIdBoundsForPart(
+    dataSource: DataSource,
+    params: {
+        translationId: string;
+        selectedPrayerId: string;
+        partId: string;
+        translations: any[];
+    }
+): Promise<{ prevLastItemId?: string; nextFirstItemId?: string }> {
+    const { translationId, selectedPrayerId, partId, translations } = params;
+    const parts = getPartsForPrayerInTranslation(translations, translationId, selectedPrayerId);
+    const partIdx = parts.findIndex((p: any) => p.id === partId);
+    const prevPartId: string | null =
+        partIdx > 0 ? (parts[partIdx - 1]?.id as string) ?? null : null;
+    const nextPartId: string | null =
+        partIdx >= 0 && partIdx < parts.length - 1
+            ? (parts[partIdx + 1]?.id as string) ?? null
+            : null;
+
+    const [prevItems, nextItems] = await Promise.all([
+        prevPartId
+            ? fetchPartItems(dataSource, translationId, selectedPrayerId, prevPartId)
+            : Promise.resolve([] as Entity<any>[]),
+        nextPartId
+            ? fetchPartItems(dataSource, translationId, selectedPrayerId, nextPartId)
+            : Promise.resolve([] as Entity<any>[]),
+    ]);
+
+    const bounds: { prevLastItemId?: string; nextFirstItemId?: string } = {};
+    if (prevItems.length > 0) {
+        const last = prevItems[prevItems.length - 1] as any;
+        const id = last.values?.itemId;
+        if (id != null && String(id).trim() !== "") bounds.prevLastItemId = String(id);
+    }
+    if (nextItems.length > 0) {
+        const first = nextItems[0] as any;
+        const id = first.values?.itemId;
+        if (id != null && String(id).trim() !== "") bounds.nextFirstItemId = String(id);
+    }
+    return bounds;
+}
+
 /** פרמטרים ליצירת פריט תרגום חדש (מקושר לפריט בסיס) */
 export type CreateTranslationItemParams = {
     targetTranslationId: string;
     selectedPrayerId: string;
     partId: string;
+    /** רשימת התרגומים מה-TOC – לחישוב מקטע קודם/הבא לאותו תרגום יעד */
+    translations: any[];
     baseItemId: string;
     afterItemId: string | null;
+    /**
+     * סדר itemId לכל שורת בסיס במקטע — באורך זהה ל-baseItems (מחרוזת ריקה אם חסר).
+     * סריקה לאחור: לכל שורה קודמת מחפשים תרגומים ש-linkedItem מצביע על itemId של אותה שורה.
+     */
+    baseItemIdsInPartOrder?: string[];
+    /** אינדקס שורת הבסיס ב-baseItems (לפי entity.id) */
+    currentBaseRowIndex?: number;
+    /** רצפל מזהי פריטים לפי תבנית אקסל (נגזר ממזהה המקטע) */
+    minIdBefore?: string;
     content: string;
     type?: string;
     titleType?: string;
     title?: string;
     fontTanach?: boolean;
+    bold?: boolean;
+    centerAlign?: boolean;
+    lineLine?: boolean;
+    red?: boolean;
+    justifyBlock?: boolean;
     noSpace?: boolean;
     block?: boolean;
     firstInPage?: boolean;
@@ -284,18 +454,10 @@ export type CreateTranslationItemParams = {
     reference?: string;
     specialSign?: string;
     dateSetId?: string;
-    /** mit_id של פריט הבסיס המקושר – לחישוב mit_id של התרגום (פסקה / תחילת פסקה / itemId) */
+    /** mit_id של פריט הבסיס המקושר – לחישוב mit_id של התרגום (פסקה / itemId) */
     baseItemMitId?: string;
-    /** האם פריט התרגום הוא "תחילת פסקה" – רלוונטי רק כשפריט הבסיס אינו חלק מפסקה (itemId === mit_id) */
-    isStartOfParagraph?: boolean;
     /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. מחזיר true אם מאשר. */
     confirmUserWantsDecimalId?: () => boolean;
-    /**
-     * IDs נוספים שכבר "תפוסים" – למשל itemIds של תרגומים אחרים (enhancements) שנוצרו לאותו פריט בסיס.
-     * מונע כפילות ID כשמוסיפים תרגומים לכמה תרגומים שונים אחד אחרי השני (כל אחד טוען path ריק
-     * ומקבל את אותו ID ללא המידע הזה).
-     */
-    extraTakenIds?: string[];
     /** שם המקטע – לשמירת partName ו-partIdAndName על הפריט (לחיפוש/סינון באפליקציה) */
     partName?: string;
 };
@@ -316,11 +478,18 @@ export async function createTranslationItem(
         partId,
         baseItemId,
         afterItemId,
+        baseItemIdsInPartOrder,
+        currentBaseRowIndex,
         content,
         type = "body",
         titleType,
         title,
         fontTanach,
+        bold,
+        centerAlign,
+        lineLine,
+        red,
+        justifyBlock,
         noSpace,
         block,
         firstInPage,
@@ -333,84 +502,253 @@ export async function createTranslationItem(
         specialSign,
         dateSetId,
         baseItemMitId: baseItemMitIdParam,
-        isStartOfParagraph,
         confirmUserWantsDecimalId,
-        extraTakenIds,
+        translations,
         partName,
+        minIdBefore: minIdBeforeParam,
     } = params;
 
     const path = `translations/${targetTranslationId}/prayers/${selectedPrayerId}/items`;
-    const allItems = await fetchPartItems(
-        dataSource,
-        targetTranslationId,
-        selectedPrayerId,
-        partId
+    cmsIdDbg("[CMS-ID] ▶▶▶ createTranslationItem – התחלה");
+    cmsIdDbg("[CMS-ID]   targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId);
+    cmsIdDbg("[CMS-ID]   baseItemId=", baseItemId, "afterItemId=", afterItemId ?? "(ריק)", "minIdBefore=", minIdBeforeParam ?? "(ריק)");
+    cmsIdDbg("[CMS-ID]   path=", path);
+
+    const otherTranslations = (translations ?? []).filter(
+        (t: any) => t.translationId !== targetTranslationId
     );
-    const orderedItemIds = allItems.map((e: any) => e.values?.itemId ?? "");
+
+    const [partEntities, neighborItemBounds, otherTranslationsEntities] = await Promise.all([
+        dataSource.fetchCollection({
+            path,
+            collection: itemsCollection,
+            filter: { partId: ["==", partId] },
+        }),
+        fetchNeighborItemIdBoundsForPart(dataSource, {
+            translationId: targetTranslationId,
+            selectedPrayerId,
+            partId,
+            translations,
+        }),
+        Promise.all(
+            otherTranslations.map((t: any) => {
+                const tPath = `translations/${t.translationId}/prayers/${selectedPrayerId}/items`;
+                return dataSource.fetchCollection({
+                    path: tPath,
+                    collection: itemsCollection,
+                    filter: { partId: ["==", partId] },
+                });
+            })
+        ),
+    ]);
+
+    cmsIdDbg("[CMS-ID]   partEntities נטענו: סה\"כ=", partEntities.length);
+    cmsIdDbg("[CMS-ID]   neighborItemBounds=", JSON.stringify(neighborItemBounds));
+
+    const otherTranslationsItemIds: string[] = otherTranslationsEntities
+        .flat()
+        .filter((e: any) => e.values?.deleted !== true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
+    cmsIdDbg("[CMS-ID]   otherTranslationsItemIds (כל התרגומים האחרים):", otherTranslationsItemIds.length, otherTranslationsItemIds.length <= 20 ? JSON.stringify(otherTranslationsItemIds) : `[${otherTranslationsItemIds.length} IDs]`);
+
+    const deletedItemIds: string[] = partEntities
+        .filter((e: any) => e.values?.deleted === true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
+    cmsIdDbg("[CMS-ID]   deletedItemIds=", deletedItemIds.length > 0 ? JSON.stringify(deletedItemIds) : "(אין)");
+
+    const allItems = partEntities
+        .filter((e: any) => e.values?.deleted !== true)
+        .sort((a: any, b: any) =>
+            (a.values?.itemId || "").localeCompare(b.values?.itemId || "", undefined, {
+                numeric: true,
+            })
+        );
+    const orderedItemIds = allItems.map((e: any) =>
+        e.values?.itemId != null && e.values?.itemId !== "" ? String(e.values.itemId) : ""
+    );
+    cmsIdDbg("[CMS-ID]   allItems (לא deleted, ממוין):", allItems.length, "פריטים");
+    cmsIdDbg("[CMS-ID]   orderedItemIds=", orderedItemIds.length <= 20 ? JSON.stringify(orderedItemIds) : `[${orderedItemIds.length} IDs: ${orderedItemIds.slice(0, 8).join(",")}...]`);
+
+    const idNorm = (v: unknown) =>
+        v != null && String(v).trim() !== "" ? String(v).trim() : "";
+    const baseKey = idNorm(baseItemId);
+    let afterKey =
+        afterItemId != null && String(afterItemId).trim() !== ""
+            ? String(afterItemId).trim()
+            : null;
+
+    /** linkedItem מתייחס ל-itemId של פריט הבסיס (מערך או ערך בודד). */
+    const linksToBaseItemId = (e: any, baseItemIdStr: string) => {
+        if (!baseItemIdStr) return false;
+        const link = e.values?.linkedItem;
+        if (Array.isArray(link)) return link.some((x: unknown) => idNorm(x) === baseItemIdStr);
+        return idNorm(link) === baseItemIdStr;
+    };
+
+    const rawItemRow = (baseItemIdsInPartOrder ?? []).map((x) => idNorm(x));
+
+    const curBaseIdx =
+        typeof currentBaseRowIndex === "number" && currentBaseRowIndex >= 0
+            ? currentBaseRowIndex
+            : rawItemRow.findIndex((id) => id === baseKey);
+
+    /**
+     * אין afterItemId: עוגן = מקסימום itemId מבין כל פריטי התרגום במקטע שמקושרים לשורת בסיס כלשהי
+     * עם אינדקס < curBaseIdx (לא רק "השורה הקרובה ביותר עם תרגום") — כדי שלא ייבחר עוגן נמוך
+     * כשיש שורת בסיס קודמת עם תרגום בעל itemId גבוה יותר (מיון גלובלי vs סדר שורות).
+     */
+    const tryAnchorFromPriorBaseRows = (): void => {
+        if (afterKey != null && afterKey !== "") return;
+        if (curBaseIdx < 1) return;
+        let best: string | null = null;
+        let bestNum = -Infinity;
+        for (let j = 0; j < curBaseIdx; j++) {
+            const prevBaseItemId = rawItemRow[j];
+            if (!prevBaseItemId) continue;
+            const linkedToPrev = allItems.filter((e: any) => linksToBaseItemId(e, prevBaseItemId));
+            for (const ent of linkedToPrev) {
+                const id = idNorm(ent.values?.itemId ?? ent.id);
+                if (id === "") continue;
+                const n = Number(id);
+                if (!Number.isNaN(n) && n > bestNum) {
+                    bestNum = n;
+                    best = id;
+                }
+            }
+        }
+        if (best != null) afterKey = best;
+    };
+
+    tryAnchorFromPriorBaseRows();
+    cmsIdDbg("[CMS-ID]   baseKey=", baseKey, "afterKey (אחרי tryAnchor)=", afterKey ?? "(ריק)", "curBaseIdx=", curBaseIdx);
+    cmsIdDbg("[CMS-ID]   rawItemRow (baseItemIdsInPartOrder)=", rawItemRow.length <= 20 ? JSON.stringify(rawItemRow) : `[${rawItemRow.length} IDs]`);
+
+    /** סימטריה לסריקה אחורה: מינימום itemId בין תרגומי שורת הבסיס הבאה (לפי סדר שורות) שיש לה תרגומים — כבסיס ל-idAfter. */
+    const nextBaseLinkedMinForInsert = ((): string | undefined => {
+        if (curBaseIdx < 0) return undefined;
+        for (let j = curBaseIdx + 1; j < rawItemRow.length; j++) {
+            const nextBaseItemId = rawItemRow[j];
+            if (!nextBaseItemId) continue;
+            const linkedToNext = allItems.filter((e: any) => linksToBaseItemId(e, nextBaseItemId));
+            if (linkedToNext.length > 0) {
+                const firstNext = linkedToNext[0];
+                const id = idNorm(firstNext.values?.itemId ?? firstNext.id);
+                return id !== "" ? id : undefined;
+            }
+        }
+        return undefined;
+    })();
+    const nextBaseItemIdForInsert = ((): string | undefined => {
+        if (curBaseIdx < 0) return undefined;
+        for (let j = curBaseIdx + 1; j < rawItemRow.length; j++) {
+            const nextBaseItemId = rawItemRow[j];
+            if (nextBaseItemId) return nextBaseItemId;
+        }
+        return undefined;
+    })();
+    const nextUpperCapForInsert = ((): string | undefined => {
+        const linkedCap = nextBaseLinkedMinForInsert;
+        const baseCap = nextBaseItemIdForInsert;
+        if (!linkedCap) return baseCap;
+        if (!baseCap) return linkedCap;
+        return Number(baseCap) <= Number(linkedCap) ? baseCap : linkedCap;
+    })();
+
+    cmsIdDbg("[CMS-ID]   nextBaseLinkedMinForInsert=", nextBaseLinkedMinForInsert ?? "(ריק)");
+    cmsIdDbg("[CMS-ID]   nextBaseItemIdForInsert=", nextBaseItemIdForInsert ?? "(ריק)");
+    cmsIdDbg("[CMS-ID]   nextUpperCapForInsert=", nextUpperCapForInsert ?? "(ריק)");
 
     let insertIndex: number;
-    if (afterItemId == null || afterItemId === "") {
-        const linkedToBase = allItems.filter((e: any) => {
-            const link = e.values?.linkedItem;
-            return Array.isArray(link) ? link.includes(baseItemId) : link === baseItemId;
-        });
+    if (afterKey == null) {
+        const linkedToBase = allItems.filter((e: any) => linksToBaseItemId(e, baseKey));
         if (linkedToBase.length > 0) {
-            const firstLinkedIdx = allItems.findIndex((e: any) => e.id === linkedToBase[0].id);
-            insertIndex = firstLinkedIdx >= 0 ? firstLinkedIdx : 0;
+            const lastLinked = linkedToBase[linkedToBase.length - 1];
+            const lastIdx = allItems.findIndex((e: any) => e.id === lastLinked.id);
+            insertIndex = lastIdx >= 0 ? lastIdx + 1 : allItems.length;
+            cmsIdDbg("[CMS-ID]   insertIndex: afterKey=null, linkedToBase=", linkedToBase.length, "→ אחרי אחרון (idx=", lastIdx, ") → insertIndex=", insertIndex);
         } else {
             insertIndex = 0;
+            cmsIdDbg("[CMS-ID]   insertIndex: afterKey=null, אין פריטים מקושרים ל-baseKey → insertIndex=0");
         }
     } else {
-        const inAll = allItems.findIndex((e: any) => e.values?.itemId === afterItemId);
+        let inAll = allItems.findIndex(
+            (e: any) => idNorm(e.values?.itemId ?? e.id) === afterKey
+        );
+        if (inAll < 0) {
+            cmsIdDbg("[CMS-ID]   afterKey=", afterKey, "לא נמצא ב-allItems → מנסה tryAnchorFromPriorBaseRows");
+            afterKey = null;
+            tryAnchorFromPriorBaseRows();
+            if (afterKey != null && afterKey !== "") {
+                inAll = allItems.findIndex(
+                    (e: any) => idNorm(e.values?.itemId ?? e.id) === afterKey
+                );
+                cmsIdDbg("[CMS-ID]   afterKey חדש מ-tryAnchor=", afterKey, "inAll=", inAll);
+            }
+        }
         insertIndex = inAll >= 0 ? inAll + 1 : allItems.length;
+        cmsIdDbg("[CMS-ID]   insertIndex: afterKey=", afterKey, "inAll=", inAll, "→ insertIndex=", insertIndex);
     }
 
-    // כשאין פריטים אחרי insertIndex בחלק הנוכחי – אין idAfter, ו-result יהיה baseItemId+1000 ללא גבול עליון.
-    // זה עלול לגרום לפריט לקבל ID גדול מפריטים קיימים בתרגום היעד שבחלקים אחרים.
-    // לכן: אם insertIndex >= orderedItemIds.length, מחפשים את הפריט הכי קרוב לאחר baseItemId
-    // בכל התפילה (ללא פילטר partId) ומשתמשים בו כ-nextFirstItemId.
-    let nextFirstItemId: string | undefined;
-    if (insertIndex >= orderedItemIds.length) {
-        try {
-            const allPrayerItems = await dataSource.fetchCollection({
-                path,
-                collection: itemsCollection,
-            });
-            const laterIds = allPrayerItems
-                .filter((e: any) => e.values?.deleted !== true)
-                .map((e: any) => e.values?.itemId)
-                .filter((id: any) => id != null && id !== "")
-                .map((id: any) => String(id))
-                .filter((id: string) => Number(id) > Number(baseItemId));
-            if (laterIds.length > 0) {
-                laterIds.sort((a: string, b: string) => Number(a) - Number(b));
-                nextFirstItemId = laterIds[0];
-                console.log(`[CMS-ID] createTranslationItem: insertIndex(${insertIndex}) >= orderedItemIds.length(${orderedItemIds.length}) → nextFirstItemId מ-fetch כולל תפילה: ${nextFirstItemId}`);
-            }
-        } catch (_) {
-            // ממשיכים ללא גבול עליון אם ה-fetch נכשל
+    let nextFirstFromPrayer: string | undefined;
+    if (
+        insertIndex >= orderedItemIds.length &&
+        neighborItemBounds.nextFirstItemId == null
+    ) {
+        cmsIdDbg("[CMS-ID]   הוספה בסוף + אין nextFirstItemId ממקטע סמוך → fetch כל התפילה");
+        const allPrayerItems = await dataSource.fetchCollection({
+            path,
+            collection: itemsCollection,
+        });
+        cmsIdDbg("[CMS-ID]   allPrayerItems=", allPrayerItems.length, "פריטים בתפילה");
+        const laterIds = allPrayerItems
+            .filter((e: any) => e.values?.deleted !== true)
+            .map((e: any) => e.values?.itemId)
+            .filter((id: any) => id != null && id !== "")
+            .map((id: any) => String(id))
+            .filter((id: string) => Number(id) > Number(baseItemId));
+        if (laterIds.length > 0) {
+            laterIds.sort((a: string, b: string) => Number(a) - Number(b));
+            nextFirstFromPrayer = laterIds[0];
+            cmsIdDbg("[CMS-ID]   laterIds (> baseItemId", baseItemId, "):", laterIds.length, "→ nextFirstFromPrayer=", nextFirstFromPrayer);
+        } else {
+            cmsIdDbg("[CMS-ID]   אין IDs מאוחרים מ-baseItemId=", baseItemId, "בכל התפילה");
         }
     }
+
+    const neighborBoundsForInsert = {
+        prevLastItemId: neighborItemBounds.prevLastItemId,
+        nextFirstItemId:
+            neighborItemBounds.nextFirstItemId ?? nextFirstFromPrayer ?? undefined,
+    };
+    const isNewPrayer = orderedItemIds.length === 0 && !neighborBoundsForInsert.prevLastItemId && !neighborBoundsForInsert.nextFirstItemId;
+    cmsIdDbg("[CMS-ID]   neighborBoundsForInsert=", JSON.stringify(neighborBoundsForInsert));
+    cmsIdDbg("[CMS-ID]   isNewPrayer=", isNewPrayer, "(orderedItemIds.length=", orderedItemIds.length, "prevLast=", neighborBoundsForInsert.prevLastItemId ?? "ריק", "nextFirst=", neighborBoundsForInsert.nextFirstItemId ?? "ריק", ")");
+    const allExtraTakenIds = [...deletedItemIds, ...otherTranslationsItemIds];
+    cmsIdDbg("[CMS-ID]   → קריאה ל-computeItemIdForInsert: orderedItemIds=", orderedItemIds.length, "insertIndex=", insertIndex, "extraTakenIds(deleted+otherTranslations)=", allExtraTakenIds.length, "nextUpperCap=", nextUpperCapForInsert ?? "(ריק)", "minIdBefore=", isNewPrayer ? (minIdBeforeParam ?? "(ריק)") : "(לא רלוונטי – יש פריטים/שכנים)");
 
     const newItemId = computeItemIdForInsert(orderedItemIds, insertIndex, {
-        minIdBefore: baseItemId,
         confirmUserWantsDecimalId,
-        extraTakenIds,
-        neighborBounds: nextFirstItemId ? { nextFirstItemId } : undefined,
+        extraTakenIds: allExtraTakenIds,
+        neighborBounds: neighborBoundsForInsert,
+        ...(nextUpperCapForInsert != null
+            ? { nextBaseLinkedMinItemId: nextUpperCapForInsert }
+            : {}),
+        ...(isNewPrayer && minIdBeforeParam ? { minIdBefore: minIdBeforeParam } : {}),
     });
 
-    // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אם לא ו"תחילת פסקה" → mit_id של הבסיס; אחרת → itemId של התרגום
+    // חישוב mit_id: אם הבסיס חלק מפסקה → mit_id של הבסיס; אחרת → itemId של התרגום
     const baseItemMitId = baseItemMitIdParam != null && String(baseItemMitIdParam).trim() !== "" ? String(baseItemMitIdParam).trim() : null;
-    const baseIsPartOfParagraph = baseItemMitId != null && baseItemId !== baseItemMitId;
-    let newMitId: string;
-    if (baseIsPartOfParagraph) {
-        newMitId = baseItemMitId;
-    } else if (isStartOfParagraph && baseItemMitId != null) {
-        newMitId = baseItemMitId;
-    } else {
-        newMitId = newItemId;
-    }
-    console.log("[CMS-ID] createTranslationItem | targetTranslationId=", targetTranslationId, "selectedPrayerId=", selectedPrayerId, "partId=", partId, "baseItemId=", baseItemId, "afterItemId=", afterItemId, "insertIndex=", insertIndex, "orderedItemIds=", orderedItemIds, "=> newItemId=", newItemId, "newMitId=", newMitId, "baseItemMitId=", baseItemMitId ?? "(none)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
+    const baseIsPartOfParagraph =
+        baseItemMitId != null && baseKey !== idNorm(baseItemMitId);
+    const newMitId = baseIsPartOfParagraph ? baseItemMitId : newItemId;
+    cmsIdDbg("[CMS-ID] ◀◀◀ createTranslationItem – תוצאה סופית:");
+    cmsIdDbg("[CMS-ID]   newItemId=", newItemId, "newMitId=", newMitId);
+    cmsIdDbg("[CMS-ID]   baseItemMitId=", baseItemMitId ?? "(ריק)", "baseIsPartOfParagraph=", baseIsPartOfParagraph);
+    cmsIdDbg("[CMS-ID]   mit_id חישוב:", baseIsPartOfParagraph ? "בסיס חלק מפסקה → mit_id=baseItemMitId" : "רגיל → mit_id=newItemId");
 
     const values: Record<string, any> = {
         content: content ?? "",
@@ -418,26 +756,31 @@ export async function createTranslationItem(
         partId,
         itemId: newItemId,
         mit_id: newMitId,
-        linkedItem: [baseItemId],
+        linkedItem: [baseKey || String(baseItemId)],
         timestamp: Date.now(),
     };
     if (partName != null && partName !== "") {
         values.partName = partName;
         values.partIdAndName = `${partId} ${partName}`;
     }
-    if (titleType !== undefined) values.titleType = titleType;
-    if (title !== undefined) values.title = title;
-    if (fontTanach !== undefined) values.fontTanach = fontTanach;
-    if (noSpace !== undefined) values.noSpace = noSpace;
-    if (block !== undefined) values.block = block;
-    if (firstInPage !== undefined) values.firstInPage = firstInPage;
-    if (specialDate !== undefined) values.specialDate = specialDate;
+    if (titleType) values.titleType = titleType;
+    if (title) values.title = title;
+    if (fontTanach === true) values.fontTanach = true;
+    if (bold === true) values.bold = true;
+    if (centerAlign === true) values.centerAlign = true;
+    if (lineLine === true) values.lineLine = true;
+    if (red === true) values.red = true;
+    if (justifyBlock === true) values.justifyBlock = true;
+    if (noSpace === true) values.noSpace = true;
+    if (block === true) values.block = true;
+    if (firstInPage === true) values.firstInPage = true;
+    if (specialDate === true) values.specialDate = true;
     if (cohanim != null) values.cohanim = cohanim;
     if (hazan != null) values.hazan = hazan;
     if (minyan != null) values.minyan = minyan;
-    if (role !== undefined) values.role = role;
-    if (reference !== undefined) values.reference = reference;
-    if (specialSign !== undefined) values.specialSign = specialSign;
+    if (role) values.role = role;
+    if (reference) values.reference = reference;
+    if (specialSign) values.specialSign = specialSign;
     if (dateSetId !== undefined) values.dateSetId = dateSetId;
 
     await dataSource.saveEntity({
@@ -501,13 +844,17 @@ export async function splitPartItems(
     );
 
     const splitIdx = baseItems.findIndex((e: any) => e.values?.itemId === splitAtItemId);
-    if (splitIdx < 0) return;
+    if (splitIdx < 0) {
+        throw new Error(`splitPartItems: split item not found: ${splitAtItemId}`);
+    }
 
     const movedItems = insertBefore
         ? baseItems.slice(0, splitIdx + 1)
         : baseItems.slice(splitIdx);
 
-    if (movedItems.length === 0) return;
+    if (movedItems.length === 0) {
+        throw new Error("splitPartItems: no items selected for split");
+    }
 
     const movedItemIds = new Set(
         movedItems.map((e: any) => e.values?.itemId as string).filter(Boolean)
@@ -516,6 +863,8 @@ export async function splitPartItems(
 
     const getPartName = (translationId: string): string =>
         translationId === `1-${tocId}` ? newPartNameEn : newPartNameHe;
+
+    const pendingWrites: PendingWrite[] = [];
 
     for (const trans of translations) {
         const tid = trans?.translationId as string | undefined;
@@ -527,12 +876,10 @@ export async function splitPartItems(
 
         if (tid === currentTranslationId) {
             for (const item of movedItems) {
-                await dataSource.saveEntity({
-                    path,
-                    entityId: item.id,
-                    values: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
-                    status: "existing",
-                    collection: itemsCollection,
+                pendingWrites.push({
+                    collectionPath: path,
+                    docId: item.id,
+                    data: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
                 });
             }
         } else {
@@ -546,17 +893,17 @@ export async function splitPartItems(
                     })
                 ).filter((e: any) => e.values?.deleted !== true);
                 for (const item of related) {
-                    await dataSource.saveEntity({
-                        path,
-                        entityId: item.id,
-                        values: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
-                        status: "existing",
-                        collection: itemsCollection,
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: item.id,
+                        data: { ...item.values, partId: newPartId, partName, partIdAndName, timestamp: now },
                     });
                 }
             }
         }
     }
+
+    await commitAtomicWrites(pendingWrites);
 }
 
 // ─── Move Items to Part ───────────────────────────────────────────────────────
@@ -624,40 +971,111 @@ export async function moveItemsToPart(
             (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, { numeric: true })
         );
 
-    if (movedEntities.length === 0) return;
+    if (movedEntities.length === 0) {
+        throw new Error("moveItemsToPart: no matching source items found for movedItemIds");
+    }
 
-    // פריטי יעד של הבסיס (ללא הפריטים המועברים, למקרה עתידי של source==target)
-    const rawTargetItems = await fetchPartItems(
-        dataSource,
-        currentTranslationId,
-        selectedPrayerId,
-        targetPartId
-    );
+    // פריטי יעד של הבסיס (כולל מחוקים, כדי לאסוף deleted IDs)
+    const basePath = `translations/${currentTranslationId}/prayers/${selectedPrayerId}/items`;
+    const allBaseTargetEntities = await dataSource.fetchCollection({
+        path: basePath,
+        collection: itemsCollection,
+        filter: { partId: ["==", targetPartId] },
+    });
+    const rawTargetItems = allBaseTargetEntities
+        .filter((e: any) => e.values?.deleted !== true)
+        .sort((a: any, b: any) =>
+            (a.values?.itemId || "").localeCompare(b.values?.itemId || "", undefined, {
+                numeric: true,
+            })
+        );
     const targetItems = rawTargetItems.filter(
         (e: any) => !movedIdSet.has(e.values?.itemId)
     );
+    const baseDeletedItemIds: string[] = allBaseTargetEntities
+        .filter((e: any) => e.values?.deleted === true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
 
+    const normalizedInsertAfterItemId =
+        insertAfterItemId == null ? null : String(insertAfterItemId);
     const insertAfterIdx =
-        insertAfterItemId === null
+        normalizedInsertAfterItemId === null
             ? -1
-            : targetItems.findIndex((e: any) => e.values?.itemId === insertAfterItemId);
-
-    const baseIdAfter =
-        insertAfterIdx + 1 < targetItems.length
-            ? (targetItems[insertAfterIdx + 1].values?.itemId ?? null)
-            : null;
+            : targetItems.findIndex(
+                (e: any) => String(e.values?.itemId ?? "") === normalizedInsertAfterItemId
+            );
+    if (normalizedInsertAfterItemId !== null && insertAfterIdx === -1) {
+        throw new Error(
+            `moveItemsToPart: insertAfterItemId "${normalizedInsertAfterItemId}" not found in target part "${targetPartId}"`
+        );
+    }
 
     const baseOrderedIds = targetItems.map((e: any) => e.values?.itemId ?? "");
     let baseInsertIdx = insertAfterIdx + 1;
+
+    const neighborBounds = await fetchNeighborItemIdBoundsForPart(dataSource, {
+        translationId: currentTranslationId,
+        selectedPrayerId,
+        partId: targetPartId,
+        translations,
+    });
+    const otherTranslationIds = translations
+        .map((t: any) => t?.translationId as string)
+        .filter((tid): tid is string => !!tid && tid !== currentTranslationId);
+
+    const [perTidNeighborBoundsArr, otherTranslationsEntities] = await Promise.all([
+        Promise.all(
+            otherTranslationIds.map(async (tid) => ({
+                tid,
+                bounds: await fetchNeighborItemIdBoundsForPart(dataSource, {
+                    translationId: tid,
+                    selectedPrayerId,
+                    partId: targetPartId,
+                    translations,
+                }),
+            }))
+        ),
+        Promise.all(
+            otherTranslationIds.map((tid) => {
+                const tPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+                return dataSource.fetchCollection({
+                    path: tPath,
+                    collection: itemsCollection,
+                    filter: { partId: ["==", targetPartId] },
+                });
+            })
+        ),
+    ]);
+    const neighborBoundsMap = new Map<string, { prevLastItemId?: string; nextFirstItemId?: string }>();
+    neighborBoundsMap.set(currentTranslationId, neighborBounds);
+    for (const { tid, bounds } of perTidNeighborBoundsArr) {
+        neighborBoundsMap.set(tid, bounds);
+    }
+    const otherTranslationsItemIds: string[] = otherTranslationsEntities
+        .flat()
+        .filter((e: any) => e.values?.deleted !== true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => id != null && String(id).trim() !== "")
+        .map((id: any) => String(id));
 
     const oldToNewBaseItemId: Record<string, string> = {};
     const oldToNewBaseMitId: Record<string, string> = {};
     let prevBaseMitId: string | null =
         insertAfterIdx >= 0 ? (targetItems[insertAfterIdx].values?.mit_id ?? null) : null;
 
+    const movedBaseOldItemIds = movedEntities
+        .map((e: any) => String(e.values?.itemId ?? ""))
+        .filter((id) => id !== "");
+
     for (const item of movedEntities) {
         const oldBaseItemId = item.values?.itemId as string;
-        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx);
+        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
+            neighborBounds,
+            // Reserve old moved IDs too, so new entity IDs never collide before soft-delete.
+            extraTakenIds: [...baseDeletedItemIds, ...otherTranslationsItemIds, ...movedBaseOldItemIds],
+        });
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
         oldToNewBaseItemId[oldBaseItemId] = newBaseItemId;
@@ -670,12 +1088,13 @@ export async function moveItemsToPart(
         oldToNewBaseMitId[oldBaseItemId] = newBaseMitId;
 
         prevBaseMitId = newBaseMitId;
-        console.log("[CMS-ID] moveItemsToPart (base) | oldBaseItemId=", oldBaseItemId, "newBaseItemId=", newBaseItemId, "newBaseMitId=", newBaseMitId, "baseInsertIdx=", baseInsertIdx - 1, "wantsParagraph=", wantsParagraph);
+        cmsIdDbg("[CMS-ID] moveItemsToPart (base) | oldBaseItemId=", oldBaseItemId, "newBaseItemId=", newBaseItemId, "newBaseMitId=", newBaseMitId, "baseInsertIdx=", baseInsertIdx - 1, "wantsParagraph=", wantsParagraph);
     }
 
     const now = Date.now();
+    const pendingWrites: PendingWrite[] = [];
 
-    // עוזר: שם המקטע היעד לפי עץ TOC של תרגום מסוים
+    // עוזר: שם מקטע היעד לפי עץ TOC של תרגום מסוים
     const getTargetPartName = (trans: any): string => {
         for (const cat of trans.categories ?? []) {
             const prayer = (cat.prayers ?? []).find((p: any) => p.id === selectedPrayerId);
@@ -700,31 +1119,61 @@ export async function moveItemsToPart(
                 const oldItemId = item.values?.itemId as string;
                 const newItemId = oldToNewBaseItemId[oldItemId] ?? oldItemId;
                 const newMitId = oldToNewBaseMitId[oldItemId] ?? item.values?.mit_id;
-                await dataSource.saveEntity({
-                    path,
-                    entityId: item.id,
-                    values: {
-                        ...item.values,
-                        partId: targetPartId,
-                        partName,
-                        partIdAndName,
-                        itemId: newItemId,
-                        mit_id: newMitId,
-                        timestamp: now,
-                    },
-                    status: "existing",
-                    collection: itemsCollection,
-                });
+                if (newItemId === item.id) {
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: item.id,
+                        data: {
+                            ...item.values,
+                            partId: targetPartId,
+                            partName,
+                            partIdAndName,
+                            itemId: newItemId,
+                            mit_id: newMitId,
+                            timestamp: now,
+                        },
+                    });
+                } else {
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: newItemId,
+                        data: {
+                            ...item.values,
+                            partId: targetPartId,
+                            partName,
+                            partIdAndName,
+                            itemId: newItemId,
+                            mit_id: newMitId,
+                            timestamp: now,
+                        },
+                    });
+                    pendingWrites.push({
+                        collectionPath: path,
+                        docId: item.id,
+                        data: { ...item.values, deleted: true, timestamp: now },
+                    });
+                }
             }
         } else {
-            const targetItemsForTranslation = await fetchPartItems(
-                dataSource,
-                tid,
-                selectedPrayerId,
-                targetPartId
-            );
+            const allTransTargetEntities = await dataSource.fetchCollection({
+                path,
+                collection: itemsCollection,
+                filter: { partId: ["==", targetPartId] },
+            });
+            const targetItemsForTranslation = allTransTargetEntities
+                .filter((e: any) => e.values?.deleted !== true)
+                .sort((a: any, b: any) =>
+                    (a.values?.itemId || "").localeCompare(b.values?.itemId || "", undefined, {
+                        numeric: true,
+                    })
+                );
+            const transDeletedItemIds: string[] = allTransTargetEntities
+                .filter((e: any) => e.values?.deleted === true)
+                .map((e: any) => e.values?.itemId)
+                .filter((id: any) => id != null && String(id).trim() !== "")
+                .map((id: any) => String(id));
             const chunks = chunkArray([...movedIdSet], 30);
-            const relatedToMove: Entity<any>[] = [];
+            const relatedToMoveMap = new Map<string, Entity<any>>();
             for (const chunk of chunks) {
                 const related = (
                     await dataSource.fetchCollection({
@@ -733,14 +1182,16 @@ export async function moveItemsToPart(
                         filter: { linkedItem: ["array-contains-any", chunk] },
                     })
                 ).filter((e: any) => e.values?.deleted !== true);
-                relatedToMove.push(...related);
+                for (const item of related) {
+                    if (!relatedToMoveMap.has(item.id)) relatedToMoveMap.set(item.id, item);
+                }
             }
+            const relatedToMove: Entity<any>[] = [...relatedToMoveMap.values()];
 
             const relatedIds = new Set(relatedToMove.map((e: any) => e.id));
             const stableTargetItems = targetItemsForTranslation.filter(
                 (e: any) => !relatedIds.has(e.id)
             );
-            // קיבוץ לפי פריט בסיס מקורי, כדי לחשב itemId בנפרד לכל תרגום ובהתאם למיקום הבסיס
             const relatedByBaseId = new Map<string, Entity<any>[]>();
             relatedToMove.forEach((item: any) => {
                 const link = item.values?.linkedItem;
@@ -763,6 +1214,15 @@ export async function moveItemsToPart(
                 .map((e: any) => e.values?.itemId)
                 .filter((v: string | undefined) => !!v)
                 .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+            const tidNeighborBounds = neighborBoundsMap.get(tid) ?? {};
+            const movedTranslationOldItemIds = relatedToMove
+                .map((e: any) => String(e.values?.itemId ?? ""))
+                .filter((id: string) => id !== "");
+            const translationExtraTakenIds = [
+                ...transDeletedItemIds,
+                ...baseOrderedIds,
+                ...movedTranslationOldItemIds,
+            ];
 
             for (const oldBaseId of orderedOldBaseIds) {
                 const relatedItems = relatedByBaseId.get(oldBaseId) ?? [];
@@ -772,50 +1232,85 @@ export async function moveItemsToPart(
                 const baseIsParagraph =
                     (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
 
-                console.log("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "baseIsParagraph=", baseIsParagraph);
+                const baseIdx = baseOrderedIds.indexOf(newBaseId);
+                const nextBaseId = baseIdx >= 0 && baseIdx < baseOrderedIds.length - 1
+                    ? baseOrderedIds[baseIdx + 1]
+                    : undefined;
 
-                // הכנסת newBaseId כנקודת ייחוס ממוינת — תרגומים ייכנסו מיד אחריו
+                cmsIdDbg("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "nextBaseId=", nextBaseId ?? "(אין)", "baseIsParagraph=", baseIsParagraph);
+
                 let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
                 if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
                 translationOrderedIds.splice(baseRefPos, 0, newBaseId);
                 let insertPos = baseRefPos + 1;
 
                 for (const item of relatedItems) {
-                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos);
+                    const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {
+                        neighborBounds: tidNeighborBounds,
+                        extraTakenIds: translationExtraTakenIds,
+                        ...(nextBaseId != null ? { nextBaseLinkedMinItemId: nextBaseId } : {}),
+                    });
                     translationOrderedIds.splice(insertPos, 0, newTranslationItemId);
                     insertPos++;
 
-                    const updatedLinkedItem = replaceLinkedItemId(
+                    let updatedLinkedItem = replaceLinkedItemId(
                         item.values?.linkedItem,
                         oldBaseId,
                         newBaseId
                     );
+                    for (const [oldId, newId] of Object.entries(oldToNewBaseItemId)) {
+                        if (oldId !== oldBaseId) {
+                            updatedLinkedItem = replaceLinkedItemId(updatedLinkedItem, oldId, newId);
+                        }
+                    }
                     const newTranslationMitId = baseIsParagraph
                         ? (oldToNewBaseMitId[oldBaseId] ?? item.values?.mit_id)
                         : newTranslationItemId;
 
-                    console.log("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
+                    cmsIdDbg("[CMS-ID] moveItemsToPart (translation item) | tid=", tid, "entityId=", item.id, "oldItemId=", item.values?.itemId, "newTranslationItemId=", newTranslationItemId, "newTranslationMitId=", newTranslationMitId);
 
-                    await dataSource.saveEntity({
-                        path,
-                        entityId: item.id,
-                        values: {
-                            ...item.values,
-                            linkedItem: updatedLinkedItem,
-                            itemId: newTranslationItemId,
-                            mit_id: newTranslationMitId,
-                            partId: targetPartId,
-                            partName,
-                            partIdAndName,
-                            timestamp: now,
-                        },
-                        status: "existing",
-                        collection: itemsCollection,
-                    });
+                    if (newTranslationItemId === item.id) {
+                        pendingWrites.push({
+                            collectionPath: path,
+                            docId: item.id,
+                            data: {
+                                ...item.values,
+                                linkedItem: updatedLinkedItem,
+                                itemId: newTranslationItemId,
+                                mit_id: newTranslationMitId,
+                                partId: targetPartId,
+                                partName,
+                                partIdAndName,
+                                timestamp: now,
+                            },
+                        });
+                    } else {
+                        pendingWrites.push({
+                            collectionPath: path,
+                            docId: newTranslationItemId,
+                            data: {
+                                ...item.values,
+                                linkedItem: updatedLinkedItem,
+                                itemId: newTranslationItemId,
+                                mit_id: newTranslationMitId,
+                                partId: targetPartId,
+                                partName,
+                                partIdAndName,
+                                timestamp: now,
+                            },
+                        });
+                        pendingWrites.push({
+                            collectionPath: path,
+                            docId: item.id,
+                            data: { ...item.values, deleted: true, timestamp: now },
+                        });
+                    }
                 }
             }
         }
     }
+
+    await commitAtomicWrites(pendingWrites);
 }
 
 // ─── Update Part Metadata in Items ────────────────────────────────────────────

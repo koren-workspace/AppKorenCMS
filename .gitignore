@@ -2,6 +2,8 @@ node_modules
 .env
 .env.local
 .env.*.local
+.env.example
+.google-service-account.json
 dist/
 
 # STAGE test scripts – backup and local config (contains paths)
@@ -18,6 +20,7 @@ scripts/koren-stage-firebase-adminsdk-9ur1w-3dd776e48a.json
 # Generate changes script – local config and output files
 scripts/changes_config.json
 scripts/changes_*.json
+scripts/migration_item_ids_report*.json
 scripts/apply_log_*.txt
 scripts/apply_report_*.xlsx
 

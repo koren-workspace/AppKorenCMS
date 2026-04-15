@@ -20,7 +20,7 @@ export type SplitPartModalProps = {
     items: Entity<any>[];
     /** ערכים מקומיים (לתצוגת content) */
     localValues: Record<string, any>;
-    /** מקטע נוכחי – לאתחול dateSetIds / hazan / minyan */
+    /** המקטע הנוכחי – לאתחול dateSetIds / hazan / minyan */
     currentPart: { id: string; name: string; dateSetIds?: string[]; hazan?: boolean | null; minyan?: boolean | null } | null;
     onSubmit: (params: {
         splitAtItemId: string;
@@ -150,7 +150,7 @@ export function SplitPartModal({
 
                     {/* תנאי תצוגה */}
                     <div className="border rounded p-3 space-y-2">
-                        <div className="text-[10px] font-semibold text-gray-600">תנאי תצוגה (ממוקם מהמקטע הנוכחי)</div>
+                        <div className="text-[10px] font-semibold text-gray-600">תנאי תצוגה (ממולא מהמקטע הנוכחי)</div>
                         <div className="flex items-center gap-4 flex-wrap">
                             <div className="flex items-center gap-1">
                                 <span className="text-[10px]">dateSetIds:</span>
@@ -252,7 +252,10 @@ export function SplitPartModal({
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="text-[10px] text-gray-800 truncate mt-0.5" dir="rtl">
+                                            <div
+                                                className="text-[10px] text-gray-800 mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words"
+                                                dir="rtl"
+                                            >
                                                 {content || <span className="text-gray-300 italic">(ריק)</span>}
                                             </div>
                                         </div>

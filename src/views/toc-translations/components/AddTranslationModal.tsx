@@ -6,7 +6,17 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Entity } from "@firecms/core";
-import { ITEM_TYPE_OPTIONS, TITLE_TYPE_OPTIONS, ITEM_FIELD_HELP } from "../constants/itemFields";
+import {
+    ITEM_TYPE_OPTIONS,
+    TITLE_TYPE_OPTIONS,
+    ITEM_FIELD_HELP,
+    isBodyLikeType,
+    showDiburHamatkhilField,
+    supportsAttachedMeta,
+    supportsFirstInPage,
+    supportsNoSpace,
+} from "../constants/itemFields";
+import { splitParagraphSentences } from "../utils/itemUtils";
 
 export type TranslationOption = { translationId: string; [k: string]: any };
 
@@ -18,8 +28,6 @@ export type AddTranslationModalProps = {
     onClose: () => void;
     baseItemId: string;
     baseContentPreview: string;
-    /** mit_id של פריט הבסיס – להצגת "תחילת פסקה" רק כשהבסיס אינו חלק מפסקה (itemId === mit_id) */
-    baseItemMitId?: string;
     /** כל הפריטים שמקושרים לפריט הזה – מכל התרגומים (לא רק מאותו סוג) */
     existingLinked: ExistingLinkedEntry[];
     translations: TranslationOption[];
@@ -44,7 +52,6 @@ export function AddTranslationModal({
     onClose,
     baseItemId,
     baseContentPreview,
-    baseItemMitId,
     existingLinked,
     translations,
     currentTranslationId,
@@ -80,9 +87,17 @@ export function AddTranslationModal({
     if (!open) return null;
 
     const content = (form.content ?? "").toString().trim();
-    const canSubmit = targetTranslationId && content.length > 0;
-    /** פריט הבסיס אינו חלק מפסקה (itemId === mit_id) – אז שואלים "תחילת פסקה?" */
-    const showStartOfParagraph = baseItemMitId != null && baseItemMitId !== "" && baseItemId === baseItemMitId;
+    const isParagraphMode = form.translationMode === "paragraph";
+    const paragraphSentences = splitParagraphSentences(form.content ?? "");
+    const baseSentencesCount = splitParagraphSentences(baseContentPreview ?? "").length;
+    const canSubmit =
+        !!targetTranslationId &&
+        (isParagraphMode ? paragraphSentences.length > 0 : content.length > 0);
+    const currentType = (form.type ?? "body") as string;
+    const showBodyFields = isBodyLikeType(currentType);
+    const showNoSpace = supportsNoSpace(currentType);
+    const showFirstInPage = supportsFirstInPage(currentType);
+    const showAttachedMeta = supportsAttachedMeta(currentType);
 
     /** קיבוץ לפי תרגום – להצגת "כל התרגומים המקושרים" */
     const byTranslation: Record<string, ExistingLinkedEntry[]> = {};
@@ -99,7 +114,7 @@ export function AddTranslationModal({
                     {/* פריט בסיס */}
                     <div>
                         <div className="text-[10px] text-gray-500 mb-1">פריט בסיס (itemId: {baseItemId})</div>
-                        <div className="p-2 bg-gray-50 rounded border text-gray-700 max-h-20 overflow-auto">
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700 max-h-40 overflow-auto whitespace-pre-wrap break-words">
                             {baseContentPreview || "(ללא תוכן)"}
                         </div>
                     </div>
@@ -185,30 +200,63 @@ export function AddTranslationModal({
                         </div>
                     )}
 
-                    {/* תחילת פסקה – רק כשפריט הבסיס אינו חלק מפסקה */}
-                    {showStartOfParagraph && (
-                        <div className="p-2 bg-amber-50 border border-amber-200 rounded">
-                            <label className="flex items-center gap-2 text-[11px] text-gray-700" title="אם סומן – פריט התרגום יקבל את אותו mit_id כמו פריט הבסיס (תחילת פסקה). אם לא – mit_id יהיה שווה ל-itemId של התרגום.">
-                                <input
-                                    type="checkbox"
-                                    checked={!!form.isStartOfParagraph}
-                                    onChange={(e) => onFormFieldChange("isStartOfParagraph", e.target.checked)}
-                                />
-                                <span>תחילת פסקה (פריט התרגום מתחיל פסקה כמו הבסיס)</span>
-                            </label>
-                        </div>
-                    )}
-
                     {/* תוכן */}
                     <div>
+                        <div className="mb-2 p-2 border border-gray-200 rounded bg-gray-50">
+                            <div className="flex items-center gap-2 text-[11px] text-gray-700 mb-1">
+                                <span className="font-semibold">מצב תרגום</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px]">
+                                <label className="flex items-center gap-1">
+                                    <input
+                                        type="radio"
+                                        name="translationMode"
+                                        checked={!isParagraphMode}
+                                        onChange={() => onFormFieldChange("translationMode", "regular")}
+                                    />
+                                    <span>תרגום רגיל</span>
+                                </label>
+                                <label className="flex items-center gap-1">
+                                    <input
+                                        type="radio"
+                                        name="translationMode"
+                                        checked={isParagraphMode}
+                                        onChange={() => onFormFieldChange("translationMode", "paragraph")}
+                                    />
+                                    <span>תרגום פסקה</span>
+                                </label>
+                            </div>
+                            <div className="text-[10px] text-gray-600 mt-1">
+                                הפריט מכיל {baseSentencesCount} משפטים
+                            </div>
+                        </div>
                         <label className="block text-[10px] text-gray-600 mb-1">תוכן התרגום</label>
                         <textarea
                             value={form.content ?? ""}
                             onChange={(e) => onFormFieldChange("content", e.target.value)}
-                            className="w-full border border-gray-300 rounded p-2 min-h-[80px]"
+                            className="w-full border border-gray-300 rounded p-2 min-h-[80px] whitespace-pre-wrap"
                             dir="rtl"
                             placeholder="הזן את התרגום"
                         />
+                        {isParagraphMode && (
+                            <div className="mt-2 border border-gray-200 rounded p-2 bg-gray-50">
+                                <div className="text-[10px] text-gray-600 mb-1">
+                                    תצוגת משפטים לפסקה ({paragraphSentences.length})
+                                </div>
+                                <div className="space-y-1 max-h-28 overflow-auto text-[10px]">
+                                    {paragraphSentences.length === 0 ? (
+                                        <div className="text-gray-400">אין משפטים (פיצול לפי שורות)</div>
+                                    ) : (
+                                        paragraphSentences.map((sentence, index) => (
+                                            <div key={`${index}_${sentence.slice(0, 10)}`} className="px-2 py-1 rounded bg-white border border-gray-200">
+                                                <span className="text-gray-500 ml-1">{index + 1}.</span>
+                                                <span>{sentence}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* מאפיינים (כמו בפריט רגיל) */}
@@ -250,50 +298,92 @@ export function AddTranslationModal({
                                                 </select>
                                             </label>
                                         )}
-                                        <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.title}>
-                                            <span className="text-gray-600 w-20 shrink-0">כותרת</span>
+                                        {showDiburHamatkhilField(form.type, targetTranslationId) && (
+                                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.titleCommentary}>
+                                                <span className="text-gray-600 w-20 shrink-0">דיבור המתחיל</span>
+                                                <input
+                                                    type="text"
+                                                    value={form.title ?? ""}
+                                                    onChange={(e) => onFormFieldChange("title", e.target.value)}
+                                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                                    dir="rtl"
+                                                />
+                                            </label>
+                                        )}
+                                    </>
+                                )}
+                                {showBodyFields && (
+                                    <>
+                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.bold}>
                                             <input
-                                                type="text"
-                                                value={form.title ?? ""}
-                                                onChange={(e) => onFormFieldChange("title", e.target.value)}
-                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                                dir="rtl"
+                                                type="checkbox"
+                                                checked={!!form.bold}
+                                                onChange={(e) => onFormFieldChange("bold", e.target.checked)}
                                             />
+                                            <span className="text-gray-600">גופן מודגש</span>
+                                        </label>
+                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.centerAlign}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.centerAlign}
+                                                onChange={(e) => onFormFieldChange("centerAlign", e.target.checked)}
+                                            />
+                                            <span className="text-gray-600">מיושר לאמצע</span>
+                                        </label>
+                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.lineLine}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.lineLine}
+                                                onChange={(e) => onFormFieldChange("lineLine", e.target.checked)}
+                                            />
+                                            <span className="text-gray-600">שורה שורה</span>
+                                        </label>
+                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.red}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.red}
+                                                onChange={(e) => onFormFieldChange("red", e.target.checked)}
+                                            />
+                                            <span className="text-gray-600">טקסט אדום</span>
+                                        </label>
+                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.justifyBlock}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.justifyBlock}
+                                                onChange={(e) => onFormFieldChange("justifyBlock", e.target.checked)}
+                                            />
+                                            <span className="text-gray-600">יישור בלוק</span>
+                                        </label>
+                                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.block}
+                                                onChange={(e) => onFormFieldChange("block", e.target.checked)}
+                                            />
+                                            <span className="text-gray-600">פיסקה</span>
                                         </label>
                                     </>
                                 )}
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.fontTanach}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!form.fontTanach}
-                                        onChange={(e) => onFormFieldChange("fontTanach", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">גופן תנ"ך</span>
-                                </label>
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!form.noSpace}
-                                        onChange={(e) => onFormFieldChange("noSpace", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">ללא רווח</span>
-                                </label>
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.block}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!form.block}
-                                        onChange={(e) => onFormFieldChange("block", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">בלוק</span>
-                                </label>
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!form.firstInPage}
-                                        onChange={(e) => onFormFieldChange("firstInPage", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">ראשון בעמוד</span>
-                                </label>
+                                {showNoSpace && (
+                                    <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.noSpace}>
+                                        <input
+                                            type="checkbox"
+                                            checked={!!form.noSpace}
+                                            onChange={(e) => onFormFieldChange("noSpace", e.target.checked)}
+                                        />
+                                        <span className="text-gray-600">ללא רווח</span>
+                                    </label>
+                                )}
+                                {showFirstInPage && (
+                                    <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.firstInPage}>
+                                        <input
+                                            type="checkbox"
+                                            checked={!!form.firstInPage}
+                                            onChange={(e) => onFormFieldChange("firstInPage", e.target.checked)}
+                                        />
+                                        <span className="text-gray-600">ראשון בעמוד</span>
+                                    </label>
+                                )}
                                 <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialDate}>
                                     <input
                                         type="checkbox"
@@ -338,34 +428,38 @@ export function AddTranslationModal({
                                         <option value="false">לא</option>
                                     </select>
                                 </label>
-                                <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.role}>
-                                    <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
-                                    <input
-                                        type="text"
-                                        value={form.role ?? ""}
-                                        onChange={(e) => onFormFieldChange("role", e.target.value)}
-                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                        dir="rtl"
-                                    />
-                                </label>
-                                <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.reference}>
-                                    <span className="text-gray-600 w-20 shrink-0">reference</span>
-                                    <input
-                                        type="text"
-                                        value={form.reference ?? ""}
-                                        onChange={(e) => onFormFieldChange("reference", e.target.value)}
-                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                    />
-                                </label>
-                                <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.specialSign}>
-                                    <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
-                                    <input
-                                        type="text"
-                                        value={form.specialSign ?? ""}
-                                        onChange={(e) => onFormFieldChange("specialSign", e.target.value)}
-                                        className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                    />
-                                </label>
+                                {showAttachedMeta && (
+                                    <>
+                                        <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.role}>
+                                            <span className="text-gray-600 w-20 shrink-0">תפקיד</span>
+                                            <input
+                                                type="text"
+                                                value={form.role ?? ""}
+                                                onChange={(e) => onFormFieldChange("role", e.target.value)}
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                                dir="rtl"
+                                            />
+                                        </label>
+                                        <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.reference}>
+                                            <span className="text-gray-600 w-20 shrink-0">מקורות</span>
+                                            <input
+                                                type="text"
+                                                value={form.reference ?? ""}
+                                                onChange={(e) => onFormFieldChange("reference", e.target.value)}
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            />
+                                        </label>
+                                        <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.specialSign}>
+                                            <span className="text-gray-600 w-20 shrink-0">סימן מיוחד</span>
+                                            <input
+                                                type="text"
+                                                value={form.specialSign ?? ""}
+                                                onChange={(e) => onFormFieldChange("specialSign", e.target.value)}
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            />
+                                        </label>
+                                    </>
+                                )}
                                 <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.dateSetId}>
                                     <span className="text-gray-600 w-20 shrink-0">dateSetId</span>
                                     <input

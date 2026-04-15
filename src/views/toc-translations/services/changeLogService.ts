@@ -1,8 +1,8 @@
 /**
  * changeLogService – תיעוד שינויים לפיתוח (לא קשור לממשק)
  *
- * מתעד אוטומטית את כל השינויים במערכת (שמירת מקטע, מחיקה, הוספת תרגום, פרסום ל-Bagel,
- * הוספת/מחיקת TOC/תרגום/קטגוריה/תפילה/מקטע) בפורמט מובנה.
+ * מתעד אוטומטית את כל השינויים במערכת (שמירת פריט, מחיקה, הוספת תרגום, פרסום ל-Bagel,
+ * הוספת/מחיקת TOC/תרגום/קטגוריה/תפילה/פריט) בפורמט מובנה.
  *
  * במצב פיתוח (npm run dev): הלוג נשמר גם בקובץ docs/cms-changelog.json – ניתן לפתוח אותו ישירות.
  * בנוסף נשמר ב-localStorage. בקונסולה: __CMS_CHANGELOG_EXPORT__('json') או __CMS_CHANGELOG_EXPORT__('text')
@@ -14,7 +14,7 @@ const MAX_ENTRIES = 2500;
 
 export type ChangeLogAction =
     | "save_part_items"      // שמירת פריטי מקטע (עדכון שדות)
-    | "delete_part_item"    // מחיקת פריט מקטע (soft delete)
+    | "delete_part_item"    // מחיקת פריט פריט (soft delete)
     | "create_translation_item"  // הוספת פריט תרגום חדש
     | "publish_to_bagel"    // פרסום ל-Bagel
     | "add_toc"             // הוספת נוסח (TOC)
@@ -25,16 +25,16 @@ export type ChangeLogAction =
     | "update_category"      // עריכת קטגוריה (שם)
     | "add_prayer"          // הוספת תפילה
     | "update_prayer"       // עריכת תפילה (שם)
-    | "add_part"            // הוספת מקטע
-    | "update_part"         // עריכת מקטע (שם, מאפיינים)
-    | "reorder_parts"       // שינוי סדר מקטעים
+    | "add_part"            // הוספת פריט
+    | "update_part"         // עריכת פריט (שם, מאפיינים)
+    | "reorder_parts"       // שינוי סדר פריטים
     | "delete_toc"          // מחיקת נוסח
     | "delete_translation"  // מחיקת תרגום
     | "delete_category"     // מחיקת קטגוריה
     | "delete_prayer"       // מחיקת תפילה
-    | "delete_part"         // מחיקת מקטע
-    | "move_items_to_part"  // העברת פריטים בין מקטעים
-    | "split_part";         // פיצול מקטע לשני מקטעים
+    | "delete_part"         // מחיקת פריט
+    | "move_items_to_part"  // העברת פריטים בין פריטים
+    | "split_part";         // פיצול פריט לשני פריטים
 
 /** הקשר – איפה בוצעה הפעולה */
 export type ChangeLogContext = {
@@ -51,7 +51,7 @@ export type ChangeLogContext = {
     partName?: string | null;
 };
 
-/** שינוי שדה בודד (לשמירת מקטע) */
+/** שינוי שדה בודד (לשמירת פריט) */
 export type FieldChange = {
     field: string;
     oldValue: unknown;

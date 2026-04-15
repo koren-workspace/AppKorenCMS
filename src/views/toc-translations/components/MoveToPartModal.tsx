@@ -2,7 +2,7 @@
  * MoveToPartModal – מודל העברת פריטים למקטע אחר
  *
  * בשונה מפיצול (שדורש חתך רציף), כאן בוחרים פריטים בודדים בחירה חופשית (checkboxes).
- * הסיבה: המקטע היעד כבר קיים, ואין מניעה שפריטים בודדים יועברו אליו.
+ * הסיבה: מקטע היעד כבר קיים, ואין מניעה שפריטים בודדים יועברו אליו.
  *
  * תהליך:
  *  1. בחירת מקטע יעד (dropdown)
@@ -31,7 +31,6 @@ export type MoveToPartModalProps = {
         movedItemIds: string[];
         targetPartId: string;
         insertAfterItemId: string | null;
-        paragraphByBaseItemId: Record<string, boolean>;
     }) => void;
     saving: boolean;
 };
@@ -51,14 +50,12 @@ export function MoveToPartModal({
     const [targetPartId, setTargetPartId] = useState<string | null>(null);
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
     const [insertAfterItemId, setInsertAfterItemId] = useState<string | null>(null);
-    const [paragraphByBaseItemId, setParagraphByBaseItemId] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (!open) return;
         setTargetPartId(null);
         setSelectedItemIds(new Set());
         setInsertAfterItemId(null);
-        setParagraphByBaseItemId({});
     }, [open]);
 
     useEffect(() => {
@@ -77,11 +74,6 @@ export function MoveToPartModal({
             const next = new Set(prev);
             if (next.has(itemId)) {
                 next.delete(itemId);
-                setParagraphByBaseItemId((m) => {
-                    const n = { ...m };
-                    delete n[itemId];
-                    return n;
-                });
             } else {
                 next.add(itemId);
             }
@@ -97,13 +89,6 @@ export function MoveToPartModal({
                 .map((e) => (localValues[e.id]?.itemId ?? e.values?.itemId) as string)
                 .filter(Boolean);
             setSelectedItemIds(new Set(allIds));
-            setParagraphByBaseItemId((prev) => {
-                const next = { ...prev };
-                allIds.forEach((id) => {
-                    if (next[id] == null) next[id] = false;
-                });
-                return next;
-            });
         }
     };
 
@@ -116,7 +101,6 @@ export function MoveToPartModal({
             movedItemIds,
             targetPartId,
             insertAfterItemId,
-            paragraphByBaseItemId,
         });
     };
 
@@ -243,24 +227,12 @@ export function MoveToPartModal({
                                                     </span>
                                                     )}
                                                 </div>
-                                                <div className="text-[10px] text-gray-800 truncate mt-0.5" dir="rtl">
+                                                <div
+                                                    className="text-[10px] text-gray-800 mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words"
+                                                    dir="rtl"
+                                                >
                                                     {content || <span className="text-gray-300 italic">(ריק)</span>}
                                                 </div>
-                                                {checked && (
-                                                    <label className="mt-1 inline-flex items-center gap-1 text-[9px] text-gray-700">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={paragraphByBaseItemId[itemId] === true}
-                                                            onChange={(e) =>
-                                                                setParagraphByBaseItemId((prev) => ({
-                                                                    ...prev,
-                                                                    [itemId]: e.target.checked,
-                                                                }))
-                                                            }
-                                                        />
-                                                        <span>הפריט חלק מהפסקה של הפריט שלפניו במיקום החדש</span>
-                                                    </label>
-                                                )}
                                             </div>
                                         </label>
                                     );

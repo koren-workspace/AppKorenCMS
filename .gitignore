@@ -33,3 +33,4 @@ scripts/load_test_chunk_*.json
 scripts/.chrome-session-*/
 docs/
 !docs/cms-changes.xlsx
+!docs/itemid_interval_violations_20260331_153322.csv

@@ -1,5 +1,5 @@
 import React from "react";
-import { FireCMSFirebaseApp } from "@firecms/firebase";
+import { FireCMSFirebaseApp, FirebaseLoginView } from "@firecms/firebase";
 import appConfig from "./index";
 import { firebaseConfig } from "./firebase_config";
 
@@ -20,6 +20,9 @@ function App() {
             authenticator={({ user }) => {
                 if (ALLOWED_EMAILS.length === 0) return true;
                 return ALLOWED_EMAILS.includes(user?.email?.toLowerCase() ?? "");
+            }}
+            components={{
+                LoginView: props => <FirebaseLoginView {...props} disableSignupScreen />
             }}
         />
     );

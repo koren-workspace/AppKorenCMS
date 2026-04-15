@@ -1,0 +1,23 @@
+[15:04:11] נבחר פרופיל Chrome עבור kpj5722@gmail.com: Profile 2
+[15:04:11] סוגר תהליכי Chrome...
+[15:04:13] מכין .chrome-session-1...
+[15:04:13] מנקה סשן Chrome זמני קודם: C:\Users\conferenceroom\Desktop\CMS\AppKorenCMS\scripts\.chrome-session-1
+[15:04:13] מעתיק נתוני התחברות מפרופיל Chrome 'Profile 2' לסשן זמני: C:\Users\conferenceroom\Desktop\CMS\AppKorenCMS\scripts\.chrome-session-1\Default
+[15:04:13]   הועתק קובץ: Preferences
+[15:04:13]   הועתק קובץ: Secure Preferences
+[15:04:13]   הועתק קובץ: Network/Cookies
+[15:04:13]   הועתק קובץ: Network/Cookies-journal
+[15:04:13]   הועתקה תיקייה: Local Storage
+[15:04:13]   הועתקה תיקייה: Session Storage
+[15:04:13]   הועתקה תיקייה: IndexedDB/http_localhost_5001.indexeddb.leveldb
+[15:04:13] מכין .chrome-session-2...
+[15:04:13] מנקה סשן Chrome זמני קודם: C:\Users\conferenceroom\Desktop\CMS\AppKorenCMS\scripts\.chrome-session-2
+[15:04:13] מעתיק נתוני התחברות מפרופיל Chrome 'Profile 2' לסשן זמני: C:\Users\conferenceroom\Desktop\CMS\AppKorenCMS\scripts\.chrome-session-2\Default
+[15:04:13]   הועתק קובץ: Preferences
+[15:04:13]   הועתק קובץ: Secure Preferences
+[15:04:13]   הועתק קובץ: Network/Cookies
+[15:04:13]   הועתק קובץ: Network/Cookies-journal
+[15:04:13]   הועתקה תיקייה: Local Storage
+[15:04:13]   הועתקה תיקייה: Session Storage
+[15:04:13]   הועתקה תיקייה: IndexedDB/http_localhost_5001.indexeddb.leveldb
+[15:04:13] הושלם. 2 תיקיות מוכנות.

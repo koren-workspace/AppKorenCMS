@@ -1,9 +1,9 @@
-import { FireCMSAppConfig } from "@firecms/cloud";
+import { buildProperty } from "@firecms/core";
 import { SampleEntityView } from "./entity_views/SampleEntityView";
 import { TocTranslationsView } from "./views/TocTranslationsView";
 import { demoCollection } from "./collections/demo";
 
-const appConfig: FireCMSAppConfig = {
+const appConfig = {
     version: "1",
     collections: [
         demoCollection
@@ -15,22 +15,24 @@ const appConfig: FireCMSAppConfig = {
             view: <TocTranslationsView />,
         },
     ],
-    propertyConfigs: [{
-        name: "String with color",
-        key: "color",
-        property: {
-            dataType: "string",
-            name: "Main color",
-            Preview: ({ value }) => {
-                return <div style={{
-                    width: 20,
-                    height: 20,
-                    backgroundColor: value,
-                    borderRadius: "4px",
-                }}/>;
-            },
-        },
-    }],
+    propertyConfigs: {
+        color: {
+            key: "color",
+            name: "String with color",
+            property: buildProperty({
+                dataType: "string",
+                name: "Main color",
+                Preview: ({ value }: { value: string }) => {
+                    return <div style={{
+                        width: 20,
+                        height: 20,
+                        backgroundColor: value,
+                        borderRadius: "4px",
+                    }}/>;
+                },
+            }),
+        }
+    },
     entityViews: [
         {
             key: "sample_entity_view",

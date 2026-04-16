@@ -1,7 +1,8 @@
 /**
  * EditorGuideBanner – הסבר לעורך: מה מותר לערוך, מה להוסיף ואיך
  *
- * מציג הודעה תלוית הקשר לפי סוג התרגום הנבחר (בסיסי 0-* או נוסח משני).
+ * מציג הודעה תלוית הקשר לפי סוג התרגום הנבחר:
+ * 0-* = בסיס, 1-9 = תרגום רגיל, 10+ = פירוש/תרגום מוגבל.
  */
 
 import React from "react";
@@ -18,6 +19,9 @@ export function EditorGuideBanner({
     hasSelection,
 }: EditorGuideBannerProps) {
     const isBase = Boolean(translationId?.startsWith?.("0-"));
+    const prefix = translationId?.split("-")[0] ?? "";
+    const prefixNumber = Number.parseInt(prefix, 10);
+    const canEditNames = !Number.isNaN(prefixNumber) && prefixNumber < 10;
 
     if (!hasSelection) {
         return (
@@ -37,9 +41,27 @@ export function EditorGuideBanner({
                 <div className="flex-1 min-w-0 space-y-1">
                     <div className="font-bold text-emerald-900">נוסח בסיסי ({translationId}) – כאן מותר גם להוסיף</div>
                     <ul className="list-disc list-inside space-y-0.5 text-emerald-700 mr-1">
-                        <li><strong>לערוך:</strong> תוכן קיים בכל רמה (קטגוריות, תפילות, מקטעים ושורות תוכן).</li>
-                        <li><strong>להוסיף:</strong> קטגוריות חדשות, תפילות חדשות ומקטעים (בעמודת הניווט) ופריטי תוכן באזור העריכה.</li>
-                        <li><strong>איך:</strong> השתמש בכפתורי „הוסף קטגוריה“, „הוסף תפילה“ ו„הוסף מקטע כאן“ בעמודה 5; בתוך המקטע — „הוסף פריט“ / „הוסף בראש הרשימה“. שאר הנוסחים מקושרים לנוסח הבסיסי.</li>
+                        <li><strong>לערוך:</strong> שמות ותוכן בכל הרמות: קטגוריות, תפילות, מקטעים ופריטי תוכן.</li>
+                        <li><strong>להוסיף:</strong> קטגוריות, תפילות, מקטעים ופריטי תוכן חדשים.</li>
+                        <li><strong>פעולות נוספות:</strong> מותר גם למחוק, לפצל מקטע, להעביר פריטים למקטע אחר, וליצור תרגום מקושר לפריט בסיס.</li>
+                        <li><strong>איך:</strong> השתמש בכפתורי ההוספה בעמודות הניווט ובאזור העריכה. מה שנוסף כאן הוא המקור שממנו מקשרים תרגומים אחרים.</li>
+                    </ul>
+                </div>
+            </div>
+        );
+    }
+
+    if (canEditNames) {
+        return (
+            <div className="shrink-0 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px]" dir="rtl">
+                <span className="shrink-0 mt-0.5" aria-hidden>✎</span>
+                <div className="flex-1 min-w-0 space-y-1">
+                    <div className="font-bold text-amber-900">תרגום רגיל ({translationId}) – בלי הוספת מבנה</div>
+                    <ul className="list-disc list-inside space-y-0.5 text-amber-700 mr-1">
+                        <li><strong>לערוך:</strong> שמות של קטגוריות, תפילות ומקטעים, וגם תוכן ומאפיינים של פריטים קיימים.</li>
+                        <li><strong>להוסיף:</strong> מותר להוסיף <strong>הוראה</strong> חדשה בתוך המקטע, אבל לא קטגוריה, תפילה, מקטע או פריט בסיס חדש.</li>
+                        <li><strong>לא זמין כאן:</strong> מחיקת קטגוריות/תפילות/מקטעים, פיצול מקטע, העברת פריטים ויצירת תרגום מקושר מפריט בסיס.</li>
+                        <li><strong>אם צריך להוסיף מבנה או פריט חדש:</strong> עבור לנוסח הבסיסי שמתחיל ב־<strong>0-</strong>, הוסף שם, ואז ערוך או קשר בתרגום הזה.</li>
                     </ul>
                 </div>
             </div>
@@ -50,11 +72,12 @@ export function EditorGuideBanner({
         <div className="shrink-0 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px]" dir="rtl">
             <span className="shrink-0 mt-0.5" aria-hidden>✎</span>
             <div className="flex-1 min-w-0 space-y-1">
-                <div className="font-bold text-amber-900">נוסח משני ({translationId}) – עריכה בלבד</div>
+                <div className="font-bold text-amber-900">פירוש / תרגום מוגבל ({translationId})</div>
                 <ul className="list-disc list-inside space-y-0.5 text-amber-700 mr-1">
-                    <li><strong>לערוך:</strong> תוכן קיים – טקסט בפריטים, שמירה ופרסום.</li>
-                    <li><strong>לא להוסיף:</strong> קטגוריות, תפילות או מקטעים חדשים – אין כפתורי הוספה.</li>
-                    <li><strong>איך להוסיף תוכן חדש:</strong> עבור לנוסח הבסיסי (זה שמזההו מתחיל ב־0-, למשל 0-ashkenaz), הוסף שם את הקטגוריה/תפילה/מקטע (ובתוכו פריטים), ואז קשר או העתק לנוסח הזה.</li>
+                    <li><strong>לערוך:</strong> תוכן ומאפיינים של פריטים קיימים.</li>
+                    <li><strong>להוסיף:</strong> מותר להוסיף רק <strong>הוראה</strong> חדשה בתוך המקטע.</li>
+                    <li><strong>מוגבל כאן:</strong> לא עורכים שמות של קטגוריות, תפילות ומקטעים, ולא מוסיפים מבנה חדש.</li>
+                    <li><strong>אם צריך מבנה חדש:</strong> הוסף אותו קודם בנוסח בסיסי <strong>0-*</strong>, ואז חזור לכאן לעריכת התוכן המתאים.</li>
                 </ul>
             </div>
         </div>

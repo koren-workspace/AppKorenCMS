@@ -124,7 +124,7 @@ function SortablePartItem({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onEditPart(part.id); }}
                     disabled={isSaving}
-                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
+                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-xs ${isSaving ? savingClass : "hover:bg-blue-50"}`}
                     title="ערוך מקטע"
                 >
                     ✎
@@ -135,7 +135,7 @@ function SortablePartItem({
                     type="button"
                     onClick={(e) => onDeletePart(e, part.id)}
                     disabled={isSaving}
-                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-[8px] ${isSaving ? savingClass : "hover:bg-red-50"}`}
+                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-xs ${isSaving ? savingClass : "hover:bg-red-50"}`}
                     title="מחק מקטע"
                 >
                     ✕
@@ -226,13 +226,13 @@ export function PrayerNavigationColumns({
     return (
         <>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">3. קטגוריה</h4>
+                <h4 className="font-bold text-gray-500 text-sm mb-1">3. קטגוריה</h4>
                 {currentCategories.length === 0 && onAddCategoryClick && showAddCategory && (
                     <button
                         type="button"
                         onClick={() => handleAddCategoryAfter(null)}
                         disabled={isSaving}
-                        className={`py-1.5 rounded border-2 border-dashed font-bold text-[9px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-indigo-200 text-indigo-600 hover:bg-indigo-50"}`}
+                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-[10px] leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-indigo-200 text-indigo-600 hover:bg-indigo-50"}`}
                     >
                         {isSaving ? "שומר…" : "+ הוסף קטגוריה"}
                     </button>
@@ -253,7 +253,7 @@ export function PrayerNavigationColumns({
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); onEditCategory(category.id); }}
                                     disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
+                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-xs ${isSaving ? savingClass : "hover:bg-blue-50"}`}
                                     title="ערוך קטגוריה"
                                 >
                                     ✎
@@ -264,7 +264,7 @@ export function PrayerNavigationColumns({
                                     type="button"
                                     onClick={(e) => handleDeleteCategory(e, category.id)}
                                     disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-[8px] ${isSaving ? savingClass : "hover:bg-red-50"}`}
+                                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-xs ${isSaving ? savingClass : "hover:bg-red-50"}`}
                                     title="מחק קטגוריה"
                                 >
                                     ✕
@@ -276,7 +276,7 @@ export function PrayerNavigationColumns({
                                 type="button"
                                 onClick={() => handleAddCategoryAfter(category.id)}
                                 disabled={isSaving}
-                                className={`w-full py-0.5 rounded border border-dashed text-[8px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-indigo-200 text-indigo-500 hover:bg-indigo-50"}`}
+                                className={`w-full py-px px-0.5 rounded border border-dashed text-[10px] font-medium leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-indigo-200 text-indigo-500 hover:bg-indigo-50"}`}
                                 title={isSaving ? undefined : `הוסף קטגוריה אחרי "${category.name}"`}
                             >
                                 {isSaving ? "שומר…" : "+ הוסף כאן"}
@@ -286,13 +286,13 @@ export function PrayerNavigationColumns({
                 ))}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">4. תפילה</h4>
+                <h4 className="font-bold text-gray-500 text-sm mb-1">4. תפילה</h4>
                 {currentPrayers.length === 0 && onAddPrayerClick && showAddPrayer && (
                     <button
                         type="button"
                         onClick={() => handleAddPrayerAfter(null)}
                         disabled={isSaving}
-                        className={`py-1.5 rounded border-2 border-dashed font-bold text-[9px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-green-200 text-green-600 hover:bg-green-50"}`}
+                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-[10px] leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-green-200 text-green-600 hover:bg-green-50"}`}
                     >
                         {isSaving ? "שומר…" : "+ הוסף תפילה"}
                     </button>
@@ -313,7 +313,7 @@ export function PrayerNavigationColumns({
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); onEditPrayer(prayer.id); }}
                                     disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-[8px] ${isSaving ? savingClass : "hover:bg-blue-50"}`}
+                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-xs ${isSaving ? savingClass : "hover:bg-blue-50"}`}
                                     title="ערוך תפילה"
                                 >
                                     ✎
@@ -324,7 +324,7 @@ export function PrayerNavigationColumns({
                                     type="button"
                                     onClick={(e) => handleDeletePrayer(e, prayer.id)}
                                     disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-[8px] ${isSaving ? savingClass : "hover:bg-red-50"}`}
+                                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-xs ${isSaving ? savingClass : "hover:bg-red-50"}`}
                                     title="מחק תפילה"
                                 >
                                     ✕
@@ -336,7 +336,7 @@ export function PrayerNavigationColumns({
                                 type="button"
                                 onClick={() => handleAddPrayerAfter(prayer.id)}
                                 disabled={isSaving}
-                                className={`w-full py-0.5 rounded border border-dashed text-[8px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-green-200 text-green-500 hover:bg-green-50"}`}
+                                className={`w-full py-px px-0.5 rounded border border-dashed text-[10px] font-medium leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-green-200 text-green-500 hover:bg-green-50"}`}
                                 title={isSaving ? undefined : `הוסף תפילה אחרי "${prayer.name}"`}
                             >
                                 {isSaving ? "שומר…" : "+ הוסף כאן"}
@@ -346,10 +346,10 @@ export function PrayerNavigationColumns({
                 ))}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-400 text-[8px] mb-1">5. מקטע</h4>
+                <h4 className="font-bold text-gray-500 text-sm mb-1">5. מקטע</h4>
                 {activeDragId && (
                     <p
-                        className="text-[8px] leading-snug font-semibold text-orange-950 mb-1 rounded px-1.5 py-1 bg-orange-100 border border-orange-300 shadow-sm"
+                        className="text-xs leading-snug font-semibold text-orange-950 mb-1 rounded px-1.5 py-1 bg-orange-100 border border-orange-300 shadow-sm"
                         role="status"
                         aria-live="polite"
                     >
@@ -361,7 +361,7 @@ export function PrayerNavigationColumns({
                         type="button"
                         onClick={() => handleAddPartAfter(null)}
                         disabled={isSaving}
-                        className={`py-1.5 rounded border-2 border-dashed font-bold text-[9px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-600 hover:bg-orange-50"}`}
+                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-[10px] leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-600 hover:bg-orange-50"}`}
                     >
                         {isSaving ? "שומר…" : "+ הוסף מקטע"}
                     </button>
@@ -392,7 +392,7 @@ export function PrayerNavigationColumns({
                                         type="button"
                                         onClick={() => handleAddPartAfter(part.id)}
                                         disabled={isSaving}
-                                        className={`w-full py-0.5 rounded border border-dashed text-[8px] ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-500 hover:bg-orange-50"}`}
+                                        className={`w-full py-px px-0.5 rounded border border-dashed text-[10px] font-medium leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-500 hover:bg-orange-50"}`}
                                         title={isSaving ? undefined : `הוסף מקטע אחרי "${part.name}"`}
                                     >
                                         {isSaving ? "שומר…" : "+ הוסף כאן"}
@@ -405,7 +405,7 @@ export function PrayerNavigationColumns({
                         {activePart ? (
                             <div className="flex items-center gap-0.5 bg-white shadow-lg rounded border border-orange-300 opacity-95">
                                 <span className="shrink-0 px-0.5 py-1 text-gray-400">⠿</span>
-                                <span className={`flex-1 text-right p-1.5 rounded text-[10px] ${selectedGroupId === activePart.id ? "bg-orange-500 text-white" : "bg-gray-50"}`}>
+                                <span className={`flex-1 text-right p-1.5 rounded text-xs ${selectedGroupId === activePart.id ? "bg-orange-500 text-white" : "bg-gray-50"}`}>
                                     {activePart.name}
                                 </span>
                             </div>

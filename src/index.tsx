@@ -1,17 +1,14 @@
 import { buildProperty } from "@firecms/core";
 import { SampleEntityView } from "./entity_views/SampleEntityView";
 import { TocTranslationsView } from "./views/TocTranslationsView";
-import { demoCollection } from "./collections/demo";
 
 const appConfig = {
     version: "1",
-    collections: [
-        demoCollection
-    ],
+    collections: [],
     views: [
         {
             path: "toc-translations",
-            name: "Toc & Translations",
+            name: "CMS אפלקציה סידור לתפילה",
             view: <TocTranslationsView />,
         },
     ],

@@ -12,7 +12,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Entity } from "@firecms/core";
-import { getItemStyle } from "../utils/itemUtils";
+import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
 import {
     ITEM_TYPE_OPTIONS,
     INSTRUCTION_TYPE_OPTIONS,
@@ -108,6 +108,7 @@ export function PartItemRow({
     const showFirstInPage = supportsFirstInPage(currentType);
     const showAttachedMeta = supportsAttachedMeta(currentType);
     const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
+    const mainContentRtl = contentUsesRtlAlignment(localVal.content);
 
     useEffect(() => {
         if (!autoFocus) return;
@@ -146,7 +147,7 @@ export function PartItemRow({
                     </div>
                 )}
                 <div className="flex justify-between items-center text-[9px] text-gray-500 mb-1 uppercase tracking-tight">
-                    <span>itemId: {curId} | MIT: {localVal.mit_id}</span>
+                    <span className="item-en-ltr">itemId: {curId} | MIT: {localVal.mit_id}</span>
                     <div className="flex items-center gap-2">
                         {onFieldChange && (
                             <button
@@ -189,7 +190,7 @@ export function PartItemRow({
                                 מחק פריט
                             </button>
                         )}
-                        <span>
+                        <span className="item-en-ltr">
                             Update:{" "}
                             {localVal.timestamp
                                 ? new Date(localVal.timestamp).toLocaleTimeString()
@@ -406,21 +407,21 @@ export function PartItemRow({
                             </>
                         )}
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.mit_id}>
-                            <span className="text-gray-600 w-20 shrink-0">MIT ID</span>
+                            <span className="text-gray-600 w-20 shrink-0 item-en-ltr">MIT ID</span>
                             <input
                                 type="text"
                                 value={localVal.mit_id ?? ""}
                                 onChange={(e) => onFieldChange(entityId, "mit_id", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0 item-en-ltr"
                             />
                         </label>
                         <label className="flex items-center gap-1 col-span-2 flex-wrap" title={ITEM_FIELD_HELP.dateSetId}>
-                            <span className="text-gray-600 w-20 shrink-0">dateSetId</span>
+                            <span className="text-gray-600 w-20 shrink-0 item-en-ltr">dateSetId</span>
                             <input
                                 type="text"
                                 value={localVal.dateSetId ?? ""}
                                 onChange={(e) => onFieldChange(entityId, "dateSetId", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0 item-en-ltr"
                             />
                             {onOpenDateSetIdConfig && (
                                 <button
@@ -436,10 +437,11 @@ export function PartItemRow({
                 )}
                 <textarea
                     ref={contentTextareaRef}
-                    className={getItemStyle(localVal.type)}
+                    className={`${getItemStyle(localVal.type)} ${mainContentRtl ? "" : "text-left"}`}
                     value={localVal.content ?? ""}
                     onChange={(e) => onContentChange(item.id, e.target.value)}
-                    dir="rtl"
+                    dir={mainContentRtl ? "rtl" : "ltr"}
+                    style={{ textAlign: mainContentRtl ? "right" : "left" }}
                 />
             </div>
 
@@ -462,6 +464,7 @@ export function PartItemRow({
                         const enhShowNoSpace = supportsNoSpace(enhType);
                         const enhShowFirstInPage = supportsFirstInPage(enhType);
                         const enhShowAttachedMeta = supportsAttachedMeta(enhType);
+                        const enhContentRtl = contentUsesRtlAlignment(displayVal?.content);
                         return (
                             <div
                                 key={enh.id}
@@ -469,8 +472,8 @@ export function PartItemRow({
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-2">
-                                        <span className={`font-bold text-[9px] ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
-                                        <span className="text-[8px] text-gray-500 font-mono" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
+                                        <span className={`font-bold text-[9px] item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
+                                        <span className="text-[8px] text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
                                         {relatedWillBeDeleted && (
                                             <span className="text-[8px] font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
                                         )}
@@ -647,12 +650,12 @@ export function PartItemRow({
                                             </>
                                         )}
                                         <label className="flex items-center gap-1 col-span-2 flex-wrap" title={ITEM_FIELD_HELP.dateSetId}>
-                                            <span className="text-gray-600 w-20 shrink-0">dateSetId</span>
+                                            <span className="text-gray-600 w-20 shrink-0 item-en-ltr">dateSetId</span>
                                             <input
                                                 type="text"
                                                 value={displayVal.dateSetId ?? ""}
                                                 onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "dateSetId", e.target.value)}
-                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0 item-en-ltr"
                                             />
                                             {onOpenDateSetIdConfig && (
                                                 <button
@@ -672,11 +675,18 @@ export function PartItemRow({
                                     <textarea
                                         value={displayVal?.content ?? ""}
                                         onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "content", e.target.value)}
-                                        className="w-full p-1.5 border border-gray-200 rounded text-[10px] min-h-[60px] whitespace-pre-wrap"
-                                        dir="rtl"
+                                        className={`w-full p-1.5 border border-gray-200 rounded text-[10px] min-h-[60px] whitespace-pre-wrap ${enhContentRtl ? "" : "text-left"}`}
+                                        dir={enhContentRtl ? "rtl" : "ltr"}
+                                        style={{ textAlign: enhContentRtl ? "right" : "left" }}
                                     />
                                 ) : (
-                                    <div className="whitespace-pre-wrap break-words">{displayVal?.content}</div>
+                                    <div
+                                        className={`whitespace-pre-wrap break-words ${enhContentRtl ? "" : "text-left"}`}
+                                        dir={enhContentRtl ? "rtl" : "ltr"}
+                                        style={{ textAlign: enhContentRtl ? "right" : "left" }}
+                                    >
+                                        {displayVal?.content}
+                                    </div>
                                 )}
                             </div>
                         );

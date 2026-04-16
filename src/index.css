@@ -4,6 +4,17 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+    font-size: 18px;
+}
+
+/* טקסט באנגלית / מזהים טכניים בשורת פריט — יישור שמאלה (בתוך מעטפת RTL) */
+.item-en-ltr {
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: isolate;
+}
+
 :root {
     --fcms-primary: #0070F4;
     --fcms-primary-bg: #0061e610;

@@ -16,7 +16,8 @@ import {
     supportsFirstInPage,
     supportsNoSpace,
 } from "../constants/itemFields";
-import { splitParagraphSentences } from "../utils/itemUtils";
+import { contentUsesRtlAlignment, splitParagraphSentences } from "../utils/itemUtils";
+import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
 
 export type TranslationOption = { translationId: string; [k: string]: any };
 
@@ -98,6 +99,7 @@ export function AddTranslationModal({
     const showNoSpace = supportsNoSpace(currentType);
     const showFirstInPage = supportsFirstInPage(currentType);
     const showAttachedMeta = supportsAttachedMeta(currentType);
+    const translationContentRtl = contentUsesRtlAlignment(form.content ?? "");
 
     /** קיבוץ לפי תרגום – להצגת "כל התרגומים המקושרים" */
     const byTranslation: Record<string, ExistingLinkedEntry[]> = {};
@@ -126,7 +128,11 @@ export function AddTranslationModal({
                             <div className="space-y-2 max-h-32 overflow-auto border border-gray-200 rounded p-2 bg-gray-50">
                                 {Object.entries(byTranslation).map(([tId, entries]) => (
                                     <div key={tId} className="border-r-2 border-blue-300 pr-2">
-                                        <div className="font-bold text-blue-700 text-[10px]">{tId}</div>
+                                        <div className="font-bold text-blue-700 text-[10px]" title={tId}>
+                                            {getTranslationDisplayLabel(tId, {
+                                                storedLabel: translations.find((tr) => tr.translationId === tId)?.label,
+                                            })}
+                                        </div>
                                         {entries.map((e) => (
                                             <div key={e.id} className="text-[10px] text-gray-600 pr-2 mt-0.5">
                                                 <span className="text-[9px] text-gray-500 font-mono mr-1">ID: {e.id}</span>
@@ -156,8 +162,8 @@ export function AddTranslationModal({
                             {translations
                                 .filter((t) => !String(t.translationId ?? "").startsWith("0-"))
                                 .map((t) => (
-                                    <option key={t.translationId} value={t.translationId}>
-                                        {t.translationId}
+                                    <option key={t.translationId} value={t.translationId} title={t.translationId}>
+                                        {getTranslationDisplayLabel(t.translationId, { storedLabel: t.label })}
                                         {t.translationId === currentTranslationId ? " (נוכחי)" : ""}
                                     </option>
                                 ))}
@@ -234,8 +240,9 @@ export function AddTranslationModal({
                         <textarea
                             value={form.content ?? ""}
                             onChange={(e) => onFormFieldChange("content", e.target.value)}
-                            className="w-full border border-gray-300 rounded p-2 min-h-[80px] whitespace-pre-wrap"
-                            dir="rtl"
+                            className={`w-full border border-gray-300 rounded p-2 min-h-[80px] whitespace-pre-wrap ${translationContentRtl ? "" : "text-left"}`}
+                            dir={translationContentRtl ? "rtl" : "ltr"}
+                            style={{ textAlign: translationContentRtl ? "right" : "left" }}
                             placeholder="הזן את התרגום"
                         />
                         {isParagraphMode && (

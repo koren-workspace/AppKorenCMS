@@ -4,6 +4,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+    font-size: 18px;
+}
+
 :root {
     --fcms-primary: #0070F4;
     --fcms-primary-bg: #0061e610;

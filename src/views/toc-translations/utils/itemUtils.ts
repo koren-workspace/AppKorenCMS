@@ -491,6 +491,16 @@ export function splitParagraphSentences(text: string): string[] {
 }
 
 /**
+ * קובע יישור לפי שפה: אם יש בתוכן אות עברית – RTL (ימין); אם רק לטינית/מספרים וכו' – LTR (שמאל).
+ * תוכן ריק – RTL (ברירת מחדל לעורך בעברית).
+ */
+export function contentUsesRtlAlignment(text: string | undefined | null): boolean {
+    const s = String(text ?? "");
+    if (!s.trim()) return true;
+    return /[\u0590-\u05FF]/.test(s);
+}
+
+/**
  * מחזיר מחרוזת classNames ל־textarea של פריט (תוכן / כותרת / הוראות).
  * type: "title" | "instructions" | אחר = body
  */

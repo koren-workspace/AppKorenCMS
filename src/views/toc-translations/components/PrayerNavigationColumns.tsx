@@ -105,7 +105,7 @@ function SortablePartItem({
                     {...attributes}
                     {...listeners}
                     className="shrink-0 px-0.5 py-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
-                    title="גרירה משנה רק את סדר המקטעים בתפריט — לא את סדר הפריטים בתוך המקטע"
+                    title="גרירה משנה רק את סדר החלקים בתפריט — לא את סדר הפריטים בתוך החלק"
                     tabIndex={-1}
                 >
                     ⠿
@@ -125,7 +125,7 @@ function SortablePartItem({
                     onClick={(e) => { e.stopPropagation(); onEditPart(part.id); }}
                     disabled={isSaving}
                     className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-xs ${isSaving ? savingClass : "hover:bg-blue-50"}`}
-                    title="ערוך מקטע"
+                    title="ערוך חלק תפילה"
                 >
                     ✎
                 </button>
@@ -136,7 +136,7 @@ function SortablePartItem({
                     onClick={(e) => onDeletePart(e, part.id)}
                     disabled={isSaving}
                     className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-xs ${isSaving ? savingClass : "hover:bg-red-50"}`}
-                    title="מחק מקטע"
+                    title="מחק חלק תפילה"
                 >
                     ✕
                 </button>
@@ -220,7 +220,7 @@ export function PrayerNavigationColumns({
 
     const handleDeletePart = (e: React.MouseEvent, partId: string) => {
         e.stopPropagation();
-        if (window.confirm("למחוק את המקטע וכל הפריטים שלו מכל התרגומים?")) onDeletePart?.(partId);
+        if (window.confirm("למחוק את חלק התפילה וכל הפריטים שלו מכל התרגומים?")) onDeletePart?.(partId);
     };
 
     return (
@@ -346,14 +346,14 @@ export function PrayerNavigationColumns({
                 ))}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-500 text-sm mb-1">5. מקטע</h4>
+                <h4 className="font-bold text-gray-500 text-sm mb-1">5. חלק תפילה</h4>
                 {activeDragId && (
                     <p
                         className="text-xs leading-snug font-semibold text-orange-950 mb-1 rounded px-1.5 py-1 bg-orange-100 border border-orange-300 shadow-sm"
                         role="status"
                         aria-live="polite"
                     >
-                        רק סדר המקטעים בתפריט משתנה כאן — לא סדר הפריטים בתוך מקטע.
+                        רק סדר החלקים בתפריט משתנה כאן — לא סדר הפריטים בתוך חלק.
                     </p>
                 )}
                 {currentParts.length === 0 && onAddPartClick && showAddPart && (
@@ -363,7 +363,7 @@ export function PrayerNavigationColumns({
                         disabled={isSaving}
                         className={`py-0.5 px-1 rounded border border-dashed font-medium text-[10px] leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-600 hover:bg-orange-50"}`}
                     >
-                        {isSaving ? "שומר…" : "+ הוסף מקטע"}
+                        {isSaving ? "שומר…" : "+ הוסף חלק תפילה"}
                     </button>
                 )}
                 <DndContext
@@ -393,7 +393,7 @@ export function PrayerNavigationColumns({
                                         onClick={() => handleAddPartAfter(part.id)}
                                         disabled={isSaving}
                                         className={`w-full py-px px-0.5 rounded border border-dashed text-[10px] font-medium leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-500 hover:bg-orange-50"}`}
-                                        title={isSaving ? undefined : `הוסף מקטע אחרי "${part.name}"`}
+                                        title={isSaving ? undefined : `הוסף חלק תפילה אחרי "${part.name}"`}
                                     >
                                         {isSaving ? "שומר…" : "+ הוסף כאן"}
                                     </button>

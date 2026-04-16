@@ -29,6 +29,7 @@ import {
     allocateNewPrayerId,
     resolveDigitMillions,
 } from "../utils/nusachIdPolicy";
+import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
 
 const LOG_PREFIX = "[TocTranslations]";
 const isSoftDeletedToc = (values: any): boolean =>
@@ -140,7 +141,11 @@ export function useTocNavigation() {
         return {
             ...ctx,
             tocName: override?.tocName ?? (ctx.tocId ? (t?.nusach ?? currentTocData?.nusach) : undefined),
-            translationName: override?.translationName ?? (ctx.translationId ? (trans?.label ?? ctx.translationId) : undefined),
+            translationName:
+                override?.translationName ??
+                (ctx.translationId
+                    ? getTranslationDisplayLabel(ctx.translationId, { storedLabel: trans?.label })
+                    : undefined),
             prayerName: override?.prayerName ?? (ctx.prayerId ? (currentPrayers?.find((p: any) => p.id === ctx.prayerId)?.name) : undefined),
             partName: override?.partName ?? (part ? (part.nameHe ?? part.name) : undefined),
         };

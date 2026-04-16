@@ -8,6 +8,8 @@
  */
 
 import React from "react";
+import { getNusachDisplayLabel } from "../utils/nusachDisplay";
+import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
 
 type TocAndTranslationColumnsProps = {
     tocItems: any[];
@@ -85,7 +87,7 @@ export function TocAndTranslationColumns({
                             className={`flex-1 text-right p-1.5 rounded border ${selectedTocId === toc.id ? "bg-blue-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
                             title={toc.id}
                         >
-                            {toc.values?.nusach ?? toc.id}
+                            {getNusachDisplayLabel(toc.id, toc.values?.nusach)}
                         </button>
                         {onEditToc && (
                             <button
@@ -123,16 +125,19 @@ export function TocAndTranslationColumns({
                 )}
             </div>
             <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-500 text-sm mb-1">2. תרגום</h4>
+                <h4 className="font-bold text-gray-500 text-sm mb-1">2. תרגום/ פירוש</h4>
                 {translations.map((translation: any, index: number) => (
                     <div key={translation.translationId ?? index} className="flex items-center gap-0.5">
                         <button
                             type="button"
                             onClick={() => onSelectTranslation(index)}
                             disabled={isSaving}
+                            title={translation.translationId}
                             className={`flex-1 text-right p-1.5 rounded border ${selectedTranslationIndex === index ? "bg-purple-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
                         >
-                            {translation.translationId}
+                            {getTranslationDisplayLabel(translation.translationId, {
+                                storedLabel: translation.label,
+                            })}
                         </button>
                         {onDeleteTranslation && (
                             <button

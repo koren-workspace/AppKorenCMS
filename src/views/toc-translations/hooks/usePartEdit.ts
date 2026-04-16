@@ -28,6 +28,8 @@ import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
 import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS, splitParagraphSentences } from "../utils/itemUtils";
 import { itemMinIdBefore, resolveDigitMillions } from "../utils/nusachIdPolicy";
+import { getNusachDisplayLabel } from "../utils/nusachDisplay";
+import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
 import { cmsSimpleBaseIntervalEnabled, cmsDebugItemIdsEnabled } from "../utils/debugFlags";
@@ -587,7 +589,11 @@ export function usePartEdit(context: PartEditContext) {
                             prayerId: selectedPrayerId,
                             partId: selectedGroupId,
                             tocName: currentTocData?.nusach,
-                            translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                            translationName: currentTranslationData?.translationId
+                                ? getTranslationDisplayLabel(currentTranslationData.translationId, {
+                                      storedLabel: currentTranslationData.label,
+                                  })
+                                : undefined,
                             prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
                             partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                         },
@@ -617,7 +623,11 @@ export function usePartEdit(context: PartEditContext) {
                             prayerId: selectedPrayerId,
                             partId: selectedGroupId,
                             tocName: currentTocData?.nusach,
-                            translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                            translationName: currentTranslationData?.translationId
+                                ? getTranslationDisplayLabel(currentTranslationData.translationId, {
+                                      storedLabel: currentTranslationData.label,
+                                  })
+                                : undefined,
                             prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
                             partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                         },
@@ -736,7 +746,11 @@ export function usePartEdit(context: PartEditContext) {
                     prayerId: selectedPrayerId ?? undefined,
                     partId: selectedGroupId ?? undefined,
                     tocName: currentTocData?.nusach ?? undefined,
-                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId ?? undefined,
+                    translationName: currentTranslationData?.translationId
+                        ? getTranslationDisplayLabel(currentTranslationData.translationId, {
+                              storedLabel: currentTranslationData.label,
+                          })
+                        : undefined,
                     prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name ?? undefined,
                     partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ?? undefined,
                 };
@@ -797,10 +811,13 @@ export function usePartEdit(context: PartEditContext) {
             const publishTimestamp = Date.now();
             await updateFirestoreTimestamp(dataSource, selectedTocId, publishTimestamp);
             await updateBagelTimestamp(selectedTocId, publishTimestamp);
-            const nusach = currentTocData?.nusach?.trim();
+            const nusachLabel = getNusachDisplayLabel(
+                selectedTocId ?? "",
+                currentTocData?.nusach
+            ).trim();
             const scope =
-                nusach && nusach.length > 0
-                    ? `הנוסח «${nusach}» סומן כמעודכן בבייגל — האפליקציה תסנכרן את כל התרגומים של נוסח זה.`
+                nusachLabel.length > 0
+                    ? `הנוסח «${nusachLabel}» סומן כמעודכן בבייגל — האפליקציה תסנכרן את כל התרגומים של נוסח זה.`
                     : "הנוסח הנבחר סומן כמעודכן בבייגל — האפליקציה תסנכרן את הנתונים.";
             snackbar.open({
                 type: "success",
@@ -1702,7 +1719,11 @@ export function usePartEdit(context: PartEditContext) {
                     prayerId: selectedPrayerId,
                     partId: selectedGroupId,
                     tocName: currentTocData?.nusach,
-                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                    translationName: currentTranslationData?.translationId
+                                ? getTranslationDisplayLabel(currentTranslationData.translationId, {
+                                      storedLabel: currentTranslationData.label,
+                                  })
+                                : undefined,
                     prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
                     partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                 },
@@ -1794,7 +1815,11 @@ export function usePartEdit(context: PartEditContext) {
                     prayerId: selectedPrayerId,
                     partId: selectedGroupId,
                     tocName: currentTocData?.nusach,
-                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                    translationName: currentTranslationData?.translationId
+                                ? getTranslationDisplayLabel(currentTranslationData.translationId, {
+                                      storedLabel: currentTranslationData.label,
+                                  })
+                                : undefined,
                     prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
                     partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                 },
@@ -2005,7 +2030,11 @@ export function usePartEdit(context: PartEditContext) {
                     prayerId: selectedPrayerId,
                     partId: selectedGroupId,
                     tocName: currentTocData?.nusach,
-                    translationName: currentTranslationData?.label ?? currentTranslationData?.translationId,
+                    translationName: currentTranslationData?.translationId
+                                ? getTranslationDisplayLabel(currentTranslationData.translationId, {
+                                      storedLabel: currentTranslationData.label,
+                                  })
+                                : undefined,
                     prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
                     partName: (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ?? (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
                 },

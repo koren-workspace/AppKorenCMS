@@ -2,7 +2,7 @@
  * PartEditPanel – אזור העריכה הראשי במסך
  *
  * מציג:
- *   - PartEditToolbar: כותרת/מצב מקטע + "שמור מקטע" (כשמקטע נבחר) + "פרסום לאפליקציה" (תמיד, לפי נוסח)
+ *   - PartEditToolbar: כותרת/מצב חלק תפילה + "שמור חלק תפילה" (כשחלק תפילה נבחר) + "פרסום לאפליקציה" (תמיד, לפי נוסח)
  *   - במצב טעינה: "טוען..."
  *   - לאחר טעינה: רשימת פריטים (PartItemRow) + כפתור "הוסף פריט"
  *
@@ -13,7 +13,7 @@ import React from "react";
 import { Entity } from "@firecms/core";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
-// ——— גרירת פריטים בתוך המקטע (מושבתת זמנית) ———
+// ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
 // import {
 //     DndContext,
 //     closestCenter,
@@ -31,9 +31,9 @@ import { PartItemRow } from "./PartItemRow";
 
 export type PartEditPanelProps = {
     selectedGroupId: string | null;
-    /** נוסח (TOC) נבחר — מאפשר פרסום גם בלי מקטע פתוח */
+    /** נוסח (TOC) נבחר — מאפשר פרסום גם בלי חלק תפילה פתוח */
     selectedTocId: string | null;
-    /** שם הנוסח הנבחר — מוצג ליד פרסום לבייגל (הפרסום לפי נוסח, לא לפי מקטע) */
+    /** שם הנוסח הנבחר — מוצג ליד פרסום לבייגל (הפרסום לפי נוסח, לא לפי חלק תפילה) */
     publishNusachLabel?: string | null;
     saving: boolean;
     changedIds: Set<string>;
@@ -61,7 +61,7 @@ export type PartEditPanelProps = {
     pendingDeletes?: Array<{ entity: Entity<any>; itemId: string }>;
     /** מחזיר פריט מרשימת המחיקות המתינות */
     onRestoreItem?: (item: Entity<any>, itemId: string) => void;
-    /** רק בנוסח הבסיסי (0-*) מותר להוסיף מקטעים; בשאר הנוסחים – עריכה בלבד */
+    /** רק בנוסח הבסיסי (0-*) מותר להוסיף חלק תפילהים; בשאר הנוסחים – עריכה בלבד */
     allowAddPart?: boolean;
     /** רק בתרגום (לא בסיס) מותר להוסיף הוראות – טקסט שלא מקושר לבסיס */
     allowAddInstruction?: boolean;
@@ -88,7 +88,7 @@ export type PartEditPanelProps = {
     onReorderItems?: (activeId: string, overId: string) => void;
 };
 
-// ——— גרירת פריטים בתוך המקטע (מושבתת זמנית) ———
+// ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
 // function SortableItemRow({
 //     item,
 //     children,
@@ -153,7 +153,7 @@ export function PartEditPanel({
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0 || pendingDeletesCount > 0;
-    // ——— גרירת פריטים בתוך המקטע (מושבתת זמנית) ———
+    // ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
     // const sensors = useSensors(
     //     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
     // );
@@ -262,7 +262,7 @@ export function PartEditPanel({
                             );
                         })}
                         {/*
-                        גרירת פריטים בתוך המקטע (מושבתת זמנית) — הקוד המקורי:
+                        גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) — הקוד המקורי:
                         <DndContext
                             sensors={sensors}
                             collisionDetection={closestCenter}

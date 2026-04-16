@@ -15,7 +15,7 @@ import {
     supportsHebrewBodyOnlyFields,
     supportsNoSpace,
 } from "../constants/itemFields";
-import { splitParagraphSentences } from "../utils/itemUtils";
+import { contentUsesRtlAlignment, splitParagraphSentences } from "../utils/itemUtils";
 
 export type AddItemFormValues = {
     dateSetId: string;
@@ -107,6 +107,7 @@ export function AddItemModal({
     const showFirstInPage = supportsFirstInPage(currentType);
     const showAttachedMeta = supportsAttachedMeta(currentType);
     const paragraphSentences = splitParagraphSentences(form.content);
+    const contentRtl = contentUsesRtlAlignment(form.content);
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" dir="rtl">
@@ -336,8 +337,9 @@ export function AddItemModal({
                         <textarea
                             value={form.content}
                             onChange={(e) => setField("content", e.target.value)}
-                            className="w-full border border-gray-300 rounded px-2 py-1 min-h-[80px] whitespace-pre-wrap"
-                            dir="rtl"
+                            className={`w-full border border-gray-300 rounded px-2 py-1 min-h-[80px] whitespace-pre-wrap ${contentRtl ? "" : "text-left"}`}
+                            dir={contentRtl ? "rtl" : "ltr"}
+                            style={{ textAlign: contentRtl ? "right" : "left" }}
                             placeholder="ניתן להשאיר ריק ולהוסיף אחרי הוספת הפריט"
                         />
                         {form.block && (

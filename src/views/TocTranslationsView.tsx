@@ -34,6 +34,7 @@ import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBann
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
 import { isBaseTranslation, isTranslationEditable } from "./toc-translations/services/navigationService";
+import { getNusachDisplayLabel } from "./toc-translations/utils/nusachDisplay";
 
 export function TocTranslationsView() {
     const nav = useTocNavigation();
@@ -300,7 +301,10 @@ export function TocTranslationsView() {
             <PartEditPanel
                 selectedGroupId={partEdit.selectedGroupId}
                 selectedTocId={nav.selectedTocId}
-                publishNusachLabel={nav.currentTocData?.nusach ?? nav.selectedTocId}
+                publishNusachLabel={getNusachDisplayLabel(
+                    nav.selectedTocId ?? "",
+                    nav.currentTocData?.nusach
+                )}
                 saving={partEdit.saving}
                 changedIds={partEdit.changedIds}
                 pendingDeletesCount={partEdit.pendingDeletes.length}

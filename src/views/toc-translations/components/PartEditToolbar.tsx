@@ -1,8 +1,8 @@
 /**
  * PartEditToolbar – סרגל פעולות באזור העריכה
  *
- * מציג את שם המקטע הנבחר (או הודעת מצב) + כפתורים:
- *   - "שמור מקטע": רק כשמקטע נבחר — שומר שינויים ל-Firestore (מושבת אם אין שינויים או במצב saving)
+ * מציג את שם החלק תפילה הנבחר (או הודעת מצב) + כפתורים:
+ *   - "שמור חלק תפילה": רק כשחלק תפילה נבחר — שומר שינויים ל-Firestore (מושבת אם אין שינויים או במצב saving)
  *   - כפתור "פרסום {נוסח} לאפליקציה": תמיד גלוי כשהמסך פעיל; מופעל כשנבחר נוסח (TOC) — מעדכן timestamp לנוסח
  */
 
@@ -10,9 +10,9 @@ import React from "react";
 
 export type PartEditToolbarProps = {
     selectedGroupId: string | null;
-    /** נדרש להפעלת פרסום (מספיק בחירת נוסח; לא חובה מקטע פתוח) */
+    /** נדרש להפעלת פרסום (מספיק בחירת נוסח; לא חובה חלק תפילה פתוח) */
     selectedTocId: string | null;
-    /** שם הנוסח הנבחר (להבהרה: פרסום לבייגל חל על כל הנוסח, לא רק על המקטע) */
+    /** שם הנוסח הנבחר (להבהרה: פרסום לבייגל חל על כל הנוסח, לא רק על החלק תפילה) */
     publishNusachLabel?: string | null;
     saving: boolean;
     hasChanges: boolean;
@@ -42,8 +42,8 @@ export function PartEditToolbar({
     const trimmedNusach = publishNusachLabel?.trim() ?? "";
     const hasNusachLabel = trimmedNusach.length > 0;
     const publishTitle = hasNusachLabel
-        ? `מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל. האפליקציה מסנכרנת את כל התרגומים של נוסח זה — לא רק את המקטע הפתוח.`
-        : "מסמן שהנוסח הנבחר התעדכן בבייגל; האפליקציה מסנכרנת לפי נוסח (לא לפי מקטע בודד).";
+        ? `מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל. האפליקציה מסנכרנת את כל התרגומים של נוסח זה — לא רק את החלק תפילה הפתוח.`
+        : "מסמן שהנוסח הנבחר התעדכן בבייגל; האפליקציה מסנכרנת לפי נוסח (לא לפי חלק תפילה בודד).";
     const publishButtonLabel = hasNusachLabel
         ? `פרסום ${trimmedNusach} לאפליקציה`
         : "פרסום לאפליקציה";
@@ -55,7 +55,7 @@ export function PartEditToolbar({
         <div className="mb-3 pb-2 border-b shrink-0">
             <div className="flex justify-between items-center flex-wrap gap-1">
                 <h3 className="font-bold text-base text-gray-800">
-                    {hasPart ? selectedGroupId : "בחר מקטע לעריכת פריטים"}
+                    {hasPart ? selectedGroupId : "בחר חלק תפילה לעריכת פריטים"}
                 </h3>
                 <div className="flex gap-2 flex-wrap items-center">
                     {allowSplitAndMove && hasPart && (
@@ -65,18 +65,18 @@ export function PartEditToolbar({
                                 onClick={onSplitPart}
                                 disabled={saving}
                                 className="px-3 py-1.5 bg-purple-600 text-white rounded font-bold text-[10px] disabled:opacity-30 hover:bg-purple-700"
-                                title="פצל מקטע – יצירת מקטע חדש מחלק מהפריטים"
+                                title="פצל חלק תפילה – יצירת חלק תפילה חדש מחלק מהפריטים"
                             >
-                                ✂ פצל מקטע
+                                ✂ פצל חלק תפילה
                             </button>
                             <button
                                 type="button"
                                 onClick={onMoveItemsToPart}
                                 disabled={saving}
                                 className="px-3 py-1.5 bg-orange-500 text-white rounded font-bold text-[10px] disabled:opacity-30 hover:bg-orange-600"
-                                title="העבר פריטים למקטע אחר"
+                                title="העבר פריטים לחלק תפילה אחר"
                             >
-                                ↔ העבר למקטע
+                                ↔ העבר לחלק תפילה
                             </button>
                         </>
                     )}
@@ -87,7 +87,7 @@ export function PartEditToolbar({
                             disabled={saving || !hasChanges}
                             className="px-4 py-1.5 bg-green-600 text-white rounded font-bold disabled:opacity-30"
                         >
-                            {saving ? "שומר..." : "שמור מקטע"}
+                            {saving ? "שומר..." : "שמור חלק תפילה"}
                         </button>
                     )}
                     <button

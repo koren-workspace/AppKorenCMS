@@ -2,7 +2,7 @@
  * PartItemRow – שורת פריט בודדת ברשימת העריכה
  *
  * מציג:
- *   - כרטיס: itemId, MIT, זמן עדכון + textarea לתוכן (עם עיצוב לפי type)
+ *   - כרטיס: itemId, זמן עדכון + textarea לתוכן (עם עיצוב לפי type)
  *   - בלוק מאפיינים (סוג, כותרת, גופן, תפקיד, וכו') – ניתן להרחבה
  *   - בלוק "תרגומים מקושרים": פריטים מתרגומים אחרים שמקושרים ל-itemId (linkedItem) – ניתן לעריכה
  *   - כפתור "הוסף פריט" / "הוסף הוראה כאן" / "הוסף תרגום לטקסט זה"
@@ -125,7 +125,7 @@ export function PartItemRow({
                 className={`p-2 border rounded ${isPendingDelete ? "bg-red-50 border-red-300 border-2 opacity-95" : isChanged ? "border-orange-300" : "border-gray-200"}`}
             >
                 {isPendingDelete && (
-                    <div className="flex items-center gap-2 mb-2 py-1 px-2 bg-red-100 border border-red-300 rounded text-[10px] font-bold text-red-800">
+                    <div className="flex items-center gap-2 mb-2 py-2 px-2 bg-red-100 border border-red-300 rounded text-base font-bold text-red-800">
                         <span>
                             ימוחק בשמירה
                             {related.length > 0 && (
@@ -138,7 +138,7 @@ export function PartItemRow({
                             <button
                                 type="button"
                                 onClick={() => onRestore(item, curId ?? item.id)}
-                                className="px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-[9px] font-bold"
+                                className="px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-bold leading-none"
                                 title="החזר – לא יימחק בשמירה"
                             >
                                 החזר
@@ -146,14 +146,14 @@ export function PartItemRow({
                         )}
                     </div>
                 )}
-                <div className="flex justify-between items-center text-[9px] text-gray-500 mb-1 uppercase tracking-tight">
-                    <span className="item-en-ltr">itemId: {curId} | MIT: {localVal.mit_id}</span>
-                    <div className="flex items-center gap-2">
+                <div className="flex justify-between items-center text-sm text-gray-500 mb-1 uppercase tracking-tight">
+                    <span className="item-en-ltr text-xs">itemId: {curId}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
                         {onFieldChange && (
                             <button
                                 type="button"
                                 onClick={() => setShowProps((p) => !p)}
-                                className="px-2 py-0.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-[10px]"
+                                className="inline-flex items-center px-2 py-0.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-sm leading-none whitespace-nowrap"
                             >
                                 {showProps ? "הסתר מאפיינים" : "מאפיינים"}
                             </button>
@@ -164,7 +164,7 @@ export function PartItemRow({
                                 type="button"
                                 {...(dragHandleProps.attributes ?? {})}
                                 {...(dragHandleProps.listeners ?? {})}
-                                className="px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-[8px] cursor-grab active:cursor-grabbing touch-none"
+                                className="px-2 py-1 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-sm cursor-grab active:cursor-grabbing touch-none"
                                 title="גרור לשינוי סדר"
                                 tabIndex={-1}
                             >
@@ -184,13 +184,13 @@ export function PartItemRow({
                                     if (window.confirm(msg))
                                         onDelete(item, curId ?? item.id);
                                 }}
-                                className="px-2 py-0.5 text-red-600 hover:bg-red-50 border border-red-200 rounded text-[10px] font-bold"
+                                className="inline-flex items-center px-2 py-0.5 text-red-600 hover:bg-red-50 border border-red-200 rounded text-sm font-bold leading-none whitespace-nowrap"
                                 title={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
                             >
                                 מחק פריט
                             </button>
                         )}
-                        <span className="item-en-ltr">
+                        <span className="item-en-ltr text-xs">
                             Update:{" "}
                             {localVal.timestamp
                                 ? new Date(localVal.timestamp).toLocaleTimeString()
@@ -199,11 +199,11 @@ export function PartItemRow({
                     </div>
                 </div>
                 {showProps && onFieldChange && (
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 p-2 bg-gray-50 rounded text-[10px]">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 p-2 bg-gray-50 rounded text-base">
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.type}>
                             <span className="text-gray-600 w-20 shrink-0">סוג</span>
                             {restrictTypeToInstructions && !INSTRUCTION_TYPE_OPTIONS.some((o) => o.value === (localVal.type ?? "body")) ? (
-                                <span className="border border-gray-200 bg-gray-100 text-gray-500 rounded px-1 py-0.5 flex-1 min-w-0 text-[10px]">
+                                <span className="border border-gray-200 bg-gray-100 text-gray-500 rounded px-1 py-0.5 flex-1 min-w-0 text-base">
                                     {ITEM_TYPE_OPTIONS.find((o) => o.value === (localVal.type ?? "body"))?.label ?? (localVal.type ?? "body")}
                                 </span>
                             ) : (
@@ -222,7 +222,7 @@ export function PartItemRow({
                             <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.titleType}>
                                 <span className="text-gray-600 w-20 shrink-0">סוג כותרת</span>
                                 {restrictTypeToInstructions ? (
-                                    <span className="border border-gray-200 bg-gray-100 text-gray-500 rounded px-1 py-0.5 flex-1 min-w-0 text-[10px]">
+                                    <span className="border border-gray-200 bg-gray-100 text-gray-500 rounded px-1 py-0.5 flex-1 min-w-0 text-base">
                                         {TITLE_TYPE_OPTIONS.find((o) => o.value === (localVal.titleType ?? ""))?.label ?? (localVal.titleType || "—")}
                                     </span>
                                 ) : (
@@ -406,15 +406,6 @@ export function PartItemRow({
                                 </label>
                             </>
                         )}
-                        <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.mit_id}>
-                            <span className="text-gray-600 w-20 shrink-0 item-en-ltr">MIT ID</span>
-                            <input
-                                type="text"
-                                value={localVal.mit_id ?? ""}
-                                onChange={(e) => onFieldChange(entityId, "mit_id", e.target.value)}
-                                className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0 item-en-ltr"
-                            />
-                        </label>
                         <label className="flex items-center gap-1 col-span-2 flex-wrap" title={ITEM_FIELD_HELP.dateSetId}>
                             <span className="text-gray-600 w-20 shrink-0 item-en-ltr">dateSetId</span>
                             <input
@@ -427,7 +418,7 @@ export function PartItemRow({
                                 <button
                                     type="button"
                                     onClick={() => onOpenDateSetIdConfig(entityId, localVal.dateSetId ?? "")}
-                                    className="shrink-0 px-2 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                    className="shrink-0 inline-flex items-center px-2 py-0.5 text-sm leading-none border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 whitespace-nowrap"
                                 >
                                     הגדר סט תאריכים
                                 </button>
@@ -449,7 +440,7 @@ export function PartItemRow({
             {related.length > 0 && (
                 <div className={`mr-8 pr-3 space-y-1 border-r-4 ${isPendingDelete && isBaseTranslation ? "border-red-400 bg-red-50/50 rounded-r p-2" : "border-blue-400"}`}>
                     {isPendingDelete && isBaseTranslation && (
-                        <div className="text-[10px] font-bold text-red-700 mb-2 px-2 py-1 bg-red-100 border border-red-300 rounded">
+                        <div className="text-base font-bold text-red-700 mb-2 px-2 py-1 bg-red-100 border border-red-300 rounded">
                             כל הפריטים למטה יימחקו בשמירה (יחד עם פריט הבסיס)
                         </div>
                     )}
@@ -468,14 +459,14 @@ export function PartItemRow({
                         return (
                             <div
                                 key={enh.id}
-                                className={`p-2 rounded text-[10px] ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : "bg-blue-50 border border-blue-100"}`}
+                                className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : "bg-blue-50 border border-blue-100"}`}
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <div className="flex items-center gap-2">
-                                        <span className={`font-bold text-[9px] item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
-                                        <span className="text-[8px] text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
+                                        <span className={`font-bold text-xs item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
+                                        <span className="text-xs text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
                                         {relatedWillBeDeleted && (
-                                            <span className="text-[8px] font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
+                                            <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
                                         )}
                                     </div>
                                     {onEnhancementFieldChange && (
@@ -487,14 +478,14 @@ export function PartItemRow({
                                                     [enh.id]: !prev[enh.id],
                                                 }))
                                             }
-                                            className="px-1.5 py-0.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-[8px]"
+                                            className="inline-flex items-center px-2 py-0.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
                                         >
                                             {enhShowProps ? "הסתר מאפיינים" : "מאפיינים"}
                                         </button>
                                     )}
                                 </div>
                                 {enhShowProps && onEnhancementFieldChange && (
-                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 p-2 bg-white rounded text-[10px] border border-blue-100">
+                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 p-2 bg-white rounded text-base border border-blue-100">
                                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.type}>
                                             <span className="text-gray-600 w-20 shrink-0">סוג</span>
                                             <select
@@ -663,7 +654,7 @@ export function PartItemRow({
                                                     onClick={() =>
                                                         onOpenDateSetIdConfig(enh.id, displayVal.dateSetId ?? "", enh.tId)
                                                     }
-                                                    className="shrink-0 px-2 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                                    className="shrink-0 inline-flex items-center px-2 py-0.5 text-sm leading-none border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 whitespace-nowrap"
                                                 >
                                                     הגדר סט תאריכים
                                                 </button>
@@ -675,7 +666,7 @@ export function PartItemRow({
                                     <textarea
                                         value={displayVal?.content ?? ""}
                                         onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "content", e.target.value)}
-                                        className={`w-full p-1.5 border border-gray-200 rounded text-[10px] min-h-[60px] whitespace-pre-wrap ${enhContentRtl ? "" : "text-left"}`}
+                                        className={`w-full p-2 border border-gray-200 rounded text-base min-h-[72px] whitespace-pre-wrap ${enhContentRtl ? "" : "text-left"}`}
                                         dir={enhContentRtl ? "rtl" : "ltr"}
                                         style={{ textAlign: enhContentRtl ? "right" : "left" }}
                                     />
@@ -704,7 +695,7 @@ export function PartItemRow({
                                 : undefined
                         }
                         onClick={() => onAddTranslation!(item)}
-                        className={`w-full py-2 px-3 rounded-lg text-[10px] font-semibold border transition-colors shadow-sm ${
+                        className={`w-full py-3 px-3 rounded-lg text-base font-semibold border transition-colors shadow-sm ${
                             isAddTranslationBlocked
                                 ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                                 : "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300"
@@ -714,7 +705,7 @@ export function PartItemRow({
                     </button>
                     {isAddTranslationBlocked && (
                         <p
-                            className="mt-1.5 text-[10px] text-amber-900/90 text-center leading-snug px-1"
+                            className="mt-1.5 text-base text-amber-900/90 text-center leading-snug px-1"
                             dir="rtl"
                         >
                             לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת המקטע</span>
@@ -727,7 +718,7 @@ export function PartItemRow({
                 <button
                     type="button"
                     onClick={onAddAfter}
-                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
+                    className="w-full py-3 px-3 mt-1.5 rounded-lg text-base font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
                 >
                     + הוסף פריט
                 </button>
@@ -736,7 +727,7 @@ export function PartItemRow({
                 <button
                     type="button"
                     onClick={onAddInstructionAfter}
-                    className="w-full py-2 px-3 mt-1.5 rounded-lg text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
+                    className="w-full py-3 px-3 mt-1.5 rounded-lg text-base font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
                 >
                     + הוסף הוראה כאן
                 </button>

@@ -111,11 +111,11 @@ export function AddTranslationModal({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" dir="rtl">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
-                <div className="p-4 border-b font-bold text-gray-800">הוסף תרגום לטקסט</div>
-                <div className="p-4 overflow-auto space-y-4 flex-1 text-sm">
+                <div className="p-4 border-b font-bold text-lg text-gray-800">הוסף תרגום לטקסט</div>
+                <div className="p-4 overflow-auto space-y-4 flex-1 text-base">
                     {/* פריט בסיס */}
                     <div>
-                        <div className="text-[10px] text-gray-500 mb-1">פריט בסיס (itemId: {baseItemId})</div>
+                        <div className="text-sm text-gray-500 mb-1">פריט בסיס (itemId: {baseItemId})</div>
                         <div className="p-2 bg-gray-50 rounded border text-gray-700 max-h-40 overflow-auto whitespace-pre-wrap break-words">
                             {baseContentPreview || "(ללא תוכן)"}
                         </div>
@@ -124,18 +124,18 @@ export function AddTranslationModal({
                     {/* כל התרגומים המקושרים לפריט – מכל התרגומים */}
                     {existingLinked.length > 0 && (
                         <div>
-                            <div className="text-[10px] font-semibold text-gray-600 mb-2">תרגומים מקושרים לפריט זה (מכל התרגומים)</div>
+                            <div className="text-sm font-semibold text-gray-600 mb-2">תרגומים מקושרים לפריט זה (מכל התרגומים)</div>
                             <div className="space-y-2 max-h-32 overflow-auto border border-gray-200 rounded p-2 bg-gray-50">
                                 {Object.entries(byTranslation).map(([tId, entries]) => (
                                     <div key={tId} className="border-r-2 border-blue-300 pr-2">
-                                        <div className="font-bold text-blue-700 text-[10px]" title={tId}>
+                                        <div className="font-bold text-blue-700 text-sm" title={tId}>
                                             {getTranslationDisplayLabel(tId, {
                                                 storedLabel: translations.find((tr) => tr.translationId === tId)?.label,
                                             })}
                                         </div>
                                         {entries.map((e) => (
-                                            <div key={e.id} className="text-[10px] text-gray-600 pr-2 mt-0.5">
-                                                <span className="text-[9px] text-gray-500 font-mono mr-1">ID: {e.id}</span>
+                                            <div key={e.id} className="text-sm text-gray-600 pr-2 mt-0.5">
+                                                <span className="text-sm text-gray-500 font-mono mr-1">ID: {e.id}</span>
                                                 {(e.values?.content ?? "").slice(0, 60)}
                                                 {(e.values?.content?.length ?? 0) > 60 ? "…" : ""}
                                             </div>
@@ -148,7 +148,7 @@ export function AddTranslationModal({
 
                     {/* בחירת תרגום יעד – רק תרגומים משניים (לא 0-נוסח), כי מוסיפים תרגום לפריט שבסיס */}
                     <div>
-                        <label className="block text-[10px] text-gray-600 mb-1">הוסף לתרגום</label>
+                        <label className="block text-sm text-gray-600 mb-1">הוסף לתרגום</label>
                         <select
                             value={targetTranslationId ?? ""}
                             onChange={(e) => {
@@ -173,12 +173,12 @@ export function AddTranslationModal({
                     {/* מיקום – תצוגה ויזואלית: רשימה עם "הוסף כאן" / "הוסף אחרי" */}
                     {targetTranslationId && (
                         <div>
-                            <div className="text-[10px] font-semibold text-gray-600 mb-2">מיקום בתרגום הנבחר</div>
+                            <div className="text-sm font-semibold text-gray-600 mb-2">מיקום בתרגום הנבחר</div>
                             <div className="border border-gray-200 rounded divide-y divide-gray-100 overflow-hidden">
                                 <button
                                     type="button"
                                     onClick={() => onInsertAfterChange(null)}
-                                    className={`w-full text-right py-2 px-3 text-[11px] font-medium transition-colors ${insertAfterItemId === null ? "bg-indigo-100 text-indigo-800 border-r-4 border-indigo-500" : "bg-white hover:bg-gray-50"}`}
+                                    className={`w-full text-right py-2 px-3 text-base font-medium transition-colors ${insertAfterItemId === null ? "bg-indigo-100 text-indigo-800 border-r-4 border-indigo-500" : "bg-white hover:bg-gray-50"}`}
                                 >
                                     ↓ הוסף בהתחלה
                                 </button>
@@ -188,14 +188,14 @@ export function AddTranslationModal({
                                     const preview = (e.values?.content ?? "").slice(0, 50);
                                     return (
                                         <React.Fragment key={e.id}>
-                                            <div className="px-3 py-1.5 bg-gray-50 text-[10px] text-gray-500 border-r-2 border-gray-200">
-                                                <span className="text-[9px] text-gray-400 font-mono mr-1">ID: {e.id}</span>
+                                            <div className="px-3 py-1.5 bg-gray-50 text-sm text-gray-500 border-r-2 border-gray-200">
+                                                <span className="text-sm text-gray-400 font-mono mr-1">ID: {e.id}</span>
                                                 {preview}{preview.length >= 50 ? "…" : ""}
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={() => onInsertAfterChange(itemId)}
-                                                className={`w-full text-right py-2 px-3 text-[11px] font-medium transition-colors ${isSelected ? "bg-indigo-100 text-indigo-800 border-r-4 border-indigo-500" : "bg-white hover:bg-gray-50"}`}
+                                                className={`w-full text-right py-2 px-3 text-base font-medium transition-colors ${isSelected ? "bg-indigo-100 text-indigo-800 border-r-4 border-indigo-500" : "bg-white hover:bg-gray-50"}`}
                                             >
                                                 ↓ הוסף אחרי פריט זה
                                             </button>
@@ -209,10 +209,10 @@ export function AddTranslationModal({
                     {/* תוכן */}
                     <div>
                         <div className="mb-2 p-2 border border-gray-200 rounded bg-gray-50">
-                            <div className="flex items-center gap-2 text-[11px] text-gray-700 mb-1">
+                            <div className="flex items-center gap-2 text-base text-gray-700 mb-1">
                                 <span className="font-semibold">מצב תרגום</span>
                             </div>
-                            <div className="flex items-center gap-3 text-[11px]">
+                            <div className="flex items-center gap-3 text-base">
                                 <label className="flex items-center gap-1">
                                     <input
                                         type="radio"
@@ -232,11 +232,11 @@ export function AddTranslationModal({
                                     <span>תרגום פסקה</span>
                                 </label>
                             </div>
-                            <div className="text-[10px] text-gray-600 mt-1">
+                            <div className="text-sm text-gray-600 mt-1">
                                 הפריט מכיל {baseSentencesCount} משפטים
                             </div>
                         </div>
-                        <label className="block text-[10px] text-gray-600 mb-1">תוכן התרגום</label>
+                        <label className="block text-sm text-gray-600 mb-1">תוכן התרגום</label>
                         <textarea
                             value={form.content ?? ""}
                             onChange={(e) => onFormFieldChange("content", e.target.value)}
@@ -247,10 +247,10 @@ export function AddTranslationModal({
                         />
                         {isParagraphMode && (
                             <div className="mt-2 border border-gray-200 rounded p-2 bg-gray-50">
-                                <div className="text-[10px] text-gray-600 mb-1">
+                                <div className="text-sm text-gray-600 mb-1">
                                     תצוגת משפטים לפסקה ({paragraphSentences.length})
                                 </div>
-                                <div className="space-y-1 max-h-28 overflow-auto text-[10px]">
+                                <div className="space-y-1 max-h-28 overflow-auto text-sm">
                                     {paragraphSentences.length === 0 ? (
                                         <div className="text-gray-400">אין משפטים (פיצול לפי שורות)</div>
                                     ) : (
@@ -271,12 +271,12 @@ export function AddTranslationModal({
                         <button
                             type="button"
                             onClick={() => setShowProps((p) => !p)}
-                            className="px-2 py-1 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-[10px]"
+                            className="px-2 py-1 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-sm"
                         >
                             {showProps ? "הסתר מאפיינים" : "מאפיינים (סוג, כותרת, גופן וכו')"}
                         </button>
                         {showProps && (
-                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 p-2 bg-gray-50 rounded text-[10px] border border-gray-100">
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 p-2 bg-gray-50 rounded text-sm border border-gray-100">
                                 <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.type}>
                                     <span className="text-gray-600 w-20 shrink-0">סוג</span>
                                     <select
@@ -479,7 +479,7 @@ export function AddTranslationModal({
                                         <button
                                             type="button"
                                             onClick={onOpenDateSetIdConfig}
-                                            className="shrink-0 px-2 py-0.5 text-xs border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                            className="shrink-0 px-2 py-1 text-sm border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
                                         >
                                             הגדר סט תאריכים
                                         </button>
@@ -493,7 +493,7 @@ export function AddTranslationModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50"
+                        className="px-4 py-2 border border-gray-300 rounded text-base hover:bg-gray-50"
                     >
                         ביטול
                     </button>
@@ -501,7 +501,7 @@ export function AddTranslationModal({
                         type="button"
                         onClick={onSubmit}
                         disabled={!canSubmit || saving}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm disabled:opacity-50 hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded text-base disabled:opacity-50 hover:bg-blue-700"
                     >
                         {saving ? "שומר…" : "הוסף תרגום"}
                     </button>

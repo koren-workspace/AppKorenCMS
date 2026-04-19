@@ -69,15 +69,15 @@ export function HebrewCalendarPicker({ value, onChange, title }: HebrewCalendarP
     return (
         <div className="border border-gray-200 rounded-lg p-3 bg-gray-50" dir="rtl">
             {title && (
-                <div className="text-gray-700 font-medium mb-2 text-sm">{title}</div>
+                <div className="text-gray-700 font-medium mb-2 text-base">{title}</div>
             )}
             <div className="flex flex-wrap gap-3 items-start">
                 <div>
-                    <label className="block text-xs text-gray-500 mb-1">חודש</label>
+                    <label className="block text-sm text-gray-500 mb-1">חודש</label>
                     <select
                         value={currentMonth}
                         onChange={(e) => setCurrentMonth(Number(e.target.value))}
-                        className="border border-gray-300 rounded px-2 py-1 text-sm"
+                        className="border border-gray-300 rounded px-2 py-1.5 text-base"
                     >
                         {monthOptions}
                     </select>
@@ -91,7 +91,7 @@ export function HebrewCalendarPicker({ value, onChange, title }: HebrewCalendarP
                                     key={day}
                                     type="button"
                                     onClick={() => handleDayClick(day)}
-                                    className={`w-8 h-8 rounded text-sm border ${
+                                    className={`w-9 h-9 rounded text-base border ${
                                         selected
                                             ? "bg-blue-600 text-white border-blue-700"
                                             : "bg-white border-gray-300 hover:bg-blue-50"
@@ -102,7 +102,7 @@ export function HebrewCalendarPicker({ value, onChange, title }: HebrewCalendarP
                             );
                         })}
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1">
+                    <p className="text-sm text-gray-400 mt-1">
                         לחץ על יום כדי לסמן/לבטל. נבחרו {value.length} תאריכים.
                     </p>
                 </div>

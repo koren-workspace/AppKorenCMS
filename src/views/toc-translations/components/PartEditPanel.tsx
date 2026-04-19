@@ -191,7 +191,7 @@ export function PartEditPanel({
                                 <button
                                     type="button"
                                     onClick={() => onAddNewItemAt(0)}
-                                    className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
+                                    className="w-full py-3 px-3 rounded-lg text-base font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
                                 >
                                     + הוסף פריט
                                 </button>
@@ -202,7 +202,7 @@ export function PartEditPanel({
                             <button
                                 type="button"
                                 onClick={() => onAddNewInstructionAt(0)}
-                                className="w-full py-2.5 px-3 rounded-lg text-sm font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
+                                className="w-full py-3 px-3 rounded-lg text-base font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
                             >
                                 + הוסף הוראה
                             </button>

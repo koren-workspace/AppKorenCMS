@@ -9,6 +9,7 @@
  */
 
 import React, { useState } from "react";
+import { getNusachPalette } from "../utils/nusachPalette";
 import {
     DndContext,
     closestCenter,
@@ -26,13 +27,19 @@ import {
     arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { DeleteTrashIcon } from "./DeleteTrashIcon";
+
+/** גובה אחיד לשורות ניווט + הגבלת גובה טקסט (שמות תפילה ארוכים לעומת קטגוריה) */
+const NAV_ROW_MIN = "min-h-[3.5rem]";
+const NAV_LABEL_BTN = "flex min-w-0 flex-1 items-center border-0 bg-transparent p-1.5 text-right shadow-none";
+const NAV_LABEL_TEXT = "block w-full min-w-0 text-right leading-snug line-clamp-2 break-words";
 
 type PrayerNavigationColumnsProps = {
     currentCategories: any[];
     selectedCategoryId: string | null;
     onSelectCategory: (categoryId: string) => void;
-    /** נקרא בלחיצה על "הוסף קטגוריה" – פותח מודל להזנת שם עברית + אנגלית. afterCategoryId = null = בסוף הרשימה */
-    onAddCategoryClick?: (afterCategoryId: string | null) => void;
+    /** נקרא בלחיצה על "הוסף קטגוריה" – פותח מודל להזנת שם עברית + אנגלית + מיקום */
+    onAddCategoryClick?: () => void;
     onEditCategory?: (categoryId: string) => void;
     onDeleteCategory?: (categoryId: string) => void;
     /** מציג את כפתור "הוסף קטגוריה" רק כשנבחרו נוסח ותרגום */
@@ -40,8 +47,8 @@ type PrayerNavigationColumnsProps = {
     currentPrayers: any[];
     selectedPrayerId: string | null;
     onSelectPrayer: (prayerId: string) => void;
-    /** נקרא בלחיצה על "הוסף תפילה" – פותח מודל להזנת שם עברית + אנגלית. afterPrayerId = null = בסוף הרשימה */
-    onAddPrayerClick?: (afterPrayerId: string | null) => void;
+    /** נקרא בלחיצה על "הוסף תפילה" – פותח מודל להזנת שם עברית + אנגלית + מיקום */
+    onAddPrayerClick?: () => void;
     /** נקרא בלחיצה על עריכת תפילה – פותח מודל עריכה */
     onEditPrayer?: (prayerId: string) => void;
     onDeletePrayer?: (prayerId: string) => void;
@@ -50,8 +57,8 @@ type PrayerNavigationColumnsProps = {
     currentParts: any[];
     selectedGroupId: string | null;
     onSelectPart: (partId: string) => void;
-    /** נקרא בלחיצה על "הוסף מקטע" – פותח מודל להזנת מאפיינים. afterPartId = null = בסוף הרשימה */
-    onAddPartClick?: (afterPartId: string | null) => void;
+    /** נקרא בלחיצה על "הוסף מקטע" – פותח מודל להזנת מאפיינים + מיקום */
+    onAddPartClick?: () => void;
     /** נקרא בלחיצה על עריכת מקטע – פותח מודל עריכה */
     onEditPart?: (partId: string) => void;
     onDeletePart?: (partId: string) => void;
@@ -61,6 +68,8 @@ type PrayerNavigationColumnsProps = {
     onReorderParts?: (orderedPartIds: string[]) => void;
     /** במהלך שמירה – כפתורי הוספה/מחיקה מושבתים ומציגים מצב טעינה */
     isSaving?: boolean;
+    /** מזהה הנוסח הנבחר — קובע את פלטת הצבעים */
+    selectedTocId?: string | null;
 };
 
 /** מקטע יחיד ברשימה הניתן לגרירה */
@@ -72,6 +81,8 @@ function SortablePartItem({
     onDeletePart,
     isSaving,
     isDragDisabled,
+    partColor,
+    partDarkText,
 }: {
     part: any;
     selectedGroupId: string | null;
@@ -80,6 +91,8 @@ function SortablePartItem({
     onDeletePart?: (e: React.MouseEvent, id: string) => void;
     isSaving: boolean;
     isDragDisabled: boolean;
+    partColor: string;
+    partDarkText: boolean;
 }) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const {
@@ -97,50 +110,66 @@ function SortablePartItem({
         opacity: isDragging ? 0.4 : 1,
     };
 
+    const sel = selectedGroupId === part.id;
+    const selText = partDarkText ? "text-gray-900" : "text-white";
+    const selHover = partDarkText ? "hover:bg-black/5" : "hover:bg-white/10";
+
     return (
-        <div ref={setNodeRef} style={style} className="flex items-center gap-0.5">
+        <div ref={setNodeRef} style={style} className="flex items-stretch gap-0.5">
             {!isDragDisabled && (
                 <button
                     type="button"
                     {...attributes}
                     {...listeners}
-                    className="shrink-0 px-0.5 py-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
+                    className="shrink-0 self-center px-0.5 py-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
                     title="גרירה משנה רק את סדר החלקים בתפריט — לא את סדר הפריטים בתוך החלק"
                     tabIndex={-1}
                 >
                     ⠿
                 </button>
             )}
-            <button
-                type="button"
-                onClick={() => onSelectPart(part.id)}
-                disabled={isSaving}
-                className={`flex-1 text-right p-1.5 rounded border ${selectedGroupId === part.id ? "bg-orange-500 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
+            <div
+                className={`flex min-w-0 flex-1 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText : "border-gray-200 bg-gray-50"}`}
+                style={sel ? { backgroundColor: partColor, borderColor: partColor } : undefined}
             >
-                {part.name}
-            </button>
-            {onEditPart && (
                 <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); onEditPart(part.id); }}
+                    onClick={() => onSelectPart(part.id)}
                     disabled={isSaving}
-                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-xs ${isSaving ? savingClass : "hover:bg-blue-50"}`}
-                    title="ערוך חלק תפילה"
+                    title={typeof part.name === "string" ? part.name : undefined}
+                    className={`${NAV_LABEL_BTN} ${sel ? `${selText} ${selHover}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                 >
-                    ✎
+                    <span className={NAV_LABEL_TEXT}>{part.name}</span>
                 </button>
-            )}
-            {onDeletePart && (
-                <button
-                    type="button"
-                    onClick={(e) => onDeletePart(e, part.id)}
-                    disabled={isSaving}
-                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-xs ${isSaving ? savingClass : "hover:bg-red-50"}`}
-                    title="מחק חלק תפילה"
-                >
-                    ✕
-                </button>
-            )}
+                {(onEditPart || onDeletePart) && (
+                    <div
+                        className={`flex shrink-0 flex-col justify-center gap-px border-l p-px ${sel ? "border-white/30" : "border-gray-200"}`}
+                    >
+                        {onEditPart && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onEditPart(part.id); }}
+                                disabled={isSaving}
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? `${selText} hover:bg-white/15` : "text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                title="ערוך חלק תפילה"
+                            >
+                                ✎
+                            </button>
+                        )}
+                        {onDeletePart && (
+                            <button
+                                type="button"
+                                onClick={(e) => onDeletePart(e, part.id)}
+                                disabled={isSaving}
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                title="מחק חלק תפילה"
+                            >
+                                <DeleteTrashIcon />
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -169,8 +198,12 @@ export function PrayerNavigationColumns({
     showAddPart,
     onReorderParts,
     isSaving = false,
+    selectedTocId,
 }: PrayerNavigationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
+    const palette = getNusachPalette(selectedTocId);
+    const [c2, c3, c4] = [palette.selectedColors[2], palette.selectedColors[3], palette.selectedColors[4]];
+    const [dark2, dark3, dark4] = [palette.darkText[2], palette.darkText[3], palette.darkText[4]];
 
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -196,26 +229,14 @@ export function PrayerNavigationColumns({
     const activePart = activeDragId ? currentParts.find((p: any) => p.id === activeDragId) : null;
     const isDragEnabled = !!onReorderParts && !isSaving && currentParts.length > 1;
 
-    const handleAddCategoryAfter = (afterCategoryId: string | null) => {
-        onAddCategoryClick?.(afterCategoryId);
-    };
-
     const handleDeleteCategory = (e: React.MouseEvent, categoryId: string) => {
         e.stopPropagation();
         if (window.confirm("למחוק את הקטגוריה?")) onDeleteCategory?.(categoryId);
     };
 
-    const handleAddPrayerAfter = (afterPrayerId: string | null) => {
-        onAddPrayerClick?.(afterPrayerId);
-    };
-
     const handleDeletePrayer = (e: React.MouseEvent, prayerId: string) => {
         e.stopPropagation();
         if (window.confirm("למחוק את התפילה?")) onDeletePrayer?.(prayerId);
-    };
-
-    const handleAddPartAfter = (afterPartId: string | null) => {
-        onAddPartClick?.(afterPartId);
     };
 
     const handleDeletePart = (e: React.MouseEvent, partId: string) => {
@@ -225,145 +246,154 @@ export function PrayerNavigationColumns({
 
     return (
         <>
-            <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-500 text-sm mb-1">3. קטגוריה</h4>
-                {currentCategories.length === 0 && onAddCategoryClick && showAddCategory && (
+            <div className="w-40 shrink-0 flex flex-col gap-1.5 bg-white p-1.5 border-l overflow-auto">
+                <h4 className="font-bold text-gray-500 text-lg mb-2">3. קטגוריה</h4>
+                {onAddCategoryClick && showAddCategory && (
                     <button
                         type="button"
-                        onClick={() => handleAddCategoryAfter(null)}
+                        onClick={onAddCategoryClick}
                         disabled={isSaving}
-                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-[10px] leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-indigo-200 text-indigo-600 hover:bg-indigo-50"}`}
+                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-sm leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : ""}`}
+                        style={!isSaving ? { borderColor: c2, color: c2 } : undefined}
                     >
-                        {isSaving ? "שומר…" : "+ הוסף קטגוריה"}
+                        {isSaving ? "שומר…" : "+ הוסף קטגוריה חדשה"}
                     </button>
                 )}
-                {currentCategories.map((category: any) => (
-                    <React.Fragment key={category.id ?? category.name}>
-                        <div className="flex items-center gap-0.5">
+                {currentCategories.map((category: any) => {
+                    const sel = selectedCategoryId === category.id;
+                    const selText2 = dark2 ? "text-gray-900" : "text-white";
+                    const selHover2 = dark2 ? "hover:bg-black/5" : "hover:bg-white/10";
+                    return (
+                        <div
+                            key={category.id ?? category.name}
+                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText2 : "border-gray-200 bg-gray-50"}`}
+                            style={sel ? { backgroundColor: c2, borderColor: c2 } : undefined}
+                        >
                             <button
                                 type="button"
                                 onClick={() => onSelectCategory(category.id)}
                                 disabled={isSaving}
-                                className={`flex-1 text-right p-1.5 rounded border ${selectedCategoryId === category.id ? "bg-indigo-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
+                                title={typeof category.name === "string" ? category.name : undefined}
+                                className={`${NAV_LABEL_BTN} ${sel ? `${selText2} ${selHover2}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                             >
-                                {category.name}
+                                <span className={NAV_LABEL_TEXT}>{category.name}</span>
                             </button>
-                            {onEditCategory && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); onEditCategory(category.id); }}
-                                    disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-xs ${isSaving ? savingClass : "hover:bg-blue-50"}`}
-                                    title="ערוך קטגוריה"
+                            {(onEditCategory || onDeleteCategory) && (
+                                <div
+                                    className={`flex shrink-0 flex-col justify-center gap-px border-l p-px ${sel ? "border-white/30" : "border-gray-200"}`}
                                 >
-                                    ✎
-                                </button>
-                            )}
-                            {onDeleteCategory && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => handleDeleteCategory(e, category.id)}
-                                    disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-xs ${isSaving ? savingClass : "hover:bg-red-50"}`}
-                                    title="מחק קטגוריה"
-                                >
-                                    ✕
-                                </button>
+                                    {onEditCategory && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); onEditCategory(category.id); }}
+                                            disabled={isSaving}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? `${selText2} hover:bg-white/15` : "text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                            title="ערוך קטגוריה"
+                                        >
+                                            ✎
+                                        </button>
+                                    )}
+                                    {onDeleteCategory && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteCategory(e, category.id)}
+                                            disabled={isSaving}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                            title="מחק קטגוריה"
+                                        >
+                                            <DeleteTrashIcon />
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
-                        {onAddCategoryClick && showAddCategory && (
-                            <button
-                                type="button"
-                                onClick={() => handleAddCategoryAfter(category.id)}
-                                disabled={isSaving}
-                                className={`w-full py-px px-0.5 rounded border border-dashed text-[10px] font-medium leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-indigo-200 text-indigo-500 hover:bg-indigo-50"}`}
-                                title={isSaving ? undefined : `הוסף קטגוריה אחרי "${category.name}"`}
-                            >
-                                {isSaving ? "שומר…" : "+ הוסף כאן"}
-                            </button>
-                        )}
-                    </React.Fragment>
-                ))}
+                    );
+                })}
             </div>
-            <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-500 text-sm mb-1">4. תפילה</h4>
-                {currentPrayers.length === 0 && onAddPrayerClick && showAddPrayer && (
+            <div className="w-40 shrink-0 flex flex-col gap-1.5 bg-white p-1.5 border-l overflow-auto">
+                <h4 className="font-bold text-gray-500 text-lg mb-2">4. תפילה</h4>
+                {onAddPrayerClick && showAddPrayer && (
                     <button
                         type="button"
-                        onClick={() => handleAddPrayerAfter(null)}
+                        onClick={onAddPrayerClick}
                         disabled={isSaving}
-                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-[10px] leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-green-200 text-green-600 hover:bg-green-50"}`}
+                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-sm leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : ""}`}
+                        style={!isSaving ? { borderColor: c3, color: c3 } : undefined}
                     >
-                        {isSaving ? "שומר…" : "+ הוסף תפילה"}
+                        {isSaving ? "שומר…" : "+ הוסף תפילה חדשה"}
                     </button>
                 )}
-                {currentPrayers.map((prayer: any) => (
-                    <React.Fragment key={prayer.id}>
-                        <div className="flex items-center gap-0.5">
+                {currentPrayers.map((prayer: any) => {
+                    const sel = selectedPrayerId === prayer.id;
+                    const selText3 = dark3 ? "text-gray-900" : "text-white";
+                    const selHover3 = dark3 ? "hover:bg-black/5" : "hover:bg-white/10";
+                    return (
+                        <div
+                            key={prayer.id}
+                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText3 : "border-gray-200 bg-gray-50"}`}
+                            style={sel ? { backgroundColor: c3, borderColor: c3 } : undefined}
+                        >
                             <button
                                 type="button"
                                 onClick={() => onSelectPrayer(prayer.id)}
                                 disabled={isSaving}
-                                className={`flex-1 text-right p-1.5 rounded border ${selectedPrayerId === prayer.id ? "bg-green-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
+                                title={typeof prayer.name === "string" ? prayer.name : undefined}
+                                className={`${NAV_LABEL_BTN} ${sel ? `${selText3} ${selHover3}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                             >
-                                {prayer.name}
+                                <span className={NAV_LABEL_TEXT}>{prayer.name}</span>
                             </button>
-                            {onEditPrayer && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); onEditPrayer(prayer.id); }}
-                                    disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-xs ${isSaving ? savingClass : "hover:bg-blue-50"}`}
-                                    title="ערוך תפילה"
+                            {(onEditPrayer || onDeletePrayer) && (
+                                <div
+                                    className={`flex shrink-0 flex-col justify-center gap-px border-l p-px ${sel ? "border-white/30" : "border-gray-200"}`}
                                 >
-                                    ✎
-                                </button>
-                            )}
-                            {onDeletePrayer && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => handleDeletePrayer(e, prayer.id)}
-                                    disabled={isSaving}
-                                    className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-xs ${isSaving ? savingClass : "hover:bg-red-50"}`}
-                                    title="מחק תפילה"
-                                >
-                                    ✕
-                                </button>
+                                    {onEditPrayer && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); onEditPrayer(prayer.id); }}
+                                            disabled={isSaving}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? `${selText3} hover:bg-white/15` : "text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                            title="ערוך תפילה"
+                                        >
+                                            ✎
+                                        </button>
+                                    )}
+                                    {onDeletePrayer && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeletePrayer(e, prayer.id)}
+                                            disabled={isSaving}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                            title="מחק תפילה"
+                                        >
+                                            <DeleteTrashIcon />
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
-                        {onAddPrayerClick && showAddPrayer && (
-                            <button
-                                type="button"
-                                onClick={() => handleAddPrayerAfter(prayer.id)}
-                                disabled={isSaving}
-                                className={`w-full py-px px-0.5 rounded border border-dashed text-[10px] font-medium leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-green-200 text-green-500 hover:bg-green-50"}`}
-                                title={isSaving ? undefined : `הוסף תפילה אחרי "${prayer.name}"`}
-                            >
-                                {isSaving ? "שומר…" : "+ הוסף כאן"}
-                            </button>
-                        )}
-                    </React.Fragment>
-                ))}
+                    );
+                })}
             </div>
-            <div className="w-28 shrink-0 flex flex-col gap-1 bg-white p-1 border-l overflow-auto">
-                <h4 className="font-bold text-gray-500 text-sm mb-1">5. חלק תפילה</h4>
+            <div className="w-40 shrink-0 flex flex-col gap-1.5 bg-white p-1.5 border-l overflow-auto">
+                <h4 className="font-bold text-gray-500 text-lg mb-2">5. חלק תפילה</h4>
                 {activeDragId && (
                     <p
-                        className="text-xs leading-snug font-semibold text-orange-950 mb-1 rounded px-1.5 py-1 bg-orange-100 border border-orange-300 shadow-sm"
+                        className="text-sm leading-snug font-semibold text-orange-950 mb-1 rounded px-1.5 py-1 bg-orange-100 border border-orange-300 shadow-sm"
                         role="status"
                         aria-live="polite"
                     >
                         רק סדר החלקים בתפריט משתנה כאן — לא סדר הפריטים בתוך חלק.
                     </p>
                 )}
-                {currentParts.length === 0 && onAddPartClick && showAddPart && (
+                {onAddPartClick && showAddPart && (
                     <button
                         type="button"
-                        onClick={() => handleAddPartAfter(null)}
+                        onClick={onAddPartClick}
                         disabled={isSaving}
-                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-[10px] leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-600 hover:bg-orange-50"}`}
+                        className={`py-0.5 px-1 rounded border border-dashed font-medium text-sm leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : ""}`}
+                        style={!isSaving ? { borderColor: c4, color: c4 } : undefined}
                     >
-                        {isSaving ? "שומר…" : "+ הוסף חלק תפילה"}
+                        {isSaving ? "שומר…" : "+ הוסף חלק תפילה חדש"}
                     </button>
                 )}
                 <DndContext
@@ -377,37 +407,30 @@ export function PrayerNavigationColumns({
                         strategy={verticalListSortingStrategy}
                     >
                         {currentParts.map((part: any) => (
-                            <React.Fragment key={part.id}>
-                                <SortablePartItem
-                                    part={part}
-                                    selectedGroupId={selectedGroupId}
-                                    onSelectPart={onSelectPart}
-                                    onEditPart={onEditPart}
-                                    onDeletePart={onDeletePart ? handleDeletePart : undefined}
-                                    isSaving={isSaving}
-                                    isDragDisabled={!isDragEnabled}
-                                />
-                                {onAddPartClick && showAddPart && !activeDragId && (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleAddPartAfter(part.id)}
-                                        disabled={isSaving}
-                                        className={`w-full py-px px-0.5 rounded border border-dashed text-[10px] font-medium leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "border-orange-200 text-orange-500 hover:bg-orange-50"}`}
-                                        title={isSaving ? undefined : `הוסף חלק תפילה אחרי "${part.name}"`}
-                                    >
-                                        {isSaving ? "שומר…" : "+ הוסף כאן"}
-                                    </button>
-                                )}
-                            </React.Fragment>
+                            <SortablePartItem
+                                key={part.id}
+                                part={part}
+                                selectedGroupId={selectedGroupId}
+                                onSelectPart={onSelectPart}
+                                onEditPart={onEditPart}
+                                onDeletePart={onDeletePart ? handleDeletePart : undefined}
+                                isSaving={isSaving}
+                                isDragDisabled={!isDragEnabled}
+                                partColor={c4}
+                                partDarkText={dark4}
+                            />
                         ))}
                     </SortableContext>
                     <DragOverlay>
                         {activePart ? (
-                            <div className="flex items-center gap-0.5 bg-white shadow-lg rounded border border-orange-300 opacity-95">
-                                <span className="shrink-0 px-0.5 py-1 text-gray-400">⠿</span>
-                                <span className={`flex-1 text-right p-1.5 rounded text-xs ${selectedGroupId === activePart.id ? "bg-orange-500 text-white" : "bg-gray-50"}`}>
-                                    {activePart.name}
-                                </span>
+                            <div className="flex items-stretch gap-0.5 bg-white opacity-95 shadow-lg">
+                                <span className="shrink-0 self-center px-0.5 py-1 text-gray-400">⠿</span>
+                                <div
+                                    className={`flex min-w-0 flex-1 items-stretch overflow-hidden rounded border text-sm ${selectedGroupId === activePart.id ? (dark4 ? "text-gray-900" : "text-white") : "border-gray-200 bg-gray-50 text-gray-900"}`}
+                                    style={selectedGroupId === activePart.id ? { backgroundColor: c4, borderColor: c4 } : undefined}
+                                >
+                                    <span className="min-w-0 flex-1 p-1.5 text-right">{activePart.name}</span>
+                                </div>
                             </div>
                         ) : null}
                     </DragOverlay>

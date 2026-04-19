@@ -91,12 +91,12 @@ export function DateSetIdConfigModal({
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" dir="rtl">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
-                <div className="p-4 border-b font-bold text-gray-800">{title}</div>
-                <div className="p-4 overflow-auto space-y-3 flex-1 text-sm">
+                <div className="p-4 border-b font-bold text-lg text-gray-800">{title}</div>
+                <div className="p-4 overflow-auto space-y-3 flex-1 text-base">
                     {loadingInitial ? (
                         <p className="text-gray-500">טוען נתוני סט תאריכים…</p>
                     ) : (
-                        <p className="text-gray-600 text-xs">
+                        <p className="text-gray-600 text-sm">
                             {initialDateSetId
                                 ? "ערוך את המאפיינים. בלחיצה על \"החל\" – אם קיים dateSetId זהה ישמש אותו, אחרת ייווצר מזהה חדש."
                                 : "הגדר את המאפיינים לפי calendar.json. אם קיים כבר סט תאריכים זהה – ישמש את המזהה הקיים; אחרת ייווצר מזהה חדש."}
@@ -174,16 +174,16 @@ export function DateSetIdConfigModal({
                                 className="w-full border border-gray-300 rounded px-2 py-1"
                                 placeholder="1,7"
                             />
-                            <span className="text-[10px] text-gray-400 block mt-0.5">{WEEKDAYS_HINT}</span>
+                            <span className="text-sm text-gray-400 block mt-0.5">{WEEKDAYS_HINT}</span>
                         </label>
                     </div>
-                    {error && <div className="text-red-600 text-xs">{error}</div>}
+                    {error && <div className="text-red-600 text-sm">{error}</div>}
                 </div>
                 <div className="p-4 border-t flex justify-end gap-2 flex-wrap">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50"
+                        className="px-4 py-2 border border-gray-300 rounded text-base hover:bg-gray-50"
                     >
                         ביטול
                     </button>
@@ -191,7 +191,7 @@ export function DateSetIdConfigModal({
                         type="button"
                         onClick={handleAlways}
                         disabled={loadingInitial}
-                        className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+                        className="px-4 py-2 border border-gray-300 rounded text-base hover:bg-gray-50 disabled:opacity-50"
                     >
                         תמיד (ID 100)
                     </button>
@@ -199,7 +199,7 @@ export function DateSetIdConfigModal({
                         type="button"
                         onClick={handleSubmit}
                         disabled={saving || loadingInitial}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm disabled:opacity-50 hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded text-base disabled:opacity-50 hover:bg-blue-700"
                     >
                         {saving ? "שומר…" : loadingInitial ? "טוען…" : "החל (מצוא או צור)"}
                     </button>

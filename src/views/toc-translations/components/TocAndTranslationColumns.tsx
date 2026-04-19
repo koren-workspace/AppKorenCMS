@@ -10,6 +10,8 @@
 import React from "react";
 import { getNusachDisplayLabel } from "../utils/nusachDisplay";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
+import { DeleteTrashIcon } from "./DeleteTrashIcon";
+import { TrashIcon } from "./TrashIcon";
 import { getNusachPalette } from "../utils/nusachPalette";
 
 type TocAndTranslationColumnsProps = {
@@ -75,7 +77,7 @@ export function TocAndTranslationColumns({
         }
     };
 
-    /** גובה אחיד לשורות ניווט: עמודת ✎/✕ (~שני כפתורי 24px) + מגבלת שורות לטקסט */
+    /** גובה אחיד לשורות ניווט: עמודת ✎/פח (~שני כפתורי 24px) + מגבלת שורות לטקסט */
     const navRowShell = "min-h-[3.5rem]";
     const navLabelBtn = "flex min-w-0 flex-1 items-center border-0 bg-transparent p-1.5 text-right shadow-none";
     const navLabelText = "block w-full min-w-0 text-right leading-snug line-clamp-2 break-words";
@@ -116,7 +118,7 @@ export function TocAndTranslationColumns({
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); onEditToc(toc.id); }}
                                             disabled={isSaving}
-                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? `border-white/35 ${selText} hover:bg-white/15` : "border-gray-300 text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? `${selText} hover:bg-white/15` : "text-blue-600 hover:bg-blue-50"} ${isSaving ? savingClass : ""}`}
                                             title="ערוך נוסח"
                                         >
                                             ✎
@@ -127,10 +129,10 @@ export function TocAndTranslationColumns({
                                             type="button"
                                             onClick={(e) => handleDeleteToc(e, toc.id)}
                                             disabled={isSaving}
-                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? "border-red-400/50 text-red-700 hover:bg-red-100/40" : "border-red-200 text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
                                             title="מחק נוסח"
                                         >
-                                            ✕
+                                            <DeleteTrashIcon />
                                         </button>
                                     )}
                                 </div>
@@ -186,11 +188,11 @@ export function TocAndTranslationColumns({
                                             type="button"
                                             onClick={(e) => handleDeleteTranslation(e, translation.translationId)}
                                             disabled={isSaving}
-                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? "border-red-400/50 text-red-700 hover:bg-red-100/40" : "border-red-200 text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
-                                            title="מחק תרגום"
-                                        >
-                                            ✕
-                                        </button>
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                        title="מחק תרגום"
+                                    >
+                                        <DeleteTrashIcon />
+                                    </button>
                                     </div>
                                 )}
                             </div>

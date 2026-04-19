@@ -27,6 +27,7 @@ import {
     arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { DeleteTrashIcon } from "./DeleteTrashIcon";
 
 /** גובה אחיד לשורות ניווט + הגבלת גובה טקסט (שמות תפילה ארוכים לעומת קטגוריה) */
 const NAV_ROW_MIN = "min-h-[3.5rem]";
@@ -149,7 +150,7 @@ function SortablePartItem({
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onEditPart(part.id); }}
                                 disabled={isSaving}
-                                className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? `border-white/35 ${selText} hover:bg-white/15` : "border-gray-300 text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? `${selText} hover:bg-white/15` : "text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                                 title="ערוך חלק תפילה"
                             >
                                 ✎
@@ -160,10 +161,10 @@ function SortablePartItem({
                                 type="button"
                                 onClick={(e) => onDeletePart(e, part.id)}
                                 disabled={isSaving}
-                                className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? "border-red-400/50 text-red-700 hover:bg-red-100/40" : "border-red-200 text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
                                 title="מחק חלק תפילה"
                             >
-                                ✕
+                                <DeleteTrashIcon />
                             </button>
                         )}
                     </div>
@@ -286,7 +287,7 @@ export function PrayerNavigationColumns({
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); onEditCategory(category.id); }}
                                             disabled={isSaving}
-                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? `border-white/35 ${selText2} hover:bg-white/15` : "border-gray-300 text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? `${selText2} hover:bg-white/15` : "text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                                             title="ערוך קטגוריה"
                                         >
                                             ✎
@@ -297,10 +298,10 @@ export function PrayerNavigationColumns({
                                             type="button"
                                             onClick={(e) => handleDeleteCategory(e, category.id)}
                                             disabled={isSaving}
-                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? "border-red-400/50 text-red-700 hover:bg-red-100/40" : "border-red-200 text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
                                             title="מחק קטגוריה"
                                         >
-                                            ✕
+                                            <DeleteTrashIcon />
                                         </button>
                                     )}
                                 </div>
@@ -350,7 +351,7 @@ export function PrayerNavigationColumns({
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); onEditPrayer(prayer.id); }}
                                             disabled={isSaving}
-                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? `border-white/35 ${selText3} hover:bg-white/15` : "border-gray-300 text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? `${selText3} hover:bg-white/15` : "text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                                             title="ערוך תפילה"
                                         >
                                             ✎
@@ -361,10 +362,10 @@ export function PrayerNavigationColumns({
                                             type="button"
                                             onClick={(e) => handleDeletePrayer(e, prayer.id)}
                                             disabled={isSaving}
-                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? "border-red-400/50 text-red-700 hover:bg-red-100/40" : "border-red-200 text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border-0 text-xs leading-none ${sel ? "text-red-100 hover:bg-red-500/25" : "text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
                                             title="מחק תפילה"
                                         >
-                                            ✕
+                                            <DeleteTrashIcon />
                                         </button>
                                     )}
                                 </div>

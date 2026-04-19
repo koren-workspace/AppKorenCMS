@@ -302,6 +302,7 @@ export function TocTranslationsView() {
                     allowAddPart
                 }
                 isSaving={nav.isSaving}
+                selectedTocId={nav.selectedTocId}
             />
             {/* אזור העריכה: toolbar + רשימת פריטים (לאחר טעינה) */}
             <PartEditPanel

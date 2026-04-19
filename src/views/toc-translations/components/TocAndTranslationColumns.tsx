@@ -10,6 +10,7 @@
 import React from "react";
 import { getNusachDisplayLabel } from "../utils/nusachDisplay";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
+import { getNusachPalette } from "../utils/nusachPalette";
 
 type TocAndTranslationColumnsProps = {
     tocItems: any[];
@@ -74,51 +75,76 @@ export function TocAndTranslationColumns({
         }
     };
 
+    /** גובה אחיד לשורות ניווט: עמודת ✎/✕ (~שני כפתורי 24px) + מגבלת שורות לטקסט */
+    const navRowShell = "min-h-[3.5rem]";
+    const navLabelBtn = "flex min-w-0 flex-1 items-center border-0 bg-transparent p-1.5 text-right shadow-none";
+    const navLabelText = "block w-full min-w-0 text-right leading-snug line-clamp-2 break-words";
+
     return (
         <>
             <div className="w-36 shrink-0 flex flex-col gap-1.5 bg-white p-1.5 border-l overflow-auto">
                 <h4 className="font-bold text-gray-500 text-lg mb-2">1. נוסח</h4>
-                {tocItems.map((toc: any) => (
-                    <div key={toc.id} className="flex items-center gap-0.5">
-                        <button
-                            type="button"
-                            onClick={() => onSelectToc(toc.id)}
-                            disabled={isSaving}
-                            className={`flex-1 text-right p-1.5 rounded border ${selectedTocId === toc.id ? "bg-blue-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
-                            title={toc.id}
+                {tocItems.map((toc: any) => {
+                    const sel = selectedTocId === toc.id;
+                    const tocLabel = getNusachDisplayLabel(toc.id, toc.values?.nusach);
+                    const p = getNusachPalette(toc.id);
+                    const c0 = p.selectedColors[0];
+                    const dark0 = p.darkText[0];
+                    const selText = dark0 ? "text-gray-900" : "text-white";
+                    const selHover = dark0 ? "hover:bg-black/5" : "hover:bg-white/10";
+                    return (
+                        <div
+                            key={toc.id}
+                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${navRowShell} ${sel ? selText : "border-gray-200 bg-gray-50"}`}
+                            style={sel ? { backgroundColor: c0, borderColor: c0 } : undefined}
                         >
-                            {getNusachDisplayLabel(toc.id, toc.values?.nusach)}
-                        </button>
-                        {onEditToc && (
                             <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); onEditToc(toc.id); }}
+                                onClick={() => onSelectToc(toc.id)}
                                 disabled={isSaving}
-                                className={`shrink-0 p-1 rounded border border-blue-200 text-blue-600 text-sm ${isSaving ? savingClass : "hover:bg-blue-50"}`}
-                                title="ערוך נוסח"
+                                className={`${navLabelBtn} ${sel ? `${selText} ${selHover}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                title={`${tocLabel} (${toc.id})`}
                             >
-                                ✎
+                                <span className={navLabelText}>{tocLabel}</span>
                             </button>
-                        )}
-                        {onDeleteToc && (
-                            <button
-                                type="button"
-                                onClick={(e) => handleDeleteToc(e, toc.id)}
-                                disabled={isSaving}
-                                className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-sm ${isSaving ? savingClass : "hover:bg-red-50"}`}
-                                title="מחק נוסח"
-                            >
-                                ✕
-                            </button>
-                        )}
-                    </div>
-                ))}
+                            {(onEditToc || onDeleteToc) && (
+                                <div
+                                    className={`flex shrink-0 flex-col justify-center gap-px border-l p-px ${sel ? "border-white/30" : "border-gray-200"}`}
+                                >
+                                    {onEditToc && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); onEditToc(toc.id); }}
+                                            disabled={isSaving}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? `border-white/35 ${selText} hover:bg-white/15` : "border-gray-300 text-gray-500 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                            title="ערוך נוסח"
+                                        >
+                                            ✎
+                                        </button>
+                                    )}
+                                    {onDeleteToc && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteToc(e, toc.id)}
+                                            disabled={isSaving}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? "border-red-400/50 text-red-700 hover:bg-red-100/40" : "border-red-200 text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                            title="מחק נוסח"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
                 {onAddToc && (
                     <button
                         type="button"
                         onClick={handleAddToc}
                         disabled={isSaving}
-                        className={`mt-1 py-1 px-1 rounded border border-dashed border-blue-200 font-medium text-sm leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "text-blue-600 hover:bg-blue-50"}`}
+                        className={`mt-1 py-1 px-1 rounded border border-dashed font-medium text-sm leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : ""}`}
+                        style={!isSaving ? { borderColor: getNusachPalette(selectedTocId).colors[0], color: getNusachPalette(selectedTocId).colors[0] } : undefined}
                     >
                         {isSaving ? "שומר…" : "+ הוסף נוסח"}
                     </button>
@@ -126,38 +152,59 @@ export function TocAndTranslationColumns({
             </div>
             <div className="w-36 shrink-0 flex flex-col gap-1.5 bg-white p-1.5 border-l overflow-auto">
                 <h4 className="font-bold text-gray-500 text-lg mb-2">2. תרגום/ פירוש</h4>
-                {translations.map((translation: any, index: number) => (
-                    <div key={translation.translationId ?? index} className="flex items-center gap-0.5">
-                        <button
-                            type="button"
-                            onClick={() => onSelectTranslation(index)}
-                            disabled={isSaving}
-                            title={translation.translationId}
-                            className={`flex-1 text-right p-1.5 rounded border ${selectedTranslationIndex === index ? "bg-purple-600 text-white" : "bg-gray-50"} ${isSaving ? savingClass : ""}`}
-                        >
-                            {getTranslationDisplayLabel(translation.translationId, {
-                                storedLabel: translation.label,
-                            })}
-                        </button>
-                        {onDeleteTranslation && (
-                            <button
-                                type="button"
-                                onClick={(e) => handleDeleteTranslation(e, translation.translationId)}
-                                disabled={isSaving}
-                                className={`shrink-0 p-1 rounded border border-red-200 text-red-600 text-sm ${isSaving ? savingClass : "hover:bg-red-50"}`}
-                                title="מחק תרגום"
+                {(() => {
+                    const activePalette = getNusachPalette(selectedTocId);
+                    const c1 = activePalette.selectedColors[1];
+                    const dark1 = activePalette.darkText[1];
+                    const selText1 = dark1 ? "text-gray-900" : "text-white";
+                    const selHover1 = dark1 ? "hover:bg-black/5" : "hover:bg-white/10";
+                    return translations.map((translation: any, index: number) => {
+                        const sel = selectedTranslationIndex === index;
+                        const trLabel = getTranslationDisplayLabel(translation.translationId, {
+                            storedLabel: translation.label,
+                        });
+                        return (
+                            <div
+                                key={translation.translationId ?? index}
+                                className={`flex min-w-0 items-stretch overflow-hidden rounded border ${navRowShell} ${sel ? selText1 : "border-gray-200 bg-gray-50"}`}
+                                style={sel ? { backgroundColor: c1, borderColor: c1 } : undefined}
                             >
-                                ✕
-                            </button>
-                        )}
-                    </div>
-                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => onSelectTranslation(index)}
+                                    disabled={isSaving}
+                                    title={`${trLabel} — ${translation.translationId}`}
+                                    className={`${navLabelBtn} ${sel ? `${selText1} ${selHover1}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
+                                >
+                                    <span className={navLabelText}>{trLabel}</span>
+                                </button>
+                                {onDeleteTranslation && (
+                                    <div
+                                        className={`flex shrink-0 flex-col justify-center border-l p-px ${sel ? "border-white/30" : "border-gray-200"}`}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteTranslation(e, translation.translationId)}
+                                            disabled={isSaving}
+                                            className={`inline-flex h-6 w-6 items-center justify-center rounded border text-xs leading-none ${sel ? "border-red-400/50 text-red-700 hover:bg-red-100/40" : "border-red-200 text-red-600 hover:bg-red-50"} ${isSaving ? savingClass : ""}`}
+                                            title="מחק תרגום"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    });
+                })()}
                 {selectedTocId && onAddTranslation && getSuggestedTranslationId && (
                     <button
                         type="button"
                         onClick={handleAddTranslation}
                         disabled={isSaving}
-                        className={`mt-1 py-1 px-1 rounded border border-dashed border-purple-200 font-medium text-sm leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : "text-purple-600 hover:bg-purple-50"}`}
+                        className={`mt-1 py-1 px-1 rounded border border-dashed font-medium text-sm leading-tight ${isSaving ? "border-gray-300 text-gray-400 " + savingClass : ""}`}
+                        style={!isSaving ? { borderColor: getNusachPalette(selectedTocId).colors[1], color: getNusachPalette(selectedTocId).colors[1] } : undefined}
+
                     >
                         {isSaving ? "שומר…" : "+ הוסף תרגום"}
                     </button>

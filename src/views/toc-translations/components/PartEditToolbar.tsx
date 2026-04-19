@@ -7,6 +7,7 @@
  */
 
 import React from "react";
+import { getNusachPalette } from "../utils/nusachPalette";
 
 export type PartEditToolbarProps = {
     selectedGroupId: string | null;
@@ -39,6 +40,13 @@ export function PartEditToolbar({
     const hasPart = !!selectedGroupId;
     const canPublish = !!selectedTocId;
 
+    const p = getNusachPalette(selectedTocId);
+    const btn = (i: 0|1|2|3|4) => ({
+        backgroundColor: p.selectedColors[i],
+        color: p.darkText[i] ? '#1a1a1a' : '#ffffff',
+        borderColor: p.selectedColors[i],
+    });
+
     const trimmedNusach = publishNusachLabel?.trim() ?? "";
     const hasNusachLabel = trimmedNusach.length > 0;
     const publishTitle = hasNusachLabel
@@ -64,7 +72,8 @@ export function PartEditToolbar({
                                 type="button"
                                 onClick={onSplitPart}
                                 disabled={saving}
-                                className="px-3 py-2 bg-purple-600 text-white rounded font-bold text-sm disabled:opacity-30 hover:bg-purple-700"
+                                className="px-3 py-2 rounded font-bold text-sm disabled:opacity-30"
+                                style={btn(2)}
                                 title="פצל חלק תפילה – יצירת חלק תפילה חדש מחלק מהפריטים"
                             >
                                 ✂ פצל חלק תפילה
@@ -73,7 +82,8 @@ export function PartEditToolbar({
                                 type="button"
                                 onClick={onMoveItemsToPart}
                                 disabled={saving}
-                                className="px-3 py-2 bg-orange-500 text-white rounded font-bold text-sm disabled:opacity-30 hover:bg-orange-600"
+                                className="px-3 py-2 rounded font-bold text-sm disabled:opacity-30"
+                                style={btn(3)}
                                 title="העבר פריטים לחלק תפילה אחר"
                             >
                                 ↔ העבר לחלק תפילה
@@ -85,7 +95,8 @@ export function PartEditToolbar({
                             type="button"
                             onClick={onSaveGroup}
                             disabled={saving || !hasChanges}
-                            className="px-4 py-2 bg-green-600 text-white rounded font-bold text-base disabled:opacity-30"
+                            className="px-4 py-2 rounded font-bold text-base disabled:opacity-30"
+                            style={btn(1)}
                         >
                             {saving ? "שומר..." : "שמור חלק תפילה"}
                         </button>
@@ -94,7 +105,8 @@ export function PartEditToolbar({
                         type="button"
                         onClick={onFinalPublish}
                         disabled={saving || !canPublish}
-                        className="px-3 py-2 bg-blue-800 text-white rounded font-bold border-2 border-blue-400 text-sm max-w-[min(100%,14rem)] truncate sm:max-w-[18rem] disabled:opacity-30"
+                        className="px-3 py-2 rounded font-bold border-2 text-sm max-w-[min(100%,14rem)] truncate sm:max-w-[18rem] disabled:opacity-30"
+                        style={btn(0)}
                         title={publishDisabledTitle}
                     >
                         🚀 {publishButtonLabel}

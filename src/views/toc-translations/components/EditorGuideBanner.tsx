@@ -49,18 +49,18 @@ function GuideCollapsible({
             : "text-amber-800 border-amber-300 hover:bg-amber-100";
 
     return (
-        <div className={`shrink-0 rounded-lg border text-[10px] ${shell}`} dir="rtl">
+        <div className={`shrink-0 rounded-lg border text-sm ${shell}`} dir="rtl">
             <div className="flex items-center gap-2 px-3 py-2">
                 <span className="shrink-0" aria-hidden>
                     {icon}
                 </span>
-                <div className={`flex-1 min-w-0 font-bold text-[11px] leading-snug ${titleCls}`}>
+                <div className={`flex-1 min-w-0 font-bold text-base leading-snug ${titleCls}`}>
                     {title}
                 </div>
                 <button
                     type="button"
                     onClick={() => setOpen((v) => !v)}
-                    className={`shrink-0 px-2 py-1 rounded border text-[10px] font-semibold ${btn}`}
+                    className={`shrink-0 px-2 py-1 rounded border text-sm font-semibold ${btn}`}
                     aria-expanded={open}
                 >
                     {open ? "צמצם" : "הרחב"}
@@ -90,7 +90,7 @@ export function EditorGuideBanner({
 
     if (!hasSelection) {
         return (
-            <div className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-[10px]" dir="rtl">
+            <div className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-sm" dir="rtl">
                 <span className="shrink-0 text-slate-400" aria-hidden>ℹ️</span>
                 <span>
                     בחר <strong>נוסח</strong> ואז <strong>תרגום</strong> כדי להתחיל. ההסבר על מה מותר לערוך ולהוסיף יופיע כאן.

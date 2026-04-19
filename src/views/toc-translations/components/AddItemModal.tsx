@@ -112,15 +112,15 @@ export function AddItemModal({
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" dir="rtl">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
-                <div className="p-4 border-b font-bold text-gray-800">
+                <div className="p-4 border-b font-bold text-lg text-gray-800">
                     {isInstruction ? "הוסף הוראה" : "הוסף פריט"}
                 </div>
-                <div className="p-4 overflow-auto space-y-4 flex-1 text-sm">
+                <div className="p-4 overflow-auto space-y-4 flex-1 text-base">
                     {/* חלון מרכזי: כפתור הגדרת dateSetId */}
                     <div className="flex flex-col items-center justify-center py-4">
                         {/* כפתור הגדרת dateSetId – ברירת מחדל 100 */}
                         <div className="mt-4 flex flex-col items-center gap-1">
-                            <span className="text-xs text-gray-600">סט תאריכים (dateSetId)</span>
+                            <span className="text-sm text-gray-600">סט תאריכים (dateSetId)</span>
                             <button
                                 type="button"
                                 onClick={onOpenDateSetIdConfig}
@@ -129,13 +129,13 @@ export function AddItemModal({
                                 {form.dateSetId ? `הגדר dateSetId (נוכחי: ${form.dateSetId})` : "הגדר dateSetId (ברירת מחדל: 100)"}
                             </button>
                             {form.dateSetId && (
-                                <span className="text-[10px] text-gray-500">נוכחי: {form.dateSetId}</span>
+                                <span className="text-base text-gray-500">נוכחי: {form.dateSetId}</span>
                             )}
                         </div>
                     </div>
 
                     {/* כל המאפיינים */}
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 p-3 bg-gray-50 rounded text-[10px]">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 p-3 bg-gray-50 rounded text-base">
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.type}>
                             <span className="text-gray-600 w-20 shrink-0">סוג</span>
                             <select
@@ -344,10 +344,10 @@ export function AddItemModal({
                         />
                         {form.block && (
                             <div className="mt-2 border border-gray-200 rounded p-2 bg-gray-50">
-                                <div className="text-[10px] text-gray-600 mb-1">
+                                <div className="text-base text-gray-600 mb-1">
                                     תצוגת משפטים לפסקה ({paragraphSentences.length})
                                 </div>
-                                <div className="space-y-1 max-h-28 overflow-auto text-[10px]">
+                                <div className="space-y-1 max-h-28 overflow-auto text-base">
                                     {paragraphSentences.length === 0 ? (
                                         <div className="text-gray-400">אין משפטים (פיצול לפי שורות)</div>
                                     ) : (
@@ -370,7 +370,7 @@ export function AddItemModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50"
+                        className="px-4 py-2 border border-gray-300 rounded text-base hover:bg-gray-50"
                     >
                         ביטול
                     </button>
@@ -378,7 +378,7 @@ export function AddItemModal({
                         type="button"
                         onClick={onConfirm}
                         disabled={saving}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm disabled:opacity-50 hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded text-base disabled:opacity-50 hover:bg-blue-700"
                     >
                         {saving ? "שומר…" : isInstruction ? "הוסף הוראה" : "הוסף פריט"}
                     </button>

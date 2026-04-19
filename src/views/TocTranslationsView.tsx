@@ -69,8 +69,8 @@ export function TocTranslationsView() {
         addPart: nav.addPart,
     });
 
-    const openAddPartModal = (afterPartId: string | null) => {
-        setAddPartAfterPartId(afterPartId);
+    const openAddPartModal = () => {
+        setAddPartAfterPartId(nav.currentParts.at(-1)?.id ?? null);
         setAddPartModalOpen(true);
     };
 
@@ -80,18 +80,22 @@ export function TocTranslationsView() {
         dateSetIds: string[];
         hazan: boolean | null;
         minyan: boolean | null;
+        afterPartId: string | null;
     }) => {
         const tocId = nav.selectedTocId;
         if (!tocId) return;
         const dateSetIds = params.dateSetIds.length ? params.dateSetIds : ["100"];
-        const result = await nav.addPart(params.nameHe, addPartAfterPartId, {
+        const result = await nav.addPart(params.nameHe, params.afterPartId, {
             nameEn: params.nameEn,
             tocId,
             dateSetIds,
             hazan: params.hazan,
             minyan: params.minyan,
         });
-        if (result !== null) setAddPartModalOpen(false);
+        if (result !== null) {
+            setAddPartModalOpen(false);
+            setAddPartAfterPartId(null);
+        }
     };
 
     const openEditPartModal = (partId: string) => {
@@ -167,30 +171,32 @@ export function TocTranslationsView() {
         setEditPrayerId(null);
     };
 
-    const openAddCategoryModal = (afterCategoryId: string | null) => {
-        setAddCategoryAfterId(afterCategoryId);
+    const openAddCategoryModal = () => {
+        setAddCategoryAfterId(nav.currentCategories.at(-1)?.id ?? null);
         setAddCategoryModalOpen(true);
     };
 
-    const handleAddCategorySubmit = async (params: { nameHe: string; nameEn: string }) => {
-        await nav.addCategory(params.nameHe, addCategoryAfterId, {
+    const handleAddCategorySubmit = async (params: { nameHe: string; nameEn: string; afterCategoryId: string | null }) => {
+        await nav.addCategory(params.nameHe, params.afterCategoryId, {
             nameEn: params.nameEn,
             tocId: nav.selectedTocId ?? undefined,
         });
         setAddCategoryModalOpen(false);
+        setAddCategoryAfterId(null);
     };
 
-    const openAddPrayerModal = (afterPrayerId: string | null) => {
-        setAddPrayerAfterPrayerId(afterPrayerId);
+    const openAddPrayerModal = () => {
+        setAddPrayerAfterPrayerId(nav.currentPrayers.at(-1)?.id ?? null);
         setAddPrayerModalOpen(true);
     };
 
-    const handleAddPrayerSubmit = async (params: { nameHe: string; nameEn: string }) => {
-        await nav.addPrayer(params.nameHe, addPrayerAfterPrayerId, {
+    const handleAddPrayerSubmit = async (params: { nameHe: string; nameEn: string; afterPrayerId: string | null }) => {
+        await nav.addPrayer(params.nameHe, params.afterPrayerId, {
             nameEn: params.nameEn,
             tocId: nav.selectedTocId ?? undefined,
         });
         setAddPrayerModalOpen(false);
+        setAddPrayerAfterPrayerId(null);
     };
 
     const hasUnsaved = partEdit.changedIds.size > 0 || partEdit.enhancementChangedIds.size > 0 || partEdit.pendingDeletes.length > 0;
@@ -228,9 +234,9 @@ export function TocTranslationsView() {
     })();
 
     return (
-        <div className="flex flex-col w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-[10px]" dir="rtl">
+        <div className="flex flex-col w-full h-full p-1 gap-1 bg-gray-200 overflow-hidden font-sans text-sm" dir="rtl">
             {nav.isSaving && (
-                <div className="flex items-center justify-center gap-2 py-2 px-3 bg-blue-100 border border-blue-300 rounded text-blue-800 font-medium shrink-0" role="status" aria-live="polite">
+                <div className="flex items-center justify-center gap-2 py-2 px-3 bg-blue-100 border border-blue-300 rounded text-blue-800 text-base font-medium shrink-0" role="status" aria-live="polite">
                     <span className="inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                     <span>{nav.savingMessage ?? "שומר..."}</span>
                 </div>
@@ -413,6 +419,11 @@ export function TocTranslationsView() {
             <AddCategoryModal
                 open={addCategoryModalOpen}
                 onClose={() => setAddCategoryModalOpen(false)}
+                existingCategories={nav.currentCategories.map((category: any) => ({
+                    id: category.id,
+                    name: category.name,
+                }))}
+                initialAfterId={addCategoryAfterId}
                 onSubmit={handleAddCategorySubmit}
                 saving={nav.isSaving}
             />
@@ -436,6 +447,11 @@ export function TocTranslationsView() {
             <AddPrayerModal
                 open={addPrayerModalOpen}
                 onClose={() => setAddPrayerModalOpen(false)}
+                existingPrayers={nav.currentPrayers.map((prayer: any) => ({
+                    id: prayer.id,
+                    name: prayer.name,
+                }))}
+                initialAfterId={addPrayerAfterPrayerId}
                 onSubmit={handleAddPrayerSubmit}
                 saving={nav.isSaving}
             />
@@ -451,6 +467,11 @@ export function TocTranslationsView() {
             <AddPartModal
                 open={addPartModalOpen}
                 onClose={() => setAddPartModalOpen(false)}
+                existingParts={nav.currentParts.map((part: any) => ({
+                    id: part.id,
+                    name: part.name,
+                }))}
+                initialAfterId={addPartAfterPartId}
                 onSubmit={handleAddPartSubmit}
                 saving={nav.isSaving}
             />

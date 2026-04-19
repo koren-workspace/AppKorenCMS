@@ -116,19 +116,19 @@ export function MoveToPartModal({
             <div className="bg-white rounded-lg shadow-xl w-[640px] max-h-[90vh] flex flex-col overflow-hidden">
                 {/* כותרת */}
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                    <h2 className="font-bold text-sm">העברת פריטים לחלק תפילה אחר</h2>
+                    <h2 className="font-bold text-lg">העברת פריטים לחלק תפילה אחר</h2>
                     <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 text-base">
                     {/* בחירת חלק תפילה יעד */}
                     <div>
-                        <label className="block text-[10px] font-semibold mb-1">חלק תפילה יעד *</label>
+                        <label className="block text-sm font-semibold mb-1">חלק תפילה יעד *</label>
                         {otherParts.length === 0 ? (
-                            <div className="text-gray-400 text-[10px]">אין חלקי תפילה אחרים בתפילה זו</div>
+                            <div className="text-gray-400 text-sm">אין חלקי תפילה אחרים בתפילה זו</div>
                         ) : (
                             <select
-                                className="border rounded px-2 py-1 text-[11px] w-full"
+                                className="border rounded px-2 py-1 text-base w-full"
                                 value={targetPartId ?? ""}
                                 onChange={(e) => setTargetPartId(e.target.value || null)}
                             >
@@ -143,9 +143,9 @@ export function MoveToPartModal({
                     {/* מיקום הכנסה בחלק תפילה היעד */}
                     {targetPartId && (
                         <div>
-                            <label className="block text-[10px] font-semibold mb-1">מיקום הכנסה בחלק תפילה היעד</label>
+                            <label className="block text-sm font-semibold mb-1">מיקום הכנסה בחלק תפילה היעד</label>
                             <select
-                                className="border rounded px-2 py-1 text-[11px] w-full"
+                                className="border rounded px-2 py-1 text-base w-full"
                                 value={insertAfterItemId ?? "__beginning__"}
                                 onChange={(e) =>
                                     setInsertAfterItemId(
@@ -174,21 +174,21 @@ export function MoveToPartModal({
                     {/* בחירת פריטים */}
                     <div>
                         <div className="flex items-center justify-between mb-1.5">
-                            <div className="text-[10px] font-semibold text-gray-700">
+                            <div className="text-sm font-semibold text-gray-700">
                                 בחר פריטים להעברה (בחירה חופשית)
                             </div>
                             {items.length > 0 && (
                                 <button
                                     type="button"
                                     onClick={toggleAll}
-                                    className="text-[9px] text-blue-600 hover:underline"
+                                    className="text-sm text-blue-600 hover:underline"
                                 >
                                     {selectedItemIds.size === items.length ? "בטל הכל" : "בחר הכל"}
                                 </button>
                             )}
                         </div>
                         {items.length === 0 ? (
-                            <div className="text-gray-400 text-[10px]">אין פריטים בחלק תפילה</div>
+                            <div className="text-gray-400 text-sm">אין פריטים בחלק תפילה</div>
                         ) : (
                             <div className="border rounded overflow-hidden divide-y max-h-64 overflow-y-auto">
                                 {items.map((item) => {
@@ -215,20 +215,20 @@ export function MoveToPartModal({
                                             />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="text-[9px] text-gray-400 font-mono shrink-0">{itemId}</span>
-                                                    <span className={`text-[9px] px-1 rounded shrink-0 ${
+                                                    <span className="text-sm text-gray-400 font-mono shrink-0">{itemId}</span>
+                                                    <span className={`text-sm px-1 rounded shrink-0 ${
                                                         type === "title" ? "bg-purple-100 text-purple-700" :
                                                         type === "instructions" ? "bg-yellow-100 text-yellow-700" :
                                                         "bg-gray-100 text-gray-500"
                                                     }`}>{type}</span>
                                                     {checked && (
-                                                    <span className="text-[9px] bg-orange-200 text-orange-700 px-1 rounded shrink-0">
+                                                    <span className="text-sm bg-orange-200 text-orange-700 px-1 rounded shrink-0">
                                                         → {targetPartId ?? "יעד"}
                                                     </span>
                                                     )}
                                                 </div>
                                                 <div
-                                                    className="text-[10px] text-gray-800 mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words"
+                                                    className="text-sm text-gray-800 mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words"
                                                     dir="rtl"
                                                 >
                                                     {content || <span className="text-gray-300 italic">(ריק)</span>}
@@ -240,7 +240,7 @@ export function MoveToPartModal({
                             </div>
                         )}
                         {selectedItemIds.size > 0 && (
-                            <div className="mt-1 text-[10px] text-orange-700 font-medium">
+                            <div className="mt-1 text-sm text-orange-700 font-medium">
                                 {selectedItemIds.size} פריטים נבחרו להעברה
                                 {targetPartId ? ` לחלק תפילה ${targetPartId}` : ""}
                             </div>
@@ -253,7 +253,7 @@ export function MoveToPartModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-1.5 rounded border border-gray-300 text-sm hover:bg-gray-100"
+                        className="px-4 py-2 rounded border border-gray-300 text-base hover:bg-gray-100"
                     >
                         ביטול
                     </button>
@@ -261,7 +261,7 @@ export function MoveToPartModal({
                         type="button"
                         onClick={handleSubmit}
                         disabled={!canSubmit}
-                        className="px-5 py-1.5 bg-orange-600 text-white rounded font-bold text-sm disabled:opacity-30 hover:bg-orange-700"
+                        className="px-5 py-2 bg-orange-600 text-white rounded font-bold text-base disabled:opacity-30 hover:bg-orange-700"
                     >
                         {saving
                             ? "מעביר..."

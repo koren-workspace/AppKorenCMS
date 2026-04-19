@@ -30,6 +30,7 @@ import {
     resolveDigitMillions,
 } from "../utils/nusachIdPolicy";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
+import { isInsertAtStart } from "../utils/insertPosition";
 
 const LOG_PREFIX = "[TocTranslations]";
 const isSoftDeletedToc = (values: any): boolean =>
@@ -311,7 +312,7 @@ export function useTocNavigation() {
         return `${maxIndex + 1}-${selectedTocId}`;
     };
 
-    /** מוסיף קטגוריה אחרי קטגוריה קיימת (או בסוף אם afterCategoryId null). options.nameEn + tocId: בתרגום 1-{tocId} משתמשים בשם האנגלית. */
+    /** מוסיף קטגוריה בתחילת הרשימה / אחרי קטגוריה קיימת / בסוף אם afterCategoryId null. */
     const addCategory = async (
         nameHe: string,
         afterCategoryId: string | null,
@@ -364,6 +365,7 @@ export function useTocNavigation() {
                 ...getCategoryForTranslation(t.translationId ?? ""),
                 id: newCategoryId,
             };
+            if (isInsertAtStart(afterCategoryId)) return [catObj, ...cats];
             if (afterCategoryId == null) return [...cats, catObj];
             const i = cats.findIndex((c: any) => c.id === afterCategoryId);
             const pos = i >= 0 ? i + 1 : cats.length;
@@ -632,7 +634,8 @@ export function useTocNavigation() {
     };
 
     /**
-     * מוסיף תפילה אחרי תפילה קיימת (או בסוף אם afterPrayerId null). ID מחושב בין המסמכים ב-prayers בנוסח הבסיסי, עם בדיקה שה-ID פנוי.
+     * מוסיף תפילה בתחילת הרשימה / אחרי תפילה קיימת / בסוף אם afterPrayerId null.
+     * חישוב ה-ID נשאר זהה למימוש הקיים כדי לא לשנות התנהגות במוצר.
      * בנוסח הבסיסי מעדכן את כל התרגומים; מסמך Firestore נוצר רק בבסיס.
      * options.nameEn + options.tocId: בתרגום 1-{tocId} משתמשים בשם האנגלית; בשאר – בעברית.
      */
@@ -664,7 +667,8 @@ export function useTocNavigation() {
             String(t.translationId ?? "").startsWith("0-")
         );
         const baseId = baseTrans?.translationId;
-        let afterId = afterPrayerId;
+        const insertAtStart = isInsertAtStart(afterPrayerId);
+        let afterId = insertAtStart ? null : afterPrayerId;
         let nextId: string | undefined;
         if (afterId != null) {
             const idx = prayers.findIndex((p: any) => p.id === afterId);
@@ -721,6 +725,7 @@ export function useTocNavigation() {
             parts: [] as any[],
         });
         const insertPrayerAt = (prayerList: any[], prayerObj: any) => {
+            if (insertAtStart) return [prayerObj, ...prayerList];
             if (afterPrayerId == null) return [...prayerList, prayerObj];
             const i = prayerList.findIndex((p: any) => p.id === afterPrayerId);
             const pos = i >= 0 ? i + 1 : prayerList.length;
@@ -1272,7 +1277,8 @@ export function useTocNavigation() {
     };
 
     /**
-     * מוסיף מקטע אחרי afterPartId (או בסוף אם null). רק בנוסח הבסיסי מעדכן את כל התרגומים.
+     * מוסיף מקטע בתחילת הרשימה / אחרי afterPartId / בסוף אם null.
+     * חישוב ה-ID נשאר זהה למימוש הקיים כדי לא לשנות התנהגות במוצר.
      * אפשרויות נוספות (לפיצול): nameEn לתרגום 1-{tocId}, dateSetIds/hazan/minyan.
      * מחזיר את newPartId שנוצר, או null אם הפעולה נכשלה / הוחמצה.
      */
@@ -1301,6 +1307,7 @@ export function useTocNavigation() {
         const trans = currentTocData.translations[idx];
         if (!trans) return null;
         const isBase = String(trans.translationId ?? "").startsWith("0-");
+        const insertAtStart = isInsertAtStart(afterPartId);
 
         const getParts = (t: any): any[] => {
             for (const cat of t.categories ?? []) {
@@ -1349,6 +1356,7 @@ export function useTocNavigation() {
         });
 
         const insertAt = (parts: any[], partObj: any) => {
+            if (insertAtStart) return [partObj, ...parts];
             if (afterPartId == null) return [...parts, partObj];
             const i = parts.findIndex((p: any) => p.id === afterPartId);
             const pos = i >= 0 ? i + 1 : parts.length;

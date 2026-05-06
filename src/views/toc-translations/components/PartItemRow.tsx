@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
+import type { DateSetLabelEntry } from "../hooks/useDateSetLabels";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
 import {
@@ -66,6 +67,8 @@ type PartItemRowProps = {
     autoFocus?: boolean;
     /** פותח מודל הגדרת/עריכת dateSetId; אם enhancementTranslationId – עריכה בפריט תרגום מקושר */
     onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string, enhancementTranslationId?: string) => void;
+    /** מפה dateSetId → { short, full } (נטענת פעם אחת מה-calendar collection) */
+    dateSetLabels?: Record<string, DateSetLabelEntry>;
     // ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
     // /** props לידית גרירה */
     // dragHandleProps?: {
@@ -96,9 +99,14 @@ export function PartItemRow({
     restrictTypeToInstructions = false,
     autoFocus = false,
     onOpenDateSetIdConfig,
+    dateSetLabels = {},
     // dragHandleProps,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
+    const isDateRestricted = !!localVal.dateSetId && localVal.dateSetId !== "100";
+    const dateSetEntry = isDateRestricted ? (dateSetLabels[localVal.dateSetId] ?? null) : null;
+    const dateSetShort = dateSetEntry?.short ?? (isDateRestricted ? `ID ${localVal.dateSetId}` : null);
+    const dateSetFull = dateSetEntry?.full ?? dateSetShort;
     const [showProps, setShowProps] = useState(false);
     const [showEnhancementProps, setShowEnhancementProps] = useState<Record<string, boolean>>({});
     const entityId = item.id;
@@ -122,7 +130,7 @@ export function PartItemRow({
     return (
         <React.Fragment>
             <div
-                className={`p-2 border rounded ${isPendingDelete ? "bg-red-50 border-red-300 border-2 opacity-95" : isChanged ? "border-orange-300" : "border-gray-200"}`}
+                className={`p-2 border rounded ${isPendingDelete ? "bg-red-50 border-red-300 border-2 opacity-95" : isChanged ? "border-orange-300" : isDateRestricted ? "border-violet-300 bg-violet-50/40" : "border-gray-200"}`}
             >
                 {isPendingDelete && (
                     <div className="flex items-center gap-2 mb-2 py-2 px-2 bg-red-100 border border-red-300 rounded text-base font-bold text-red-800">
@@ -146,8 +154,32 @@ export function PartItemRow({
                         )}
                     </div>
                 )}
-                <div className="flex justify-between items-center text-sm text-gray-500 mb-1 uppercase tracking-tight">
-                    <span className="item-en-ltr text-xs">itemId: {curId}</span>
+                <div className="flex justify-between items-center text-sm text-gray-500 mb-1 uppercase tracking-tight gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="item-en-ltr text-xs shrink-0">itemId: {curId}</span>
+                        {isDateRestricted && (
+                            <div className="relative group shrink-0 normal-case tracking-normal">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
+                                    מוגבל לתאריכים
+                                </span>
+                                <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
+                                    {dateSetShort && (
+                                        <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
+                                            {dateSetShort}
+                                        </div>
+                                    )}
+                                    {dateSetFull && dateSetFull !== dateSetShort && (
+                                        <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
+                                            {dateSetFull}
+                                        </div>
+                                    )}
+                                    <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
+                                        ID: {localVal.dateSetId}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                         {onFieldChange && (
                             <button
@@ -456,17 +488,43 @@ export function PartItemRow({
                         const enhShowFirstInPage = supportsFirstInPage(enhType);
                         const enhShowAttachedMeta = supportsAttachedMeta(enhType);
                         const enhContentRtl = contentUsesRtlAlignment(displayVal?.content);
+                        const enhIsDateRestricted = !!displayVal.dateSetId && displayVal.dateSetId !== "100";
+                        const enhEntry = enhIsDateRestricted ? (dateSetLabels[displayVal.dateSetId] ?? null) : null;
+                        const enhShort = enhEntry?.short ?? (enhIsDateRestricted ? `ID ${displayVal.dateSetId}` : null);
+                        const enhFull = enhEntry?.full ?? enhShort;
                         return (
                             <div
                                 key={enh.id}
-                                className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : "bg-blue-50 border border-blue-100"}`}
+                                className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
                             >
                                 <div className="flex items-center justify-between mb-1">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <span className={`font-bold text-xs item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
                                         <span className="text-xs text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
                                         {relatedWillBeDeleted && (
                                             <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
+                                        )}
+                                        {enhIsDateRestricted && !relatedWillBeDeleted && (
+                                            <div className="relative group">
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
+                                                    מוגבל לתאריכים
+                                                </span>
+                                                <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
+                                                    {enhShort && (
+                                                        <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
+                                                            {enhShort}
+                                                        </div>
+                                                    )}
+                                                    {enhFull && enhFull !== enhShort && (
+                                                        <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
+                                                            {enhFull}
+                                                        </div>
+                                                    )}
+                                                    <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
+                                                        ID: {displayVal.dateSetId}
+                                                    </div>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                     {onEnhancementFieldChange && (

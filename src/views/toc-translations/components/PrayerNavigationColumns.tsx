@@ -70,6 +70,12 @@ type PrayerNavigationColumnsProps = {
     isSaving?: boolean;
     /** מזהה הנוסח הנבחר — קובע את פלטת הצבעים */
     selectedTocId?: string | null;
+    /**
+     * רשימת dateSetIds פעילים לתאריך הנבחר (מחושב ב-useDateFilter).
+     * כשערך = null: מוצגים כל המקטעים (סינון מבוטל).
+     * כשערך = string[]: מוצגים רק מקטעים שלפחות אחד מ-dateSetIds שלהם נמצא ברשימה.
+     */
+    relevantDateSetIds?: string[] | null;
 };
 
 /** מקטע יחיד ברשימה הניתן לגרירה */
@@ -199,11 +205,27 @@ export function PrayerNavigationColumns({
     onReorderParts,
     isSaving = false,
     selectedTocId,
+    relevantDateSetIds = null,
 }: PrayerNavigationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const palette = getNusachPalette(selectedTocId);
     const [c2, c3, c4] = [palette.selectedColors[2], palette.selectedColors[3], palette.selectedColors[4]];
     const [dark2, dark3, dark4] = [palette.darkText[2], palette.darkText[3], palette.darkText[4]];
+
+    /**
+     * סינון מקטעים לפי relevantDateSetIds:
+     *   - null = הצג הכל ללא סינון
+     *   - string[] = הצג רק מקטעים שיש להם dateSetId שנמצא ברשימה
+     *   - מקטע ללא dateSetIds (edge case) — מוצג תמיד
+     */
+    const visibleParts = relevantDateSetIds === null
+        ? currentParts
+        : currentParts.filter((p: any) => {
+            const ids: string[] = Array.isArray(p.dateSetIds) ? p.dateSetIds : [];
+            if (ids.length === 0) return true;
+            return ids.some((id: string) => relevantDateSetIds.includes(id));
+        });
+    const hiddenPartsCount = currentParts.length - visibleParts.length;
 
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -227,7 +249,8 @@ export function PrayerNavigationColumns({
     };
 
     const activePart = activeDragId ? currentParts.find((p: any) => p.id === activeDragId) : null;
-    const isDragEnabled = !!onReorderParts && !isSaving && currentParts.length > 1;
+    // אם סינון תאריך פעיל (חלק מהמקטעים מוסתרים), לא מאפשרים גרירה כדי לא לשבור את הסדר ברשימה המלאה
+    const isDragEnabled = !!onReorderParts && !isSaving && currentParts.length > 1 && hiddenPartsCount === 0;
 
     const handleDeleteCategory = (e: React.MouseEvent, categoryId: string) => {
         e.stopPropagation();
@@ -396,6 +419,16 @@ export function PrayerNavigationColumns({
                         {isSaving ? "שומר…" : "+ הוסף חלק תפילה חדש"}
                     </button>
                 )}
+                {hiddenPartsCount > 0 && (
+                    <p
+                        className="text-xs leading-snug text-gray-600 mb-1 rounded px-1.5 py-1 bg-gray-50 border border-gray-200"
+                        role="status"
+                        aria-live="polite"
+                        title="חלק מהמקטעים מוסתרים בגלל סינון לפי תאריך. לחץ על 'הצג הכל' כדי לראות את כולם."
+                    >
+                        {hiddenPartsCount} חלקי תפילה מוסתרים בסינון
+                    </p>
+                )}
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
@@ -403,10 +436,10 @@ export function PrayerNavigationColumns({
                     onDragEnd={handleDragEnd}
                 >
                     <SortableContext
-                        items={currentParts.map((p: any) => p.id)}
+                        items={visibleParts.map((p: any) => p.id)}
                         strategy={verticalListSortingStrategy}
                     >
-                        {currentParts.map((part: any) => (
+                        {visibleParts.map((part: any) => (
                             <SortablePartItem
                                 key={part.id}
                                 part={part}

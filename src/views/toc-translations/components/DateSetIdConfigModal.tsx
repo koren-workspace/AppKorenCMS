@@ -41,9 +41,11 @@ export function DateSetIdConfigModal({
     const [saving, setSaving] = useState(false);
     const [loadingInitial, setLoadingInitial] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [resolvedId, setResolvedId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!open) return;
+        setResolvedId(null);
         if (initialDateSetId) {
             setLoadingInitial(true);
             setError(null);
@@ -77,6 +79,7 @@ export function DateSetIdConfigModal({
         setError(null);
         try {
             const { dateSetId } = await resolveDateSetId(dataSource, form);
+            setResolvedId(dateSetId);
             onSelect(dateSetId);
             onClose();
         } catch (e) {
@@ -102,6 +105,21 @@ export function DateSetIdConfigModal({
                                 : "הגדר את המאפיינים לפי calendar.json. אם קיים כבר סט תאריכים זהה – ישמש את המזהה הקיים; אחרת ייווצר מזהה חדש."}
                         </p>
                     )}
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">
+                            שם קצר לתצוגה (label)
+                            <span className="font-normal text-gray-400 mr-1">– מוצג ב-badge במקום המספר; השאר ריק לתיאור אוטומטי</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={form.label}
+                            onChange={(e) => setField("label", e.target.value)}
+                            placeholder={'לדוגמה: ט"ו בשבט, ר"ח, ט באב...'}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-base focus:outline-none focus:ring-1 focus:ring-violet-400"
+                            dir="rtl"
+                            maxLength={40}
+                        />
+                    </div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                         <label className="flex items-center gap-2">
                             <input

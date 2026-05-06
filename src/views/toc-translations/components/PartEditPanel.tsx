@@ -13,6 +13,7 @@ import React from "react";
 import { Entity } from "@firecms/core";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
+import { useDateSetLabels, type DateSetLabelEntry } from "../hooks/useDateSetLabels";
 // ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
 // import {
 //     DndContext,
@@ -86,6 +87,15 @@ export type PartEditPanelProps = {
     onSplitPart?: () => void;
     onMoveItemsToPart?: () => void;
     onReorderItems?: (activeId: string, overId: string) => void;
+    /** מקור נתונים לטעינת תיאורי dateSetId */
+    dataSource?: { fetchCollection: (opts: any) => Promise<any[]>; saveEntity: (opts: any) => Promise<any> } | null;
+    /**
+     * רשימת dateSetIds פעילים לתאריך הנבחר (מחושב ב-useDateFilter).
+     * כשערך = null: מוצגים כל הפריטים (סינון מבוטל).
+     * כשערך = string[]: מוצגים רק פריטים שאין להם dateSetId, או שה-dateSetId שלהם נמצא ברשימה.
+     * הסינון הוא להצגה בלבד — `allItems`, `changedIds`, שמירה ופרסום ממשיכים לפעול על כל הפריטים.
+     */
+    relevantDateSetIds?: string[] | null;
 };
 
 // ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
@@ -150,9 +160,29 @@ export function PartEditPanel({
     onSplitPart,
     onMoveItemsToPart,
     onReorderItems: _onReorderItems,
+    dataSource,
+    relevantDateSetIds = null,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0 || pendingDeletesCount > 0;
+    const dateSetLabels = useDateSetLabels(dataSource);
+
+    /**
+     * סינון פריטים מוצגים לפי relevantDateSetIds:
+     *   - null = הצג הכל ללא סינון
+     *   - string[] = הצג רק פריטים שאין להם dateSetId, או שה-dateSetId שלהם נמצא ברשימה
+     * הסינון אינו משנה את `allItems` עצמו — `changedIds`, שמירה ופרסום ממשיכים על הכל.
+     */
+    const visibleItems = relevantDateSetIds === null
+        ? allItems
+        : allItems.filter((item) => {
+            const dsId =
+                (localValues[item.id]?.dateSetId as string | undefined) ??
+                (item.values?.dateSetId as string | undefined);
+            if (!dsId) return true;
+            return relevantDateSetIds.includes(dsId);
+        });
+    const hiddenItemsCount = allItems.length - visibleItems.length;
     // ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
     // const sensors = useSensors(
     //     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -207,8 +237,22 @@ export function PartEditPanel({
                                 + הוסף הוראה
                             </button>
                         )}
-                        {/* לכל פריט: ערכים מקומיים + תרגומים מקושרים (לפי itemId/linkedItem) */}
-                        {allItems.map((item, index) => {
+                        {/* הודעה כשיש פריטים מוסתרים בסינון */}
+                        {hiddenItemsCount > 0 && (
+                            <div
+                                className="text-sm text-gray-700 px-3 py-2 rounded bg-amber-50 border border-amber-200"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                <span className="font-semibold">{hiddenItemsCount}</span> פריטים מוסתרים בגלל סינון לפי תאריך.
+                                הם עדיין נשמרים ויפורסמו כרגיל; כדי לראות אותם — לחץ על "הצג הכל ללא סינון" בסרגל העליון.
+                            </div>
+                        )}
+                        {/* לכל פריט: ערכים מקומיים + תרגומים מקושרים (לפי itemId/linkedItem).
+                            iterate על visibleItems, אבל את index ברשימה המלאה לוקחים מ-allItems
+                            כדי ש-onAddNewItemAt יקבל מיקום נכון בתוך allItems */}
+                        {visibleItems.map((item) => {
+                            const fullIndex = allItems.indexOf(item);
                             const val = localValues[item.id] || {};
                             const curId = val.itemId;
                             const related = Object.entries(enhancements).flatMap(
@@ -241,12 +285,12 @@ export function PartEditPanel({
                                     currentTranslationId={currentTranslationId}
                                     onAddAfter={
                                         allowAddPart
-                                            ? () => onAddNewItemAt(index + 1)
+                                            ? () => onAddNewItemAt(fullIndex + 1)
                                             : undefined
                                     }
                                     onAddInstructionAfter={
                                         allowAddInstruction && onAddNewInstructionAt
-                                            ? () => onAddNewInstructionAt(index + 1)
+                                            ? () => onAddNewInstructionAt(fullIndex + 1)
                                             : undefined
                                     }
                                     onAddTranslation={isBaseTranslation ? onAddTranslation : undefined}
@@ -258,6 +302,7 @@ export function PartEditPanel({
                                     restrictTypeToInstructions={restrictTypeToInstructions}
                                     autoFocus={lastAddedItemId === item.id}
                                     onOpenDateSetIdConfig={onOpenDateSetIdForItem}
+                                    dateSetLabels={dateSetLabels}
                                 />
                             );
                         })}

@@ -87,6 +87,7 @@ function buildCalendarEntryValues(
         dateSetId,
         timestamp: Date.now(),
     };
+    if (payload.label?.trim()) values.label = payload.label.trim();
     if (payload.simha !== undefined && payload.simha !== null) values.simha = payload.simha;
     if (payload.beitEvel !== undefined && payload.beitEvel !== null) values.beitEvel = payload.beitEvel;
     if (payload.abroad !== undefined && payload.abroad !== null) values.abroad = payload.abroad;

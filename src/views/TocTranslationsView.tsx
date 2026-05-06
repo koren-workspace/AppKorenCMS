@@ -31,8 +31,10 @@ import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTr
 // ─── מושבת זמנית: עריכת נוסח ב־TOC — להפעלה בטל הערות ────────────────────────
 // import { EditTocModal } from "./toc-translations/components/EditTocModal";
 import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBanner";
+import { DateFilterBar } from "./toc-translations/components/DateFilterBar";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
+import { useDateFilter } from "./toc-translations/hooks/useDateFilter";
 import { isBaseTranslation, isTranslationEditable } from "./toc-translations/services/navigationService";
 import { getNusachDisplayLabel } from "./toc-translations/utils/nusachDisplay";
 
@@ -68,6 +70,8 @@ export function TocTranslationsView() {
         currentPrayers: nav.currentPrayers,
         addPart: nav.addPart,
     });
+
+    const dateFilter = useDateFilter(partEdit.dataSource);
 
     const openAddPartModal = () => {
         setAddPartAfterPartId(nav.currentParts.at(-1)?.id ?? null);
@@ -245,6 +249,15 @@ export function TocTranslationsView() {
                 translationId={nav.currentTranslationData?.translationId}
                 hasSelection={hasTranslationSelection}
             />
+            <DateFilterBar
+                filterDate={dateFilter.filterDate}
+                onDateChange={dateFilter.setFilterDate}
+                showAll={dateFilter.showAll}
+                onShowAllToggle={dateFilter.setShowAll}
+                relevantDateSetIds={dateFilter.relevantDateSetIds}
+                hebrewLabel={dateFilter.hebrewLabel}
+                isLoading={dateFilter.isLoading}
+            />
             <div className="flex flex-1 min-h-0 gap-1">
             {/* עמודה 1–2: בחירת נוסח (TOC) ותרגום */}
             {/*
@@ -303,6 +316,7 @@ export function TocTranslationsView() {
                 }
                 isSaving={nav.isSaving}
                 selectedTocId={nav.selectedTocId}
+                relevantDateSetIds={dateFilter.relevantDateSetIds}
             />
             {/* אזור העריכה: toolbar + רשימת פריטים (לאחר טעינה) */}
             <PartEditPanel
@@ -348,6 +362,8 @@ export function TocTranslationsView() {
                 onSplitPart={partEdit.openSplitPartModal}
                 onMoveItemsToPart={partEdit.openMoveToPartModal}
                 onReorderItems={partEdit.reorderItemsWithinPart}
+                dataSource={partEdit.dataSource}
+                relevantDateSetIds={dateFilter.relevantDateSetIds}
             />
             <AddItemModal
                 open={partEdit.addItemModalOpen}

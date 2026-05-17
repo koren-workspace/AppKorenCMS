@@ -2,7 +2,7 @@
  * PartItemRow – שורת פריט בודדת ברשימת העריכה
  *
  * מציג:
- *   - כרטיס: itemId, זמן עדכון + textarea לתוכן (עם עיצוב לפי type)
+ *   - כרטיס: itemId + textarea לתוכן (עם עיצוב לפי type)
  *   - בלוק מאפיינים (סוג, כותרת, גופן, תפקיד, וכו') – ניתן להרחבה
  *   - בלוק "תרגומים מקושרים": פריטים מתרגומים אחרים שמקושרים ל-itemId (linkedItem) – ניתן לעריכה
  *   - כפתור "הוסף פריט" / "הוסף הוראה כאן" / "הוסף תרגום לטקסט זה"
@@ -12,6 +12,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import type { DateSetLabelEntry } from "../hooks/useDateSetLabels";
+import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
 import {
@@ -28,6 +29,40 @@ import {
 
 /** פריט מתרגום אחר שמקושר לפריט הנוכחי (לפי linkedItem); tId = מזהה התרגום */
 export type RelatedEntry = { id: string; tId: string; values: any };
+
+/** תגית "מוגבל לתאריכים" + tooltip (נפתח למטה כדי שלא יחסום כפתורי פעולה) */
+function DateRestrictionBadge({
+    dateSetId,
+    dateSetShort,
+    dateSetFull,
+}: {
+    dateSetId: string;
+    dateSetShort: string | null;
+    dateSetFull: string | null;
+}) {
+    return (
+        <div className="relative group shrink-0 normal-case tracking-normal">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
+                מוגבל לתאריכים
+            </span>
+            <div className="absolute top-full right-0 mt-1 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
+                {dateSetShort && (
+                    <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
+                        {dateSetShort}
+                    </div>
+                )}
+                {dateSetFull && dateSetFull !== dateSetShort && (
+                    <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
+                        {dateSetFull}
+                    </div>
+                )}
+                <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
+                    ID: {dateSetId}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 type PartItemRowProps = {
     item: Entity<any>;
@@ -154,40 +189,24 @@ export function PartItemRow({
                         )}
                     </div>
                 )}
-                <div className="flex justify-between items-center text-sm text-gray-500 mb-1 uppercase tracking-tight gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="item-en-ltr text-xs shrink-0">itemId: {curId}</span>
-                        {isDateRestricted && (
-                            <div className="relative group shrink-0 normal-case tracking-normal">
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
-                                    מוגבל לתאריכים
-                                </span>
-                                <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
-                                    {dateSetShort && (
-                                        <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
-                                            {dateSetShort}
-                                        </div>
-                                    )}
-                                    {dateSetFull && dateSetFull !== dateSetShort && (
-                                        <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
-                                            {dateSetFull}
-                                        </div>
-                                    )}
-                                    <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
-                                        ID: {localVal.dateSetId}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 mb-1 min-h-7 text-sm text-gray-500 uppercase tracking-tight">
+                    <span className="item-en-ltr text-xs shrink-0">itemId: {curId}</span>
+                    {isDateRestricted && (
+                        <DateRestrictionBadge
+                            dateSetId={localVal.dateSetId}
+                            dateSetShort={dateSetShort}
+                            dateSetFull={dateSetFull}
+                        />
+                    )}
+                    <span className="flex-1 min-w-0" aria-hidden />
+                    <div className="flex items-center gap-1 shrink-0 relative z-10">
                         {onFieldChange && (
                             <button
                                 type="button"
                                 onClick={() => setShowProps((p) => !p)}
-                                className="inline-flex items-center px-2 py-0.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-sm leading-none whitespace-nowrap"
+                                className="inline-flex items-center h-7 px-1.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                             >
-                                {showProps ? "הסתר מאפיינים" : "מאפיינים"}
+                                {showProps ? "הסתר" : "מאפיינים"}
                             </button>
                         )}
                         {/* ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
@@ -216,18 +235,13 @@ export function PartItemRow({
                                     if (window.confirm(msg))
                                         onDelete(item, curId ?? item.id);
                                 }}
-                                className="inline-flex items-center px-2 py-0.5 text-red-600 hover:bg-red-50 border border-red-200 rounded text-sm font-bold leading-none whitespace-nowrap"
+                                className="inline-flex h-7 w-7 items-center justify-center text-red-600 hover:bg-red-50 border border-red-200 rounded"
                                 title={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
+                                aria-label="מחק פריט"
                             >
-                                מחק פריט
+                                <DeleteTrashIcon className="h-3.5 w-3.5" />
                             </button>
                         )}
-                        <span className="item-en-ltr text-xs">
-                            Update:{" "}
-                            {localVal.timestamp
-                                ? new Date(localVal.timestamp).toLocaleTimeString()
-                                : "Never"}
-                        </span>
                     </div>
                 </div>
                 {showProps && onFieldChange && (
@@ -497,36 +511,20 @@ export function PartItemRow({
                                 key={enh.id}
                                 className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
                             >
-                                <div className="flex items-center justify-between mb-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`font-bold text-xs item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
-                                        <span className="text-xs text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
-                                        {relatedWillBeDeleted && (
-                                            <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
-                                        )}
-                                        {enhIsDateRestricted && !relatedWillBeDeleted && (
-                                            <div className="relative group">
-                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
-                                                    מוגבל לתאריכים
-                                                </span>
-                                                <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
-                                                    {enhShort && (
-                                                        <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
-                                                            {enhShort}
-                                                        </div>
-                                                    )}
-                                                    {enhFull && enhFull !== enhShort && (
-                                                        <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
-                                                            {enhFull}
-                                                        </div>
-                                                    )}
-                                                    <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
-                                                        ID: {displayVal.dateSetId}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                <div className="flex items-center gap-1.5 mb-1 min-h-7">
+                                    <span className={`font-bold text-xs item-en-ltr shrink-0 ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
+                                    <span className="text-xs text-gray-500 font-mono item-en-ltr shrink-0 hidden md:inline" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
+                                    {relatedWillBeDeleted && (
+                                        <span className="text-xs font-bold text-red-600 bg-red-200 px-1 py-0.5 rounded shrink-0 whitespace-nowrap">ימוחק בשמירה</span>
+                                    )}
+                                    {enhIsDateRestricted && !relatedWillBeDeleted && (
+                                        <DateRestrictionBadge
+                                            dateSetId={displayVal.dateSetId}
+                                            dateSetShort={enhShort}
+                                            dateSetFull={enhFull}
+                                        />
+                                    )}
+                                    <span className="flex-1 min-w-0" aria-hidden />
                                     {onEnhancementFieldChange && (
                                         <button
                                             type="button"
@@ -536,9 +534,9 @@ export function PartItemRow({
                                                     [enh.id]: !prev[enh.id],
                                                 }))
                                             }
-                                            className="inline-flex items-center px-2 py-0.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                                            className="inline-flex items-center h-7 px-1.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-xs leading-none whitespace-nowrap shrink-0 relative z-10"
                                         >
-                                            {enhShowProps ? "הסתר מאפיינים" : "מאפיינים"}
+                                            {enhShowProps ? "הסתר" : "מאפיינים"}
                                         </button>
                                     )}
                                 </div>

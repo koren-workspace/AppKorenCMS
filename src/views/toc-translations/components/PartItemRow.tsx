@@ -496,7 +496,7 @@ export function PartItemRow({
                         onClick={() => setLargeTextEditor({ kind: "main" })}
                         className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
                     >
-                        פתח טקסט גדול
+                       הגדל חלון +
                     </button>
                 </div>
                 <textarea

@@ -29,6 +29,10 @@ import {
 /** פריט מתרגום אחר שמקושר לפריט הנוכחי (לפי linkedItem); tId = מזהה התרגום */
 export type RelatedEntry = { id: string; tId: string; values: any };
 
+type LargeTextEditorTarget =
+    | { kind: "main" }
+    | { kind: "enhancement"; id: string; tId: string };
+
 type PartItemRowProps = {
     item: Entity<any>;
     localVal: Record<string, any>;
@@ -109,6 +113,7 @@ export function PartItemRow({
     const dateSetFull = dateSetEntry?.full ?? dateSetShort;
     const [showProps, setShowProps] = useState(false);
     const [showEnhancementProps, setShowEnhancementProps] = useState<Record<string, boolean>>({});
+    const [largeTextEditor, setLargeTextEditor] = useState<LargeTextEditorTarget | null>(null);
     const entityId = item.id;
     const currentType = (localVal.type ?? "body") as string;
     const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, isBaseTranslation);
@@ -117,6 +122,33 @@ export function PartItemRow({
     const showAttachedMeta = supportsAttachedMeta(currentType);
     const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
     const mainContentRtl = contentUsesRtlAlignment(localVal.content);
+
+    const activeLargeTextEditor = (() => {
+        if (!largeTextEditor) return null;
+        if (largeTextEditor.kind === "main") {
+            return {
+                title: `עריכת טקסט פריט ${curId ?? item.id}`,
+                value: localVal.content ?? "",
+                isRtl: mainContentRtl,
+                className: `${getItemStyle(localVal.type)} ${mainContentRtl ? "" : "text-left"}`,
+                onChange: (value: string) => onContentChange(item.id, value),
+                readOnly: false,
+            };
+        }
+
+        const enh = related.find((entry) => entry.id === largeTextEditor.id);
+        if (!enh) return null;
+        const displayVal = { ...enh.values, ...enhancementLocalValues[enh.id] };
+        const isRtl = contentUsesRtlAlignment(displayVal?.content);
+        return {
+            title: `עריכת טקסט תרגום ${largeTextEditor.tId}`,
+            value: displayVal?.content ?? "",
+            isRtl,
+            className: `w-full p-2 border border-gray-200 rounded text-base min-h-[72px] whitespace-pre-wrap ${isRtl ? "" : "text-left"}`,
+            onChange: (value: string) => onEnhancementFieldChange?.(enh.id, enh.tId, "content", value),
+            readOnly: !onEnhancementFieldChange,
+        };
+    })();
 
     useEffect(() => {
         if (!autoFocus) return;
@@ -458,6 +490,15 @@ export function PartItemRow({
                         </label>
                     </div>
                 )}
+                <div className="flex justify-end mb-1">
+                    <button
+                        type="button"
+                        onClick={() => setLargeTextEditor({ kind: "main" })}
+                        className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                    >
+                        פתח טקסט גדול
+                    </button>
+                </div>
                 <textarea
                     ref={contentTextareaRef}
                     className={`${getItemStyle(localVal.type)} ${mainContentRtl ? "" : "text-left"}`}
@@ -720,6 +761,15 @@ export function PartItemRow({
                                         </label>
                                     </div>
                                 )}
+                                <div className="flex justify-end mb-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLargeTextEditor({ kind: "enhancement", id: enh.id, tId: enh.tId })}
+                                        className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                                    >
+                                        פתח טקסט גדול
+                                    </button>
+                                </div>
                                 {onEnhancementFieldChange ? (
                                     <textarea
                                         value={displayVal?.content ?? ""}
@@ -789,6 +839,43 @@ export function PartItemRow({
                 >
                     + הוסף הוראה כאן
                 </button>
+            )}
+            {activeLargeTextEditor && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" dir="rtl">
+                    <div className="bg-white rounded-lg shadow-xl w-[min(1100px,95vw)] max-h-[90vh] flex flex-col overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+                            <h2 className="font-bold text-lg">{activeLargeTextEditor.title}</h2>
+                            <button
+                                type="button"
+                                onClick={() => setLargeTextEditor(null)}
+                                className="text-gray-400 hover:text-gray-600 text-lg"
+                                aria-label="סגור"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-4 flex-1 min-h-0">
+                            <textarea
+                                value={activeLargeTextEditor.value}
+                                onChange={(e) => activeLargeTextEditor.onChange(e.target.value)}
+                                readOnly={activeLargeTextEditor.readOnly}
+                                className={`${activeLargeTextEditor.className} h-[65vh] resize-none text-xl leading-loose focus:outline-none focus:ring-2 focus:ring-blue-300`}
+                                dir={activeLargeTextEditor.isRtl ? "rtl" : "ltr"}
+                                style={{ textAlign: activeLargeTextEditor.isRtl ? "right" : "left" }}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="px-4 py-3 border-t bg-gray-50 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setLargeTextEditor(null)}
+                                className="px-5 py-2 bg-blue-600 text-white rounded font-bold text-base hover:bg-blue-700"
+                            >
+                                סגור
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </React.Fragment>
     );

@@ -186,33 +186,41 @@ export function PartItemRow({
                         )}
                     </div>
                 )}
-                <div className="flex justify-between items-center text-sm text-gray-500 mb-1 uppercase tracking-tight gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="item-en-ltr text-xs shrink-0">itemId: {curId}</span>
-                        {isDateRestricted && (
-                            <div className="relative group shrink-0 normal-case tracking-normal">
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
-                                    מוגבל לתאריכים
-                                </span>
-                                <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
-                                    {dateSetShort && (
-                                        <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
-                                            {dateSetShort}
+                <div className="space-y-1 mb-1 text-sm text-gray-500">
+                    <div className="flex justify-between items-center uppercase tracking-tight gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="item-en-ltr text-xs shrink-0">itemId: {curId}</span>
+                            {isDateRestricted && (
+                                <div className="relative group shrink-0 normal-case tracking-normal">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
+                                        מוגבל לתאריכים
+                                    </span>
+                                    <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
+                                        {dateSetShort && (
+                                            <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
+                                                {dateSetShort}
+                                            </div>
+                                        )}
+                                        {dateSetFull && dateSetFull !== dateSetShort && (
+                                            <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
+                                                {dateSetFull}
+                                            </div>
+                                        )}
+                                        <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
+                                            ID: {localVal.dateSetId}
                                         </div>
-                                    )}
-                                    {dateSetFull && dateSetFull !== dateSetShort && (
-                                        <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
-                                            {dateSetFull}
-                                        </div>
-                                    )}
-                                    <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
-                                        ID: {localVal.dateSetId}
                                     </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
+                        <span className="item-en-ltr text-xs shrink-0">
+                            Update:{" "}
+                            {localVal.timestamp
+                                ? new Date(localVal.timestamp).toLocaleTimeString()
+                                : "Never"}
+                        </span>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
                         {onFieldChange && (
                             <button
                                 type="button"
@@ -236,6 +244,13 @@ export function PartItemRow({
                             </button>
                         )}
                         */}
+                        <button
+                            type="button"
+                            onClick={() => setLargeTextEditor({ kind: "main" })}
+                            className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                        >
+                            הגדל חלון +
+                        </button>
                         {onDelete && !isPendingDelete && (
                             <button
                                 type="button"
@@ -254,12 +269,6 @@ export function PartItemRow({
                                 מחק פריט
                             </button>
                         )}
-                        <span className="item-en-ltr text-xs">
-                            Update:{" "}
-                            {localVal.timestamp
-                                ? new Date(localVal.timestamp).toLocaleTimeString()
-                                : "Never"}
-                        </span>
                     </div>
                 </div>
                 {showProps && onFieldChange && (
@@ -490,15 +499,6 @@ export function PartItemRow({
                         </label>
                     </div>
                 )}
-                <div className="flex justify-end mb-1">
-                    <button
-                        type="button"
-                        onClick={() => setLargeTextEditor({ kind: "main" })}
-                        className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
-                    >
-                       הגדל חלון +
-                    </button>
-                </div>
                 <textarea
                     ref={contentTextareaRef}
                     className={`${getItemStyle(localVal.type)} ${mainContentRtl ? "" : "text-left"}`}
@@ -538,50 +538,67 @@ export function PartItemRow({
                                 key={enh.id}
                                 className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
                             >
-                                <div className="flex items-center justify-between mb-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`font-bold text-xs item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
-                                        <span className="text-xs text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
-                                        {relatedWillBeDeleted && (
-                                            <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
-                                        )}
-                                        {enhIsDateRestricted && !relatedWillBeDeleted && (
-                                            <div className="relative group">
-                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
-                                                    מוגבל לתאריכים
-                                                </span>
-                                                <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
-                                                    {enhShort && (
-                                                        <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
-                                                            {enhShort}
+                                <div className="space-y-1 mb-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className={`font-bold text-xs item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
+                                            <span className="text-xs text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
+                                            {relatedWillBeDeleted && (
+                                                <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
+                                            )}
+                                            {enhIsDateRestricted && !relatedWillBeDeleted && (
+                                                <div className="relative group">
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
+                                                        מוגבל לתאריכים
+                                                    </span>
+                                                    <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
+                                                        {enhShort && (
+                                                            <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
+                                                                {enhShort}
+                                                            </div>
+                                                        )}
+                                                        {enhFull && enhFull !== enhShort && (
+                                                            <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
+                                                                {enhFull}
+                                                            </div>
+                                                        )}
+                                                        <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
+                                                            ID: {displayVal.dateSetId}
                                                         </div>
-                                                    )}
-                                                    {enhFull && enhFull !== enhShort && (
-                                                        <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
-                                                            {enhFull}
-                                                        </div>
-                                                    )}
-                                                    <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
-                                                        ID: {displayVal.dateSetId}
                                                     </div>
                                                 </div>
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
+                                        <span className="item-en-ltr text-xs text-gray-500 shrink-0">
+                                            Update:{" "}
+                                            {displayVal.timestamp
+                                                ? new Date(displayVal.timestamp).toLocaleTimeString()
+                                                : "Never"}
+                                        </span>
                                     </div>
-                                    {onEnhancementFieldChange && (
+                                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
                                         <button
                                             type="button"
-                                            onClick={() =>
-                                                setShowEnhancementProps((prev) => ({
-                                                    ...prev,
-                                                    [enh.id]: !prev[enh.id],
-                                                }))
-                                            }
-                                            className="inline-flex items-center px-2 py-0.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                                            onClick={() => setLargeTextEditor({ kind: "enhancement", id: enh.id, tId: enh.tId })}
+                                            className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
                                         >
-                                            {enhShowProps ? "הסתר מאפיינים" : "מאפיינים"}
+                                            הגדל חלון +
                                         </button>
-                                    )}
+                                        {onEnhancementFieldChange && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowEnhancementProps((prev) => ({
+                                                        ...prev,
+                                                        [enh.id]: !prev[enh.id],
+                                                    }))
+                                                }
+                                                className="inline-flex items-center px-2 py-0.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                                            >
+                                                {enhShowProps ? "הסתר מאפיינים" : "מאפיינים"}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 {enhShowProps && onEnhancementFieldChange && (
                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 p-2 bg-white rounded text-base border border-blue-100">
@@ -761,15 +778,6 @@ export function PartItemRow({
                                         </label>
                                     </div>
                                 )}
-                                <div className="flex justify-end mb-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setLargeTextEditor({ kind: "enhancement", id: enh.id, tId: enh.tId })}
-                                        className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
-                                    >
-                                        פתח טקסט גדול
-                                    </button>
-                                </div>
                                 {onEnhancementFieldChange ? (
                                     <textarea
                                         value={displayVal?.content ?? ""}

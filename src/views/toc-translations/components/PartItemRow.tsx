@@ -16,7 +16,6 @@ import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
-import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import {
     ITEM_TYPE_OPTIONS,
     INSTRUCTION_TYPE_OPTIONS,
@@ -260,7 +259,7 @@ export function PartItemRow({
                                 onClick={() => setShowProps((p) => !p)}
                                 className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                             >
-                                {showProps ? "הסתר" : "מאפיינים"}
+                                {showProps ? "הסתר מאפיינים" : "מאפיינים"}
                             </button>
                         )}
                         {/* ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———

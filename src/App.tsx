@@ -8,10 +8,22 @@ const ALLOWED_EMAILS = (import.meta.env.VITE_ALLOWED_EMAILS as string ?? "")
     .map(e => e.trim().toLowerCase())
     .filter(Boolean);
 
+const firebaseProjectId = import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "";
+const firebaseAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? "";
+const environmentName =
+    [firebaseProjectId, firebaseAuthDomain].some(value => value.toLowerCase().includes("stage"))
+        ? "STAGE"
+        : "PROD";
+const appTitle = `My CMS (${environmentName})`;
+
 function App() {
+    React.useEffect(() => {
+        document.title = appTitle;
+    }, []);
+
     return (
         <FireCMSFirebaseApp
-            name={"My CMS"}
+            name={appTitle}
             firebaseConfig={firebaseConfig}
             collections={appConfig.collections}
             views={appConfig.views}

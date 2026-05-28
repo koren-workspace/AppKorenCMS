@@ -257,6 +257,13 @@ export function TocTranslationsView() {
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
                 hebrewLabel={dateFilter.hebrewLabel}
                 isLoading={dateFilter.isLoading}
+                selectedTocId={nav.selectedTocId}
+                publishNusachLabel={getNusachDisplayLabel(
+                    nav.selectedTocId ?? "",
+                    nav.currentTocData?.nusach
+                )}
+                saving={partEdit.saving}
+                onFinalPublish={partEdit.handleFinalPublish}
             />
             <div className="flex flex-1 min-h-0 gap-1">
             {/* עמודה 1–2: בחירת נוסח (TOC) ותרגום */}
@@ -322,10 +329,6 @@ export function TocTranslationsView() {
             <PartEditPanel
                 selectedGroupId={partEdit.selectedGroupId}
                 selectedTocId={nav.selectedTocId}
-                publishNusachLabel={getNusachDisplayLabel(
-                    nav.selectedTocId ?? "",
-                    nav.currentTocData?.nusach
-                )}
                 saving={partEdit.saving}
                 changedIds={partEdit.changedIds}
                 pendingDeletesCount={partEdit.pendingDeletes.length}
@@ -334,7 +337,6 @@ export function TocTranslationsView() {
                 localValues={partEdit.localValues}
                 enhancements={partEdit.enhancements}
                 onSaveGroup={partEdit.handleSaveGroup}
-                onFinalPublish={partEdit.handleFinalPublish}
                 onContentChange={(id, value) =>
                     partEdit.updateLocalItem(id, "content", value)
                 }

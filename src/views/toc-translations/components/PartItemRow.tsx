@@ -15,6 +15,8 @@ import type { DateSetLabelEntry } from "../hooks/useDateSetLabels";
 import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
+import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
+import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import {
     ITEM_TYPE_OPTIONS,
     INSTRUCTION_TYPE_OPTIONS,
@@ -27,42 +29,31 @@ import {
     supportsNoSpace,
 } from "../constants/itemFields";
 
+function OpenInNewIcon({ className = "h-3.5 w-3.5 shrink-0" }: { className?: string }) {
+    return (
+        <svg
+            className={className}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+        >
+            <path d="M14 3h7v7" />
+            <path d="M10 14 21 3" />
+            <path d="M21 14v7H3V3h7" />
+        </svg>
+    );
+}
+
 /** פריט מתרגום אחר שמקושר לפריט הנוכחי (לפי linkedItem); tId = מזהה התרגום */
 export type RelatedEntry = { id: string; tId: string; values: any };
 
-/** תגית "מוגבל לתאריכים" + tooltip (נפתח למטה כדי שלא יחסום כפתורי פעולה) */
-function DateRestrictionBadge({
-    dateSetId,
-    dateSetShort,
-    dateSetFull,
-}: {
-    dateSetId: string;
-    dateSetShort: string | null;
-    dateSetFull: string | null;
-}) {
-    return (
-        <div className="relative group shrink-0 normal-case tracking-normal">
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
-                מוגבל לתאריכים
-            </span>
-            <div className="absolute top-full right-0 mt-1 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
-                {dateSetShort && (
-                    <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
-                        {dateSetShort}
-                    </div>
-                )}
-                {dateSetFull && dateSetFull !== dateSetShort && (
-                    <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
-                        {dateSetFull}
-                    </div>
-                )}
-                <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
-                    ID: {dateSetId}
-                </div>
-            </div>
-        </div>
-    );
-}
+type LargeTextEditorTarget =
+    | { kind: "main" }
+    | { kind: "enhancement"; id: string; tId: string };
 
 type PartItemRowProps = {
     item: Entity<any>;
@@ -138,12 +129,15 @@ export function PartItemRow({
     // dragHandleProps,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
+    const formatUpdateDate = (timestamp: unknown) =>
+        timestamp ? new Date(timestamp as string | number).toLocaleDateString("he-IL") : "לא עודכן";
     const isDateRestricted = !!localVal.dateSetId && localVal.dateSetId !== "100";
     const dateSetEntry = isDateRestricted ? (dateSetLabels[localVal.dateSetId] ?? null) : null;
     const dateSetShort = dateSetEntry?.short ?? (isDateRestricted ? `ID ${localVal.dateSetId}` : null);
     const dateSetFull = dateSetEntry?.full ?? dateSetShort;
     const [showProps, setShowProps] = useState(false);
     const [showEnhancementProps, setShowEnhancementProps] = useState<Record<string, boolean>>({});
+    const [largeTextEditor, setLargeTextEditor] = useState<LargeTextEditorTarget | null>(null);
     const entityId = item.id;
     const currentType = (localVal.type ?? "body") as string;
     const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, isBaseTranslation);
@@ -152,6 +146,33 @@ export function PartItemRow({
     const showAttachedMeta = supportsAttachedMeta(currentType);
     const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
     const mainContentRtl = contentUsesRtlAlignment(localVal.content);
+
+    const activeLargeTextEditor = (() => {
+        if (!largeTextEditor) return null;
+        if (largeTextEditor.kind === "main") {
+            return {
+                title: `עריכת טקסט פריט ${curId ?? item.id}`,
+                value: localVal.content ?? "",
+                isRtl: mainContentRtl,
+                className: `${getItemStyle(localVal.type)} ${mainContentRtl ? "" : "text-left"}`,
+                onChange: (value: string) => onContentChange(item.id, value),
+                readOnly: false,
+            };
+        }
+
+        const enh = related.find((entry) => entry.id === largeTextEditor.id);
+        if (!enh) return null;
+        const displayVal = { ...enh.values, ...enhancementLocalValues[enh.id] };
+        const isRtl = contentUsesRtlAlignment(displayVal?.content);
+        return {
+            title: `עריכת טקסט תרגום ${largeTextEditor.tId}`,
+            value: displayVal?.content ?? "",
+            isRtl,
+            className: `w-full p-2 border border-gray-200 rounded text-base min-h-[72px] whitespace-pre-wrap ${isRtl ? "" : "text-left"}`,
+            onChange: (value: string) => onEnhancementFieldChange?.(enh.id, enh.tId, "content", value),
+            readOnly: !onEnhancementFieldChange,
+        };
+    })();
 
     useEffect(() => {
         if (!autoFocus) return;
@@ -189,22 +210,46 @@ export function PartItemRow({
                         )}
                     </div>
                 )}
-                <div className="flex items-center gap-1.5 mb-1 min-h-7 text-sm text-gray-500 uppercase tracking-tight">
-                    <span className="item-en-ltr text-xs shrink-0">itemId: {curId}</span>
-                    {isDateRestricted && (
-                        <DateRestrictionBadge
-                            dateSetId={localVal.dateSetId}
-                            dateSetShort={dateSetShort}
-                            dateSetFull={dateSetFull}
-                        />
-                    )}
-                    <span className="flex-1 min-w-0" aria-hidden />
-                    <div className="flex items-center gap-1 shrink-0 relative z-10">
+                <div className="space-y-1 mb-1 text-sm text-gray-500">
+                    <div className="flex justify-between items-center uppercase tracking-tight gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0 leading-none">
+                            <span className="item-en-ltr text-xs shrink-0 leading-none">itemId: {curId}</span>
+                            {isDateRestricted && (
+                                <div className="relative group shrink-0 normal-case tracking-normal inline-flex items-center -translate-y-px">
+                                    <span
+                                        className="inline-flex items-center px-1 py-px rounded text-[10px] font-medium leading-none bg-violet-100 border border-violet-300 text-violet-800 cursor-default select-none whitespace-nowrap"
+                                        title="מוגבל לתאריכים"
+                                    >
+                                        מוגבל לתאריכים
+                                    </span>
+                                    <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
+                                        {dateSetShort && (
+                                            <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
+                                                {dateSetShort}
+                                            </div>
+                                        )}
+                                        {dateSetFull && dateSetFull !== dateSetShort && (
+                                            <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
+                                                {dateSetFull}
+                                            </div>
+                                        )}
+                                        <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
+                                            ID: {localVal.dateSetId}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <span className="item-en-ltr text-xs shrink-0">
+                            תאריך עדכון: {formatUpdateDate(localVal.timestamp)}
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-end gap-1 flex-wrap">
                         {onFieldChange && (
                             <button
                                 type="button"
                                 onClick={() => setShowProps((p) => !p)}
-                                className="inline-flex items-center h-7 px-1.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
+                                className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                             >
                                 {showProps ? "הסתר" : "מאפיינים"}
                             </button>
@@ -215,7 +260,7 @@ export function PartItemRow({
                                 type="button"
                                 {...(dragHandleProps.attributes ?? {})}
                                 {...(dragHandleProps.listeners ?? {})}
-                                className="px-2 py-1 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-sm cursor-grab active:cursor-grabbing touch-none"
+                                className="px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs cursor-grab active:cursor-grabbing touch-none"
                                 title="גרור לשינוי סדר"
                                 tabIndex={-1}
                             >
@@ -223,6 +268,15 @@ export function PartItemRow({
                             </button>
                         )}
                         */}
+                        <button
+                            type="button"
+                            onClick={() => setLargeTextEditor({ kind: "main" })}
+                            className="inline-flex items-center px-1.5 py-px text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-xs leading-none whitespace-nowrap"
+                            title="הגדל חלון עריכה"
+                            aria-label="הגדל חלון עריכה"
+                        >
+                            <OpenInNewIcon />
+                        </button>
                         {onDelete && !isPendingDelete && (
                             <button
                                 type="button"
@@ -235,11 +289,11 @@ export function PartItemRow({
                                     if (window.confirm(msg))
                                         onDelete(item, curId ?? item.id);
                                 }}
-                                className="inline-flex h-7 w-7 items-center justify-center text-red-600 hover:bg-red-50 border border-red-200 rounded"
+                                className="inline-flex items-center px-1.5 py-px text-red-600 hover:bg-red-50 border border-red-200 rounded text-xs font-bold leading-none whitespace-nowrap"
                                 title={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
-                                aria-label="מחק פריט"
+                                aria-label={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
                             >
-                                <DeleteTrashIcon className="h-3.5 w-3.5" />
+                                <DeleteTrashIcon className="h-3.5 w-3.5 shrink-0" />
                             </button>
                         )}
                     </div>
@@ -492,6 +546,7 @@ export function PartItemRow({
                     )}
                     {related.map((enh) => {
                         const displayVal = { ...enh.values, ...enhancementLocalValues[enh.id] };
+                        const translationLabel = getTranslationDisplayLabel(enh.tId);
                         const enhChanged = isEnhancementChanged?.(enh.id) ?? false;
                         const enhShowProps = showEnhancementProps[enh.id] ?? false;
                         const relatedWillBeDeleted = isPendingDelete && isBaseTranslation;
@@ -511,34 +566,73 @@ export function PartItemRow({
                                 key={enh.id}
                                 className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
                             >
-                                <div className="flex items-center gap-1.5 mb-1 min-h-7">
-                                    <span className={`font-bold text-xs item-en-ltr shrink-0 ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
-                                    <span className="text-xs text-gray-500 font-mono item-en-ltr shrink-0 hidden md:inline" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
-                                    {relatedWillBeDeleted && (
-                                        <span className="text-xs font-bold text-red-600 bg-red-200 px-1 py-0.5 rounded shrink-0 whitespace-nowrap">ימוחק בשמירה</span>
-                                    )}
-                                    {enhIsDateRestricted && !relatedWillBeDeleted && (
-                                        <DateRestrictionBadge
-                                            dateSetId={displayVal.dateSetId}
-                                            dateSetShort={enhShort}
-                                            dateSetFull={enhFull}
-                                        />
-                                    )}
-                                    <span className="flex-1 min-w-0" aria-hidden />
-                                    {onEnhancementFieldChange && (
+                                <div className="space-y-1 mb-1 text-sm text-gray-500">
+                                    <div className="flex items-center justify-between uppercase tracking-tight gap-2">
+                                        <div className="flex items-center gap-1.5 min-w-0 leading-none">
+                                            <span className={`font-bold text-xs shrink-0 ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{translationLabel}</span>
+                                            <span className="text-xs text-gray-500 font-mono item-en-ltr shrink-0" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
+                                        </div>
+                                        <span className="item-en-ltr text-xs shrink-0">
+                                            תאריך עדכון: {formatUpdateDate(displayVal.timestamp)}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                        <div className="flex items-center gap-1.5 min-h-[20px]">
+                                            {relatedWillBeDeleted && (
+                                                <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
+                                            )}
+                                            {enhIsDateRestricted && !relatedWillBeDeleted && (
+                                                <div className="relative group inline-flex items-center">
+                                                    <span
+                                                        className="inline-flex items-center px-1 py-px rounded text-[10px] font-medium leading-none bg-violet-100 border border-violet-300 text-violet-800 cursor-default select-none whitespace-nowrap"
+                                                        title="מוגבל לתאריכים"
+                                                    >
+                                                        מוגבל לתאריכים
+                                                    </span>
+                                                    <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
+                                                        {enhShort && (
+                                                            <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
+                                                                {enhShort}
+                                                            </div>
+                                                        )}
+                                                        {enhFull && enhFull !== enhShort && (
+                                                            <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
+                                                                {enhFull}
+                                                            </div>
+                                                        )}
+                                                        <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
+                                                            ID: {displayVal.dateSetId}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center justify-end gap-1 flex-wrap">
                                         <button
                                             type="button"
-                                            onClick={() =>
-                                                setShowEnhancementProps((prev) => ({
-                                                    ...prev,
-                                                    [enh.id]: !prev[enh.id],
-                                                }))
-                                            }
-                                            className="inline-flex items-center h-7 px-1.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-xs leading-none whitespace-nowrap shrink-0 relative z-10"
+                                            onClick={() => setLargeTextEditor({ kind: "enhancement", id: enh.id, tId: enh.tId })}
+                                            className="inline-flex items-center px-1.5 py-px text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-xs leading-none whitespace-nowrap"
+                                            title="הגדל חלון עריכה"
+                                            aria-label="הגדל חלון עריכה"
                                         >
-                                            {enhShowProps ? "הסתר" : "מאפיינים"}
+                                            <OpenInNewIcon />
                                         </button>
-                                    )}
+                                        {onEnhancementFieldChange && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowEnhancementProps((prev) => ({
+                                                        ...prev,
+                                                        [enh.id]: !prev[enh.id],
+                                                    }))
+                                                }
+                                                className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
+                                            >
+                                                {enhShowProps ? "הסתר מאפיינים" : "מאפיינים"}
+                                            </button>
+                                        )}
+                                        </div>
+                                    </div>
                                 </div>
                                 {enhShowProps && onEnhancementFieldChange && (
                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 p-2 bg-white rounded text-base border border-blue-100">
@@ -740,53 +834,92 @@ export function PartItemRow({
                     })}
                 </div>
             )}
-            {onAddTranslation && (
-                <div className="mt-1.5">
-                    <button
-                        type="button"
-                        disabled={isAddTranslationBlocked}
-                        title={
-                            isAddTranslationBlocked
-                                ? "הוספת תרגום זמינה רק אחרי לחיצה על «שמור מקטע» (בראש אזור המקטע)"
-                                : undefined
-                        }
-                        onClick={() => onAddTranslation!(item)}
-                        className={`w-full py-3 px-3 rounded-lg text-base font-semibold border transition-colors shadow-sm ${
-                            isAddTranslationBlocked
-                                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                                : "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300"
-                        }`}
-                    >
-                        + הוסף תרגום לטקסט זה
-                    </button>
-                    {isAddTranslationBlocked && (
-                        <p
-                            className="mt-1.5 text-base text-amber-900/90 text-center leading-snug px-1"
-                            dir="rtl"
+            {(onAddTranslation || onAddAfter || onAddInstructionAfter) && (
+                <div className="mt-1.5 flex flex-col gap-1 w-full">
+                    {onAddTranslation && (
+                        <>
+                            <button
+                                type="button"
+                                disabled={isAddTranslationBlocked}
+                                title={
+                                    isAddTranslationBlocked
+                                        ? "הוספת תרגום זמינה רק אחרי שמירת חלק התפילה"
+                                        : "הוסף תרגום לטקסט של הפריט שמעל"
+                                }
+                                onClick={() => onAddTranslation!(item)}
+                                className={`w-full px-3 py-1 rounded text-sm font-semibold border transition-colors ${
+                                    isAddTranslationBlocked
+                                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                        : "bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100"
+                                }`}
+                            >
+                                + הוסף תרגום לטקסט זה
+                            </button>
+                            {isAddTranslationBlocked && (
+                                <p className="text-xs text-amber-900 leading-snug px-1">
+                                    יש לשמור את חלק התפילה לפני הוספת תרגום
+                                </p>
+                            )}
+                        </>
+                    )}
+                    {onAddAfter && (
+                        <button
+                            type="button"
+                            onClick={onAddAfter}
+                            title="הוסף פריט חדש אחרי הפריט שמעל"
+                            className="w-full px-3 py-1 rounded text-sm font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
                         >
-                            לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת המקטע</span>
-                            — לחץ <span className="font-semibold">«שמור מקטע»</span> למעלה.
-                        </p>
+                            + הוסף פריט
+                        </button>
+                    )}
+                    {onAddInstructionAfter && (
+                        <button
+                            type="button"
+                            onClick={onAddInstructionAfter}
+                            title="הוסף פריט הוראה אחרי הפריט שמעל"
+                            className="w-full px-3 py-1 rounded text-sm font-semibold bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 transition-colors"
+                        >
+                            + הוסף הוראה כאן
+                        </button>
                     )}
                 </div>
             )}
-            {onAddAfter && (
-                <button
-                    type="button"
-                    onClick={onAddAfter}
-                    className="w-full py-3 px-3 mt-1.5 rounded-lg text-base font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
-                >
-                    + הוסף פריט
-                </button>
-            )}
-            {onAddInstructionAfter && (
-                <button
-                    type="button"
-                    onClick={onAddInstructionAfter}
-                    className="w-full py-3 px-3 mt-1.5 rounded-lg text-base font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
-                >
-                    + הוסף הוראה כאן
-                </button>
+            {activeLargeTextEditor && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" dir="rtl">
+                    <div className="bg-white rounded-lg shadow-xl w-[min(1100px,95vw)] max-h-[90vh] flex flex-col overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+                            <h2 className="font-bold text-lg">{activeLargeTextEditor.title}</h2>
+                            <button
+                                type="button"
+                                onClick={() => setLargeTextEditor(null)}
+                                className="text-gray-400 hover:text-gray-600 text-lg"
+                                aria-label="סגור"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-4 flex-1 min-h-0">
+                            <textarea
+                                value={activeLargeTextEditor.value}
+                                onChange={(e) => activeLargeTextEditor.onChange(e.target.value)}
+                                readOnly={activeLargeTextEditor.readOnly}
+                                className={`${activeLargeTextEditor.className} h-[65vh] resize-none text-xl leading-loose focus:outline-none focus:ring-2 focus:ring-blue-300`}
+                                dir={activeLargeTextEditor.isRtl ? "rtl" : "ltr"}
+                                style={{ textAlign: activeLargeTextEditor.isRtl ? "right" : "left" }}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="px-4 py-3 border-t bg-gray-50 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setLargeTextEditor(null)}
+                                className="px-5 py-2 bg-blue-600 text-white rounded font-bold text-base hover:bg-blue-700"
+                            >
+                                סגור
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </React.Fragment>
     );

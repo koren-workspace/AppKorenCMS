@@ -983,4 +983,75 @@ describe("partEditService – createTranslationItem", () => {
         expect(Number(result.newItemId)).toBeLessThan(200);
         expect(saveEntity).toHaveBeenCalledTimes(1);
     });
+
+    it("uses the minimum linked id of next base row as cap", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const fetchCollection = vi.fn().mockImplementation(({ filter }: any) => {
+            if (filter?.partId?.[1] === "part-a") {
+                return Promise.resolve([
+                    { id: "160", values: { itemId: "160", linkedItem: ["100"] } },
+                    // intentionally unsorted and both linked to next base row (200)
+                    { id: "250", values: { itemId: "250", linkedItem: ["200"] } },
+                    { id: "205", values: { itemId: "205", linkedItem: ["200"] } },
+                ]);
+            }
+            return Promise.resolve([]);
+        });
+        const dataSource = {
+            fetchCollection,
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await createTranslationItem(dataSource as any, {
+            targetTranslationId: "0-sefard",
+            selectedPrayerId: "p1",
+            partId: "part-a",
+            baseItemId: "100",
+            afterItemId: null,
+            baseItemIdsInPartOrder: ["100", "200"],
+            currentBaseRowIndex: 0,
+            translations: [],
+            content: "new",
+            minIdBefore: "100",
+        });
+
+        expect(Number(result.newItemId)).toBeGreaterThan(160);
+        expect(Number(result.newItemId)).toBeLessThan(205);
+        expect(saveEntity).toHaveBeenCalledTimes(1);
+    });
+
+    it("first translation on base row stays above baseItemId when part has only later-row translations", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const fetchCollection = vi.fn().mockImplementation(({ filter }: any) => {
+            if (filter?.partId?.[1] === "part-a") {
+                return Promise.resolve([
+                    { id: "250", values: { itemId: "250", linkedItem: ["200"] } },
+                ]);
+            }
+            return Promise.resolve([]);
+        });
+        const dataSource = {
+            fetchCollection,
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await createTranslationItem(dataSource as any, {
+            targetTranslationId: "0-sefard",
+            selectedPrayerId: "p1",
+            partId: "part-a",
+            baseItemId: "100",
+            afterItemId: null,
+            baseItemIdsInPartOrder: ["100", "200"],
+            currentBaseRowIndex: 0,
+            translations: [],
+            content: "new",
+            minIdBefore: "100",
+        });
+
+        expect(Number(result.newItemId)).toBeGreaterThan(100);
+        expect(Number(result.newItemId)).toBeLessThan(200);
+        expect(saveEntity).toHaveBeenCalledTimes(1);
+    });
 });

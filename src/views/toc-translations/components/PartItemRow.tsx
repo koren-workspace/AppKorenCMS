@@ -14,6 +14,8 @@ import React, { useState, useRef, useEffect } from "react";
 import type { DateSetLabelEntry } from "../hooks/useDateSetLabels";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
+import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
+import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import {
     ITEM_TYPE_OPTIONS,
     INSTRUCTION_TYPE_OPTIONS,
@@ -25,6 +27,25 @@ import {
     supportsHebrewBodyOnlyFields,
     supportsNoSpace,
 } from "../constants/itemFields";
+
+function OpenInNewIcon({ className = "h-3.5 w-3.5 shrink-0" }: { className?: string }) {
+    return (
+        <svg
+            className={className}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+        >
+            <path d="M14 3h7v7" />
+            <path d="M10 14 21 3" />
+            <path d="M21 14v7H3V3h7" />
+        </svg>
+    );
+}
 
 /** פריט מתרגום אחר שמקושר לפריט הנוכחי (לפי linkedItem); tId = מזהה התרגום */
 export type RelatedEntry = { id: string; tId: string; values: any };
@@ -107,6 +128,8 @@ export function PartItemRow({
     // dragHandleProps,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
+    const formatUpdateDate = (timestamp: unknown) =>
+        timestamp ? new Date(timestamp as string | number).toLocaleDateString("he-IL") : "לא עודכן";
     const isDateRestricted = !!localVal.dateSetId && localVal.dateSetId !== "100";
     const dateSetEntry = isDateRestricted ? (dateSetLabels[localVal.dateSetId] ?? null) : null;
     const dateSetShort = dateSetEntry?.short ?? (isDateRestricted ? `ID ${localVal.dateSetId}` : null);
@@ -188,11 +211,14 @@ export function PartItemRow({
                 )}
                 <div className="space-y-1 mb-1 text-sm text-gray-500">
                     <div className="flex justify-between items-center uppercase tracking-tight gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="item-en-ltr text-xs shrink-0">itemId: {curId}</span>
+                        <div className="flex items-center gap-1.5 min-w-0 leading-none">
+                            <span className="item-en-ltr text-xs shrink-0 leading-none">itemId: {curId}</span>
                             {isDateRestricted && (
-                                <div className="relative group shrink-0 normal-case tracking-normal">
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
+                                <div className="relative group shrink-0 normal-case tracking-normal inline-flex items-center -translate-y-px">
+                                    <span
+                                        className="inline-flex items-center px-1 py-px rounded text-[10px] font-medium leading-none bg-violet-100 border border-violet-300 text-violet-800 cursor-default select-none whitespace-nowrap"
+                                        title="מוגבל לתאריכים"
+                                    >
                                         מוגבל לתאריכים
                                     </span>
                                     <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
@@ -214,18 +240,15 @@ export function PartItemRow({
                             )}
                         </div>
                         <span className="item-en-ltr text-xs shrink-0">
-                            Update:{" "}
-                            {localVal.timestamp
-                                ? new Date(localVal.timestamp).toLocaleTimeString()
-                                : "Never"}
+                            תאריך עדכון: {formatUpdateDate(localVal.timestamp)}
                         </span>
                     </div>
-                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                    <div className="flex items-center justify-end gap-1 flex-wrap">
                         {onFieldChange && (
                             <button
                                 type="button"
                                 onClick={() => setShowProps((p) => !p)}
-                                className="inline-flex items-center px-2 py-0.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded text-sm leading-none whitespace-nowrap"
+                                className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                             >
                                 {showProps ? "הסתר מאפיינים" : "מאפיינים"}
                             </button>
@@ -236,7 +259,7 @@ export function PartItemRow({
                                 type="button"
                                 {...(dragHandleProps.attributes ?? {})}
                                 {...(dragHandleProps.listeners ?? {})}
-                                className="px-2 py-1 text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-sm cursor-grab active:cursor-grabbing touch-none"
+                                className="px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs cursor-grab active:cursor-grabbing touch-none"
                                 title="גרור לשינוי סדר"
                                 tabIndex={-1}
                             >
@@ -247,9 +270,11 @@ export function PartItemRow({
                         <button
                             type="button"
                             onClick={() => setLargeTextEditor({ kind: "main" })}
-                            className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                            className="inline-flex items-center px-1.5 py-px text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-xs leading-none whitespace-nowrap"
+                            title="הגדל חלון עריכה"
+                            aria-label="הגדל חלון עריכה"
                         >
-                            הגדל חלון +
+                            <OpenInNewIcon />
                         </button>
                         {onDelete && !isPendingDelete && (
                             <button
@@ -263,10 +288,11 @@ export function PartItemRow({
                                     if (window.confirm(msg))
                                         onDelete(item, curId ?? item.id);
                                 }}
-                                className="inline-flex items-center px-2 py-0.5 text-red-600 hover:bg-red-50 border border-red-200 rounded text-sm font-bold leading-none whitespace-nowrap"
+                                className="inline-flex items-center px-1.5 py-px text-red-600 hover:bg-red-50 border border-red-200 rounded text-xs font-bold leading-none whitespace-nowrap"
                                 title={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
+                                aria-label={isBaseTranslation && related.length > 0 ? "מחק פריט וכל התרגומים המקושרים בכל הנוסחים" : "מחק פריט"}
                             >
-                                מחק פריט
+                                <DeleteTrashIcon className="h-3.5 w-3.5 shrink-0" />
                             </button>
                         )}
                     </div>
@@ -519,6 +545,7 @@ export function PartItemRow({
                     )}
                     {related.map((enh) => {
                         const displayVal = { ...enh.values, ...enhancementLocalValues[enh.id] };
+                        const translationLabel = getTranslationDisplayLabel(enh.tId);
                         const enhChanged = isEnhancementChanged?.(enh.id) ?? false;
                         const enhShowProps = showEnhancementProps[enh.id] ?? false;
                         const relatedWillBeDeleted = isPendingDelete && isBaseTranslation;
@@ -538,17 +565,27 @@ export function PartItemRow({
                                 key={enh.id}
                                 className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
                             >
-                                <div className="space-y-1 mb-1">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className={`font-bold text-xs item-en-ltr ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{enh.tId}</span>
-                                            <span className="text-xs text-gray-500 font-mono item-en-ltr" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
+                                <div className="space-y-1 mb-1 text-sm text-gray-500">
+                                    <div className="flex items-center justify-between uppercase tracking-tight gap-2">
+                                        <div className="flex items-center gap-1.5 min-w-0 leading-none">
+                                            <span className={`font-bold text-xs shrink-0 ${relatedWillBeDeleted ? "text-red-700" : "text-blue-600"}`}>{translationLabel}</span>
+                                            <span className="text-xs text-gray-500 font-mono item-en-ltr shrink-0" title="מזהה הפריט (entity ID)">ID: {enh.id}</span>
+                                        </div>
+                                        <span className="item-en-ltr text-xs shrink-0">
+                                            תאריך עדכון: {formatUpdateDate(displayVal.timestamp)}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                        <div className="flex items-center gap-1.5 min-h-[20px]">
                                             {relatedWillBeDeleted && (
                                                 <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
                                             )}
                                             {enhIsDateRestricted && !relatedWillBeDeleted && (
-                                                <div className="relative group">
-                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 border border-violet-400 text-violet-800 cursor-default select-none whitespace-nowrap">
+                                                <div className="relative group inline-flex items-center">
+                                                    <span
+                                                        className="inline-flex items-center px-1 py-px rounded text-[10px] font-medium leading-none bg-violet-100 border border-violet-300 text-violet-800 cursor-default select-none whitespace-nowrap"
+                                                        title="מוגבל לתאריכים"
+                                                    >
                                                         מוגבל לתאריכים
                                                     </span>
                                                     <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
@@ -569,20 +606,15 @@ export function PartItemRow({
                                                 </div>
                                             )}
                                         </div>
-                                        <span className="item-en-ltr text-xs text-gray-500 shrink-0">
-                                            Update:{" "}
-                                            {displayVal.timestamp
-                                                ? new Date(displayVal.timestamp).toLocaleTimeString()
-                                                : "Never"}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                        <div className="flex items-center justify-end gap-1 flex-wrap">
                                         <button
                                             type="button"
                                             onClick={() => setLargeTextEditor({ kind: "enhancement", id: enh.id, tId: enh.tId })}
-                                            className="inline-flex items-center px-2 py-0.5 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                                            className="inline-flex items-center px-1.5 py-px text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-xs leading-none whitespace-nowrap"
+                                            title="הגדל חלון עריכה"
+                                            aria-label="הגדל חלון עריכה"
                                         >
-                                            הגדל חלון +
+                                            <OpenInNewIcon />
                                         </button>
                                         {onEnhancementFieldChange && (
                                             <button
@@ -593,11 +625,12 @@ export function PartItemRow({
                                                         [enh.id]: !prev[enh.id],
                                                     }))
                                                 }
-                                                className="inline-flex items-center px-2 py-0.5 text-blue-500 hover:bg-blue-100 border border-blue-200 rounded text-sm leading-none whitespace-nowrap"
+                                                className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                                             >
                                                 {enhShowProps ? "הסתר מאפיינים" : "מאפיינים"}
                                             </button>
                                         )}
+                                        </div>
                                     </div>
                                 </div>
                                 {enhShowProps && onEnhancementFieldChange && (
@@ -800,53 +833,55 @@ export function PartItemRow({
                     })}
                 </div>
             )}
-            {onAddTranslation && (
-                <div className="mt-1.5">
-                    <button
-                        type="button"
-                        disabled={isAddTranslationBlocked}
-                        title={
-                            isAddTranslationBlocked
-                                ? "הוספת תרגום זמינה רק אחרי לחיצה על «שמור מקטע» (בראש אזור המקטע)"
-                                : undefined
-                        }
-                        onClick={() => onAddTranslation!(item)}
-                        className={`w-full py-3 px-3 rounded-lg text-base font-semibold border transition-colors shadow-sm ${
-                            isAddTranslationBlocked
-                                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                                : "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300"
-                        }`}
-                    >
-                        + הוסף תרגום לטקסט זה
-                    </button>
-                    {isAddTranslationBlocked && (
-                        <p
-                            className="mt-1.5 text-base text-amber-900/90 text-center leading-snug px-1"
-                            dir="rtl"
+            {(onAddTranslation || onAddAfter || onAddInstructionAfter) && (
+                <div className="mt-1.5 flex flex-col gap-1 w-full">
+                    {onAddTranslation && (
+                        <>
+                            <button
+                                type="button"
+                                disabled={isAddTranslationBlocked}
+                                title={
+                                    isAddTranslationBlocked
+                                        ? "הוספת תרגום זמינה רק אחרי שמירת חלק התפילה"
+                                        : "הוסף תרגום לטקסט של הפריט שמעל"
+                                }
+                                onClick={() => onAddTranslation!(item)}
+                                className={`w-full px-3 py-1 rounded text-sm font-semibold border transition-colors ${
+                                    isAddTranslationBlocked
+                                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                        : "bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100"
+                                }`}
+                            >
+                                + הוסף תרגום לטקסט זה
+                            </button>
+                            {isAddTranslationBlocked && (
+                                <p className="text-xs text-amber-900 leading-snug px-1">
+                                    יש לשמור את חלק התפילה לפני הוספת תרגום
+                                </p>
+                            )}
+                        </>
+                    )}
+                    {onAddAfter && (
+                        <button
+                            type="button"
+                            onClick={onAddAfter}
+                            title="הוסף פריט חדש אחרי הפריט שמעל"
+                            className="w-full px-3 py-1 rounded text-sm font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
                         >
-                            לא ניתן להוסיף תרגום לפני <span className="font-semibold">שמירת המקטע</span>
-                            — לחץ <span className="font-semibold">«שמור מקטע»</span> למעלה.
-                        </p>
+                            + הוסף פריט
+                        </button>
+                    )}
+                    {onAddInstructionAfter && (
+                        <button
+                            type="button"
+                            onClick={onAddInstructionAfter}
+                            title="הוסף פריט הוראה אחרי הפריט שמעל"
+                            className="w-full px-3 py-1 rounded text-sm font-semibold bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 transition-colors"
+                        >
+                            + הוסף הוראה כאן
+                        </button>
                     )}
                 </div>
-            )}
-            {onAddAfter && (
-                <button
-                    type="button"
-                    onClick={onAddAfter}
-                    className="w-full py-3 px-3 mt-1.5 rounded-lg text-base font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition-colors shadow-sm"
-                >
-                    + הוסף פריט
-                </button>
-            )}
-            {onAddInstructionAfter && (
-                <button
-                    type="button"
-                    onClick={onAddInstructionAfter}
-                    className="w-full py-3 px-3 mt-1.5 rounded-lg text-base font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors shadow-sm"
-                >
-                    + הוסף הוראה כאן
-                </button>
             )}
             {activeLargeTextEditor && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" dir="rtl">

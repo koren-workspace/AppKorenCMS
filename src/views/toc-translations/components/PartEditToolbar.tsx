@@ -17,10 +17,11 @@ export type PartEditToolbarProps = {
     saving: boolean;
     hasChanges: boolean;
     onSaveGroup: () => void;
-    /** מציג כפתורי פיצול והעברה – רק בנוסח הבסיסי */
+    /** מציג כפתורי פיצול / העברה / העתקה – רק בנוסח הבסיסי */
     allowSplitAndMove?: boolean;
     onSplitPart?: () => void;
     onMoveItemsToPart?: () => void;
+    onCopyItemsToPart?: () => void;
 };
 
 export function PartEditToolbar({
@@ -32,6 +33,7 @@ export function PartEditToolbar({
     allowSplitAndMove,
     onSplitPart,
     onMoveItemsToPart,
+    onCopyItemsToPart,
 }: PartEditToolbarProps) {
     const hasPart = !!selectedGroupId;
 
@@ -89,6 +91,18 @@ export function PartEditToolbar({
                                 >
                                     ↔ העבר
                                 </button>
+                                {onCopyItemsToPart && (
+                                    <button
+                                        type="button"
+                                        onClick={onCopyItemsToPart}
+                                        disabled={saving}
+                                        className={actionBtn}
+                                        style={btn(4)}
+                                        title="העתק פריטים לחלק תפילה אחר (יכול להיות תפילה/נוסח שונים) – המקור נשאר"
+                                    >
+                                        📋 העתק
+                                    </button>
+                                )}
                             </>
                         )}
                     </div>

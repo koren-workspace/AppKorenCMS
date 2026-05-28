@@ -22,6 +22,7 @@ import {
     createTranslationItem,
     splitPartItems,
     moveItemsToPart,
+    copyItemsToPart,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
@@ -48,6 +49,8 @@ export type PartEditContext = {
     currentParts: any[];
     /** תפילות בקטגוריה הנוכחית (לשם תפילה בתיעוד) */
     currentPrayers?: any[];
+    /** כל מסמכי ה-TOC (נוסחים) – לבחירת נוסח יעד במודל העתקה */
+    tocItems?: Entity<any>[];
     /** מוסיף מקטע ב-TOC (מ-useTocNavigation) – מחזיר newPartId */
     addPart: (
         name: string,
@@ -138,6 +141,7 @@ export function usePartEdit(context: PartEditContext) {
         selectedTocId,
         currentParts,
         currentPrayers,
+        tocItems = [],
         addPart,
     } = context;
 
@@ -194,6 +198,10 @@ export function usePartEdit(context: PartEditContext) {
 
     /** פריטים שסומנו למחיקה – נמחקים ב-Firestore רק בלחיצה על "שמור מקטע" */
     const [pendingDeletes, setPendingDeletes] = useState<Array<{ entity: Entity<any>; itemId: string }>>([]);
+    /** פריטי תרגום מקושרים שסומנו למחיקה מתצוגת בסיס */
+    const [pendingEnhancementDeletes, setPendingEnhancementDeletes] = useState<
+        Array<{ entity: Entity<any>; itemId: string; translationId: string }>
+    >([]);
     /** מזההים של פריטים עם deleted: true בשרת – לא מוצגים אבל נספרים בחישוב itemId/mit_id לפריטים חדשים */
     const [deletedIdsFromServer, setDeletedIdsFromServer] = useState<{ itemIds: string[]; mitIds: string[] }>({
         itemIds: [],
@@ -231,6 +239,10 @@ export function usePartEdit(context: PartEditContext) {
     const [moveToPartModalOpen, setMoveToPartModalOpen] = useState(false);
     /** פריטי מקטע היעד (נטענים בבחירת מקטע במודל ההעברה) */
     const [moveTargetPartItems, setMoveTargetPartItems] = useState<Entity<any>[]>([]);
+    // מודל העתקת פריטים לחלק תפילה אחר (יכול להיות תפילה/נוסח שונים)
+    const [copyToPartModalOpen, setCopyToPartModalOpen] = useState(false);
+    /** פריטי חלק היעד במודל ההעתקה (יכולים להיות מתפילה/נוסח אחרים) */
+    const [copyTargetPartItems, setCopyTargetPartItems] = useState<Entity<any>[]>([]);
 
     // מודל "הוסף תרגום" – פריט בסיס, תרגום יעד, מיקום, תוכן
     const [addTranslationOpen, setAddTranslationOpen] = useState(false);
@@ -522,7 +534,14 @@ export function usePartEdit(context: PartEditContext) {
 
     /** שומר את כל הפריטים שסומנו כ־changed, שינויי התרגומים המקושרים, ומבצע מחיקות שסומנו; אם יש פריטים חדשים או מחיקות – טוען מחדש */
     const handleSaveGroup = async () => {
-        if (!currentTranslationData || (changedIds.size === 0 && enhancementChangedIds.size === 0 && pendingDeletes.length === 0)) return;
+        if (
+            !currentTranslationData ||
+            (changedIds.size === 0 &&
+                enhancementChangedIds.size === 0 &&
+                pendingDeletes.length === 0 &&
+                pendingEnhancementDeletes.length === 0)
+        )
+            return;
         setSaving(true);
         const path = `translations/${currentTranslationData.translationId}/prayers/${selectedPrayerId}/items`;
         const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
@@ -530,6 +549,10 @@ export function usePartEdit(context: PartEditContext) {
         const hasNewItems = changedIdList.some((id) => id.startsWith("new_"));
         const hadEnhancementChanges = enhancementChangedIds.size > 0;
         const pendingDeletesList = [...pendingDeletes];
+        const pendingEnhancementDeletesList = [...pendingEnhancementDeletes];
+        const pendingEnhancementDeleteIds = new Set(
+            pendingEnhancementDeletesList.map((p) => p.entity.id)
+        );
         try {
             if (changedIds.size > 0) {
                 await savePartItems(dataSource, {
@@ -541,6 +564,7 @@ export function usePartEdit(context: PartEditContext) {
             if (enhancementChangedIds.size > 0 && selectedPrayerId) {
                 const byTid: Record<string, string[]> = {};
                 enhancementChangedIds.forEach((eid) => {
+                    if (pendingEnhancementDeleteIds.has(eid)) return;
                     const tid = enhancementTranslationIds[eid];
                     if (tid) {
                         if (!byTid[tid]) byTid[tid] = [];
@@ -641,7 +665,24 @@ export function usePartEdit(context: PartEditContext) {
                     });
                 }
             }
+            for (const { entity, translationId } of pendingEnhancementDeletesList) {
+                const path =
+                    entity.path ??
+                    `translations/${translationId}/prayers/${selectedPrayerId}/items`;
+                await dataSource.saveEntity({
+                    path,
+                    entityId: entity.id,
+                    values: {
+                        ...entity.values,
+                        ...enhancementLocalValues[entity.id],
+                        deleted: true,
+                        timestamp: Date.now(),
+                    },
+                    status: "existing",
+                });
+            }
             setPendingDeletes([]);
+            setPendingEnhancementDeletes([]);
 
             snackbar.open({
                 type: "success",
@@ -792,7 +833,13 @@ export function usePartEdit(context: PartEditContext) {
             // --- סוף יומן שינויים ---
 
             setChangedIds(new Set());
-            if ((hasNewItems || hadEnhancementChanges || pendingDeletesList.length > 0) && selectedGroupId) {
+            if (
+                (hasNewItems ||
+                    hadEnhancementChanges ||
+                    pendingDeletesList.length > 0 ||
+                    pendingEnhancementDeletesList.length > 0) &&
+                selectedGroupId
+            ) {
                 await fetchItemsWithEnhancements(selectedGroupId);
             }
         } catch (err) {
@@ -871,6 +918,31 @@ export function usePartEdit(context: PartEditContext) {
     /** מסיר פריט מרשימת המחיקות המתינות – הפריט נשאר ונשמר כרגיל */
     const handleRestoreItem = (entity: Entity<any>) => {
         setPendingDeletes((prev) => prev.filter((p) => p.entity.id !== entity.id));
+    };
+
+    /** מסמן פריט תרגום מקושר למחיקה (מתצוגת בסיס) */
+    const handleDeleteEnhancementItem = (entityId: string, translationId: string) => {
+        if (!selectedPrayerId) return;
+        const entity = (enhancements[translationId] ?? []).find((e) => e.id === entityId);
+        if (!entity) return;
+        const itemId =
+            (enhancementLocalValues[entityId]?.itemId as string | undefined) ??
+            (entity.values?.itemId as string | undefined) ??
+            entityId;
+        setPendingEnhancementDeletes((prev) => {
+            if (prev.some((p) => p.entity.id === entityId)) return prev;
+            return [...prev, { entity, itemId, translationId }];
+        });
+        setEnhancementChangedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(entityId);
+            return next;
+        });
+    };
+
+    /** מחזיר פריט תרגום מקושר מרשימת המחיקות המתינות */
+    const handleRestoreEnhancementItem = (entityId: string) => {
+        setPendingEnhancementDeletes((prev) => prev.filter((p) => p.entity.id !== entityId));
     };
 
     /** מחזיר את ה-mit_id האפקטיבי של פריט (מהעריכה המקומית או מהערכים המקוריים) */
@@ -1851,6 +1923,156 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
+    // ─── Copy Items to Part ────────────────────────────────────────────────────
+
+    const openCopyToPartModal = () => {
+        setCopyTargetPartItems([]);
+        setCopyToPartModalOpen(true);
+    };
+    const closeCopyToPartModal = () => setCopyToPartModalOpen(false);
+
+    /** טוען פריטי חלק יעד (בסיס 0-* של הנוסח הנבחר) להצגת מיקום הכנסה */
+    const loadCopyTargetPartItems = async (params: {
+        targetTocId: string;
+        targetPrayerId: string;
+        targetPartId: string;
+    }) => {
+        try {
+            const items = await fetchPartItems(
+                dataSource,
+                `0-${params.targetTocId}`,
+                params.targetPrayerId,
+                params.targetPartId
+            );
+            setCopyTargetPartItems(items);
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Load copy target part items failed`, err);
+            setCopyTargetPartItems([]);
+        }
+    };
+
+    /**
+     * מעתיק פריטים מחלק התפילה הנוכחי לחלק יעד.
+     * היעד יכול להיות נוסח/תפילה/חלק אחר. פריטי המקור נשארים.
+     * אם copyLinkedTranslations=true, גם תרגומים מקושרים מועתקים לנוסח היעד.
+     */
+    const handleCopyItemsToPart = async (params: {
+        sourceItemIds: string[];
+        targetTocId: string;
+        targetPrayerId: string;
+        targetPartId: string;
+        insertAfterItemId: string | null;
+        copyLinkedTranslations: boolean;
+    }) => {
+        if (
+            !selectedGroupId ||
+            !selectedPrayerId ||
+            !selectedTocId ||
+            !currentTranslationData?.translationId
+        )
+            return;
+        if (params.sourceItemIds.length === 0) return;
+
+        const sourceTranslationId = `0-${selectedTocId}`;
+        const targetTranslationId = `0-${params.targetTocId}`;
+        const targetTocValues = tocItems.find((t) => t.id === params.targetTocId)?.values;
+        const targetTranslations = targetTocValues?.translations ?? [];
+
+        setSaving(true);
+        try {
+            const result = await copyItemsToPart(dataSource, {
+                sourceTranslationId,
+                sourcePrayerId: selectedPrayerId,
+                sourcePartId: selectedGroupId,
+                sourceItemIds: params.sourceItemIds,
+                targetTranslationId,
+                targetTocId: params.targetTocId,
+                targetPrayerId: params.targetPrayerId,
+                targetPartId: params.targetPartId,
+                insertAfterItemId: params.insertAfterItemId,
+                copyLinkedTranslations: params.copyLinkedTranslations,
+                sourceTranslations: currentTocData?.translations ?? [],
+                targetTranslations,
+                confirmUserWantsDecimalId: () =>
+                    window.confirm(
+                        "בין שני פריטים צמודים אין מקום למספר שלם. האם ליצור מזהה עם .5?"
+                    ),
+            });
+
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "copy_items_to_part",
+                context: {
+                    tocId: selectedTocId,
+                    translationId: currentTranslationData.translationId,
+                    prayerId: selectedPrayerId,
+                    partId: selectedGroupId,
+                    tocName: currentTocData?.nusach,
+                    translationName: currentTranslationData?.translationId
+                        ? getTranslationDisplayLabel(currentTranslationData.translationId, {
+                              storedLabel: currentTranslationData.label,
+                          })
+                        : undefined,
+                    prayerName: (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
+                    partName:
+                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
+                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
+                },
+                details: {
+                    sourceTranslationId,
+                    sourcePrayerId: selectedPrayerId,
+                    sourcePartId: selectedGroupId,
+                    targetTranslationId,
+                    targetPrayerId: params.targetPrayerId,
+                    targetPartId: params.targetPartId,
+                    copiedItemIds: params.sourceItemIds,
+                    copiedItemsCount: result.createdCount,
+                    copyLinkedTranslations: params.copyLinkedTranslations,
+                    baseIdMap: result.baseIdMap,
+                },
+                savedToFirestore: true,
+            });
+
+            snackbar.open({
+                type: "success",
+                message: `${result.createdCount} פריטים הועתקו בהצלחה`,
+            });
+            closeCopyToPartModal();
+            // רענון מקטע נוכחי רק אם היעד = המקטע הנוכחי (אחרת הנתונים המוצגים לא משתנים)
+            if (
+                params.targetTocId === selectedTocId &&
+                params.targetPrayerId === selectedPrayerId &&
+                params.targetPartId === selectedGroupId
+            ) {
+                await fetchItemsWithEnhancements(selectedGroupId);
+            }
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Copy items to part failed`, err);
+            const msg = err instanceof Error ? err.message : "";
+            if (err instanceof Error && err.message === NO_SPACE_BETWEEN_ITEMS) {
+                snackbar.open({
+                    type: "error",
+                    message: "אין מקום פנוי בין הפריטים – לא ניתן להעתיק ללא עקיפת הסדר.",
+                });
+            } else if (msg.includes("copyItemsToPart: no matching source items found")) {
+                snackbar.open({
+                    type: "warning",
+                    message: "לא נמצאו פריטים תואמים להעתקה, הפעולה לא בוצעה",
+                });
+            } else if (msg.includes("copyItemsToPart: insertAfterItemId")) {
+                snackbar.open({
+                    type: "error",
+                    message:
+                        "פריט הייחוס להכנסה לא נמצא במקטע היעד – ייתכן שהנתונים השתנו. נסה לרענן ולנסות שוב.",
+                });
+            } else {
+                snackbar.open({ type: "error", message: "שגיאה בהעתקת הפריטים" });
+            }
+        } finally {
+            setSaving(false);
+        }
+    };
+
     /** שומר את פריט התרגום החדש וסוגר את המודל */
     const submitAddTranslation = async () => {
         if (
@@ -2066,6 +2288,7 @@ export function usePartEdit(context: PartEditContext) {
         localValues,
         changedIds,
         pendingDeletes,
+        pendingEnhancementDeletes,
         loading,
         saving,
         fetchItemsWithEnhancements,
@@ -2079,6 +2302,8 @@ export function usePartEdit(context: PartEditContext) {
         lastAddedItemId,
         handleDeleteItem,
         handleRestoreItem,
+        handleDeleteEnhancementItem,
+        handleRestoreEnhancementItem,
         enhancementLocalValues,
         enhancementChangedIds,
         enhancementTranslationIds,
@@ -2094,6 +2319,13 @@ export function usePartEdit(context: PartEditContext) {
         handleMoveItemsToPart,
         moveTargetPartItems,
         loadMoveTargetPartItems,
+        // העתקת פריטים לחלק תפילה אחר (כולל בנוסח/תפילה אחרים)
+        copyToPartModalOpen,
+        openCopyToPartModal,
+        closeCopyToPartModal,
+        handleCopyItemsToPart,
+        copyTargetPartItems,
+        loadCopyTargetPartItems,
         addTranslationOpen,
         addTranslationBaseItem,
         addTranslationTargetId,

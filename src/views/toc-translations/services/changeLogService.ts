@@ -34,6 +34,7 @@ export type ChangeLogAction =
     | "delete_prayer"       // מחיקת תפילה
     | "delete_part"         // מחיקת פריט
     | "move_items_to_part"  // העברת פריטים בין פריטים
+    | "copy_items_to_part"  // העתקת פריטים לחלק תפילה אחר (יכול להיות תפילה/נוסח שונים)
     | "split_part";         // פיצול פריט לשני פריטים
 
 /** הקשר – איפה בוצעה הפעולה */
@@ -127,6 +128,16 @@ export type ChangeLogEntry = {
         fromPartId?: string;
         toPartId?: string;
         movedItemIds?: string[];
+        /** copy_items_to_part */
+        sourceTranslationId?: string;
+        sourcePrayerId?: string;
+        sourcePartId?: string;
+        targetPrayerId?: string;
+        targetPartId?: string;
+        copiedItemIds?: string[];
+        copiedItemsCount?: number;
+        copyLinkedTranslations?: boolean;
+        baseIdMap?: Record<string, string>;
         /** delete_* */
         deletedId?: string;
         deletedName?: string;

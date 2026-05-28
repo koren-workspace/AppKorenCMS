@@ -58,6 +58,12 @@ export type PartEditPanelProps = {
     pendingDeletes?: Array<{ entity: Entity<any>; itemId: string }>;
     /** מחזיר פריט מרשימת המחיקות המתינות */
     onRestoreItem?: (item: Entity<any>, itemId: string) => void;
+    /** מוחק פריט תרגום מקושר (מתצוגת בסיס) */
+    onDeleteEnhancementItem?: (entityId: string, translationId: string) => void;
+    /** פריטי תרגום שסומנו למחיקה */
+    pendingEnhancementDeleteIds?: Set<string>;
+    /** מחזיר פריט תרגום מרשימת המחיקות המתינות */
+    onRestoreEnhancementItem?: (entityId: string) => void;
     /** רק בנוסח הבסיסי (0-*) מותר להוסיף חלק תפילהים; בשאר הנוסחים – עריכה בלבד */
     allowAddPart?: boolean;
     /** רק בתרגום (לא בסיס) מותר להוסיף הוראות – טקסט שלא מקושר לבסיס */
@@ -78,10 +84,11 @@ export type PartEditPanelProps = {
     lastAddedItemId?: string | null;
     /** פותח מודל הגדרת/עריכת dateSetId (פרמטר שלישי = תרגום מקושר) */
     onOpenDateSetIdForItem?: (entityId: string, currentDateSetId: string, enhancementTranslationId?: string) => void;
-    /** כפתורי פיצול והעברה – רק בנוסח הבסיסי */
+    /** כפתורי פיצול / העברה / העתקה – רק בנוסח הבסיסי */
     allowSplitAndMove?: boolean;
     onSplitPart?: () => void;
     onMoveItemsToPart?: () => void;
+    onCopyItemsToPart?: () => void;
     onReorderItems?: (activeId: string, overId: string) => void;
     /** מקור נתונים לטעינת תיאורי dateSetId */
     dataSource?: { fetchCollection: (opts: any) => Promise<any[]>; saveEntity: (opts: any) => Promise<any> } | null;
@@ -140,6 +147,9 @@ export function PartEditPanel({
     onDeleteItem,
     pendingDeletes = [],
     onRestoreItem,
+    onDeleteEnhancementItem,
+    pendingEnhancementDeleteIds = new Set(),
+    onRestoreEnhancementItem,
     allowAddPart = true,
     allowAddInstruction = false,
     onAddNewInstructionAt,
@@ -153,12 +163,17 @@ export function PartEditPanel({
     allowSplitAndMove = false,
     onSplitPart,
     onMoveItemsToPart,
+    onCopyItemsToPart,
     onReorderItems: _onReorderItems,
     dataSource,
     relevantDateSetIds = null,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
-    const hasAnyChanges = changedIds.size > 0 || enhancementChangedIds.size > 0 || pendingDeletesCount > 0;
+    const hasAnyChanges =
+        changedIds.size > 0 ||
+        enhancementChangedIds.size > 0 ||
+        pendingDeletesCount > 0 ||
+        pendingEnhancementDeleteIds.size > 0;
     const dateSetLabels = useDateSetLabels(dataSource);
     const [searchQuery, setSearchQuery] = useState("");
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -245,6 +260,7 @@ export function PartEditPanel({
                 allowSplitAndMove={allowSplitAndMove}
                 onSplitPart={onSplitPart}
                 onMoveItemsToPart={onMoveItemsToPart}
+                onCopyItemsToPart={onCopyItemsToPart}
             />
             {loading ? (
                 <div className="m-auto font-bold text-blue-500 animate-pulse text-lg">
@@ -399,6 +415,13 @@ export function PartEditPanel({
                                         autoFocus={lastAddedItemId === item.id}
                                         onOpenDateSetIdConfig={onOpenDateSetIdForItem}
                                         dateSetLabels={dateSetLabels}
+                                        onDeleteEnhancementItem={
+                                            isBaseTranslation ? onDeleteEnhancementItem : undefined
+                                        }
+                                        pendingEnhancementDeleteIds={pendingEnhancementDeleteIds}
+                                        onRestoreEnhancementItem={
+                                            isBaseTranslation ? onRestoreEnhancementItem : undefined
+                                        }
                                     />
                                 </div>
                             );

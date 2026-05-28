@@ -9,7 +9,11 @@ import {
     itemMinIdBefore,
     resolveDigitMillions,
 } from "./nusachIdPolicy";
-import { computeItemIdForInsert } from "./itemUtils";
+import {
+    computeItemIdForInsert,
+    computeNextUpperCap,
+    computeNextUpperCapForBaseRow,
+} from "./itemUtils";
 
 describe("nusachIdPolicy", () => {
     it("itemMinIdBefore matches 12-digit excel-style floor for Sefard part", () => {
@@ -141,6 +145,43 @@ describe("nusachIdPolicy", () => {
         });
 
         expect(idWithSparse).toBe(idWithFull);
+    });
+
+    it("computeNextUpperCap picks tighter numeric cap between base and linked", () => {
+        expect(computeNextUpperCap("200", "205")).toBe("200");
+        expect(computeNextUpperCap("200", "199")).toBe("199");
+        expect(computeNextUpperCap(undefined, "205")).toBe("205");
+        expect(computeNextUpperCap("200", undefined)).toBe("200");
+    });
+
+    it("computeNextUpperCapForBaseRow uses min linked id on next base row with translations", () => {
+        const baseOrder = ["100", "200"];
+        const items = [
+            { values: { itemId: "160", linkedItem: ["100"] } },
+            { values: { itemId: "250", linkedItem: ["200"] } },
+            { values: { itemId: "205", linkedItem: ["200"] } },
+        ];
+        expect(computeNextUpperCapForBaseRow(baseOrder, 0, items)).toBe("200");
+    });
+
+    it("first translation on base row: minIdBefore keeps id above base when part has other rows", () => {
+        // מדמה createTranslationItem: insertIndex=0, רק תרגום לשורה 200, תרגום ראשון לשורה 100
+        const ordered = ["250"];
+        const insertIndex = 0;
+        const nextCap = "200";
+        const baseItemId = "100";
+
+        const withoutFloor = computeItemIdForInsert(ordered, insertIndex, {
+            nextBaseLinkedMinItemId: nextCap,
+        });
+        const withBaseFloor = computeItemIdForInsert(ordered, insertIndex, {
+            nextBaseLinkedMinItemId: nextCap,
+            minIdBefore: baseItemId,
+        });
+
+        expect(Number(withoutFloor)).toBeLessThan(Number(baseItemId));
+        expect(Number(withBaseFloor)).toBeGreaterThan(Number(baseItemId));
+        expect(Number(withBaseFloor)).toBeLessThan(Number(nextCap));
     });
 
     it("extraTakenIds act as gap blockers inside the insert window", () => {

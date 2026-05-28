@@ -27,6 +27,7 @@ import { AddCategoryModal } from "./toc-translations/components/AddCategoryModal
 import { EditCategoryModal } from "./toc-translations/components/EditCategoryModal";
 import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
 import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
+import { CopyItemsToPartModal } from "./toc-translations/components/CopyItemsToPartModal";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
 // ─── מושבת זמנית: עריכת נוסח ב־TOC — להפעלה בטל הערות ────────────────────────
 // import { EditTocModal } from "./toc-translations/components/EditTocModal";
@@ -68,6 +69,7 @@ export function TocTranslationsView() {
         selectedTocId: nav.selectedTocId,
         currentParts: nav.currentParts,
         currentPrayers: nav.currentPrayers,
+        tocItems: nav.tocItems,
         addPart: nav.addPart,
     });
 
@@ -203,7 +205,11 @@ export function TocTranslationsView() {
         setAddPrayerAfterPrayerId(null);
     };
 
-    const hasUnsaved = partEdit.changedIds.size > 0 || partEdit.enhancementChangedIds.size > 0 || partEdit.pendingDeletes.length > 0;
+    const hasUnsaved =
+        partEdit.changedIds.size > 0 ||
+        partEdit.enhancementChangedIds.size > 0 ||
+        partEdit.pendingDeletes.length > 0 ||
+        partEdit.pendingEnhancementDeletes.length > 0;
 
     /** עוטף פונקציית ניווט – שואל לאישור אם יש שינויים לא שמורים */
     function withUnsavedCheck<T extends unknown[]>(fn: (...args: T) => void) {
@@ -331,7 +337,9 @@ export function TocTranslationsView() {
                 selectedTocId={nav.selectedTocId}
                 saving={partEdit.saving}
                 changedIds={partEdit.changedIds}
-                pendingDeletesCount={partEdit.pendingDeletes.length}
+                pendingDeletesCount={
+                    partEdit.pendingDeletes.length + partEdit.pendingEnhancementDeletes.length
+                }
                 loading={partEdit.loading}
                 allItems={partEdit.allItems}
                 localValues={partEdit.localValues}
@@ -350,6 +358,11 @@ export function TocTranslationsView() {
                 onDeleteItem={partEdit.handleDeleteItem}
                 pendingDeletes={partEdit.pendingDeletes}
                 onRestoreItem={partEdit.handleRestoreItem}
+                onDeleteEnhancementItem={partEdit.handleDeleteEnhancementItem}
+                pendingEnhancementDeleteIds={
+                    new Set(partEdit.pendingEnhancementDeletes.map((p) => p.entity.id))
+                }
+                onRestoreEnhancementItem={partEdit.handleRestoreEnhancementItem}
                 allowAddPart={allowAddPart}
                 allowAddInstruction={allowAddInstruction}
                 onAddNewInstructionAt={partEdit.addNewInstructionAt}
@@ -363,6 +376,7 @@ export function TocTranslationsView() {
                 allowSplitAndMove={allowAddPart}
                 onSplitPart={partEdit.openSplitPartModal}
                 onMoveItemsToPart={partEdit.openMoveToPartModal}
+                onCopyItemsToPart={partEdit.openCopyToPartModal}
                 onReorderItems={partEdit.reorderItemsWithinPart}
                 dataSource={partEdit.dataSource}
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
@@ -519,6 +533,21 @@ export function TocTranslationsView() {
                 targetPartItems={partEdit.moveTargetPartItems}
                 onLoadTargetPartItems={partEdit.loadMoveTargetPartItems}
                 onSubmit={partEdit.handleMoveItemsToPart}
+                saving={partEdit.saving}
+            />
+            {/* מודל העתקת פריטים לחלק תפילה אחר (יכול להיות תפילה/נוסח שונים) */}
+            <CopyItemsToPartModal
+                open={partEdit.copyToPartModalOpen}
+                onClose={partEdit.closeCopyToPartModal}
+                items={partEdit.allItems}
+                localValues={partEdit.localValues}
+                currentTocId={nav.selectedTocId ?? ""}
+                currentPrayerId={nav.selectedPrayerId ?? ""}
+                currentPartId={partEdit.selectedGroupId ?? ""}
+                tocItems={nav.tocItems}
+                targetPartItems={partEdit.copyTargetPartItems}
+                onLoadTargetPartItems={partEdit.loadCopyTargetPartItems}
+                onSubmit={partEdit.handleCopyItemsToPart}
                 saving={partEdit.saving}
             />
             </div>

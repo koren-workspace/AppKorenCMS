@@ -371,6 +371,95 @@ function buildTakenIdsForInsert(
     return takenIds;
 }
 
+/** מנרמל itemId / מזהה מספרי לצורך השוואות. */
+export function normalizeItemId(v: unknown): string {
+    return v != null && String(v).trim() !== "" ? String(v).trim() : "";
+}
+
+type ItemWithLink = {
+    values?: { itemId?: unknown; linkedItem?: unknown };
+    id?: string;
+};
+
+/** האם linkedItem של הישות מצביע על itemId של שורת בסיס. */
+export function entityLinksToBaseItemId(e: ItemWithLink, baseItemIdStr: string): boolean {
+    if (!baseItemIdStr) return false;
+    const link = e.values?.linkedItem;
+    if (Array.isArray(link)) return link.some((x) => normalizeItemId(x) === baseItemIdStr);
+    return normalizeItemId(link) === baseItemIdStr;
+}
+
+/** מינימום itemId בין פריטי תרגום המקושרים לשורת בסיס אחת. */
+export function minLinkedItemIdForBaseRow(
+    baseItemId: string,
+    translationItems: ItemWithLink[]
+): string | undefined {
+    const linked = translationItems.filter((e) => entityLinksToBaseItemId(e, baseItemId));
+    if (linked.length === 0) return undefined;
+    const ids = linked
+        .map((e) => normalizeItemId(e.values?.itemId ?? e.id))
+        .filter((id) => id !== "");
+    if (ids.length === 0) return undefined;
+    return ids.sort((a, b) => Number(a) - Number(b))[0];
+}
+
+/** itemId של שורת הבסיס הבאה מיד אחרי currentBaseRowIndex (לפי סדר שורות UI). */
+export function nextBaseItemIdInOrder(
+    baseItemIdsInOrder: string[],
+    currentBaseRowIndex: number
+): string | undefined {
+    if (currentBaseRowIndex < 0) return undefined;
+    for (let j = currentBaseRowIndex + 1; j < baseItemIdsInOrder.length; j++) {
+        const id = normalizeItemId(baseItemIdsInOrder[j]);
+        if (id) return id;
+    }
+    return undefined;
+}
+
+/**
+ * מינימום itemId בין תרגומים לשורת הבסיס הבאה (לפי סדר שורות) שיש לה כבר תרגומים.
+ * לא בהכרח השורה המיידית — הראשונה שממוקם אחרי currentBaseRowIndex ויש לה linked.
+ */
+export function minLinkedItemIdOnNextBaseRowWithTranslations(
+    baseItemIdsInOrder: string[],
+    currentBaseRowIndex: number,
+    translationItems: ItemWithLink[]
+): string | undefined {
+    if (currentBaseRowIndex < 0) return undefined;
+    for (let j = currentBaseRowIndex + 1; j < baseItemIdsInOrder.length; j++) {
+        const nextBaseItemId = normalizeItemId(baseItemIdsInOrder[j]);
+        if (!nextBaseItemId) continue;
+        const min = minLinkedItemIdForBaseRow(nextBaseItemId, translationItems);
+        if (min != null) return min;
+    }
+    return undefined;
+}
+
+/** תקרה עליונה ל-idAfter: MIN מספרי בין itemId של בסיס הבא לבין מינימום תרגומים לשורה הבאה עם תרגום. */
+export function computeNextUpperCap(
+    baseCap: string | undefined,
+    linkedCap: string | undefined
+): string | undefined {
+    if (!linkedCap) return baseCap;
+    if (!baseCap) return linkedCap;
+    return Number(baseCap) <= Number(linkedCap) ? baseCap : linkedCap;
+}
+
+/** מחשב את nextBaseLinkedMinItemId לשימוש ב-computeItemIdForInsert (הוספה / העברה / העתקה). */
+export function computeNextUpperCapForBaseRow(
+    baseItemIdsInOrder: string[],
+    currentBaseRowIndex: number,
+    translationItems: ItemWithLink[]
+): string | undefined {
+    const baseCap = nextBaseItemIdInOrder(baseItemIdsInOrder, currentBaseRowIndex);
+    const linkedCap = minLinkedItemIdOnNextBaseRowWithTranslations(
+        baseItemIdsInOrder,
+        currentBaseRowIndex,
+        translationItems
+    );
+    return computeNextUpperCap(baseCap, linkedCap);
+}
+
 export interface InsertNeighborBounds {
     prevLastItemId?: string;
     nextFirstItemId?: string;

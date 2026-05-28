@@ -16,7 +16,6 @@ import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
-import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import {
     ITEM_TYPE_OPTIONS,
     INSTRUCTION_TYPE_OPTIONS,
@@ -95,6 +94,12 @@ type PartItemRowProps = {
     onOpenDateSetIdConfig?: (entityId: string, currentDateSetId: string, enhancementTranslationId?: string) => void;
     /** מפה dateSetId → { short, full } (נטענת פעם אחת מה-calendar collection) */
     dateSetLabels?: Record<string, DateSetLabelEntry>;
+    /** מוחק פריט תרגום מקושר (מתצוגת בסיס) */
+    onDeleteEnhancementItem?: (entityId: string, translationId: string) => void;
+    /** מזהי פריטי תרגום שסומנו למחיקה */
+    pendingEnhancementDeleteIds?: Set<string>;
+    /** מחזיר פריט תרגום מרשימת המחיקות המתינות */
+    onRestoreEnhancementItem?: (entityId: string) => void;
     // ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
     // /** props לידית גרירה */
     // dragHandleProps?: {
@@ -126,6 +131,9 @@ export function PartItemRow({
     autoFocus = false,
     onOpenDateSetIdConfig,
     dateSetLabels = {},
+    onDeleteEnhancementItem,
+    pendingEnhancementDeleteIds = new Set(),
+    onRestoreEnhancementItem,
     // dragHandleProps,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
@@ -251,7 +259,7 @@ export function PartItemRow({
                                 onClick={() => setShowProps((p) => !p)}
                                 className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                             >
-                                {showProps ? "הסתר" : "מאפיינים"}
+                                {showProps ? "הסתר מאפיינים" : "מאפיינים"}
                             </button>
                         )}
                         {/* ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
@@ -550,6 +558,7 @@ export function PartItemRow({
                         const enhChanged = isEnhancementChanged?.(enh.id) ?? false;
                         const enhShowProps = showEnhancementProps[enh.id] ?? false;
                         const relatedWillBeDeleted = isPendingDelete && isBaseTranslation;
+                        const isEnhancementPendingDelete = pendingEnhancementDeleteIds.has(enh.id);
                         const enhType = (displayVal.type ?? "body") as string;
                         const enhancementIsBase = String(enh.tId ?? "").startsWith("0-");
                         const enhShowHebrewBodyOnly = supportsHebrewBodyOnlyFields(enhType, enhancementIsBase);
@@ -564,8 +573,23 @@ export function PartItemRow({
                         return (
                             <div
                                 key={enh.id}
-                                className={`p-2 rounded text-base ${relatedWillBeDeleted ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
+                                className={`p-2 rounded text-base ${relatedWillBeDeleted || isEnhancementPendingDelete ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
                             >
+                                {isEnhancementPendingDelete && !relatedWillBeDeleted && (
+                                    <div className="flex items-center gap-2 mb-1 py-1 px-2 bg-red-100 border border-red-300 rounded text-xs font-bold text-red-800">
+                                        <span>ימוחק בשמירה</span>
+                                        {onRestoreEnhancementItem && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onRestoreEnhancementItem(enh.id)}
+                                                className="px-1.5 py-px bg-green-600 text-white rounded hover:bg-green-700 text-xs font-bold leading-none"
+                                                title="החזר – לא יימחק בשמירה"
+                                            >
+                                                החזר
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="space-y-1 mb-1 text-sm text-gray-500">
                                     <div className="flex items-center justify-between uppercase tracking-tight gap-2">
                                         <div className="flex items-center gap-1.5 min-w-0 leading-none">
@@ -631,6 +655,29 @@ export function PartItemRow({
                                                 {enhShowProps ? "הסתר מאפיינים" : "מאפיינים"}
                                             </button>
                                         )}
+                                        {onDeleteEnhancementItem &&
+                                            onEnhancementFieldChange &&
+                                            !relatedWillBeDeleted &&
+                                            !isEnhancementPendingDelete && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const label = getTranslationDisplayLabel(enh.tId);
+                                                        if (
+                                                            window.confirm(
+                                                                `למחוק את פריט התרגום «${label}»? (יסומן כ-deleted בשמירה)`
+                                                            )
+                                                        ) {
+                                                            onDeleteEnhancementItem(enh.id, enh.tId);
+                                                        }
+                                                    }}
+                                                    className="inline-flex items-center px-1.5 py-px text-red-600 hover:bg-red-50 border border-red-200 rounded text-xs font-bold leading-none whitespace-nowrap"
+                                                    title="מחק פריט תרגום"
+                                                    aria-label="מחק פריט תרגום"
+                                                >
+                                                    <DeleteTrashIcon className="h-3.5 w-3.5 shrink-0" />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

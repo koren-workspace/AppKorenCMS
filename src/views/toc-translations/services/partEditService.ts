@@ -13,7 +13,14 @@ import { Entity } from "@firecms/core";
 import { getFirestore, doc as firestoreDoc, writeBatch } from "firebase/firestore";
 import { getFirebaseApp } from "../../../firebase_config";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
-import { chunkArray, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS } from "../utils/itemUtils";
+import {
+    chunkArray,
+    computeItemIdForInsert,
+    computeNextUpperCapForBaseRow,
+    entityLinksToBaseItemId,
+    normalizeItemId,
+    NO_SPACE_BETWEEN_ITEMS,
+} from "../utils/itemUtils";
 import { cmsDebugItemIdsEnabled } from "../utils/debugFlags";
 
 export { NO_SPACE_BETWEEN_ITEMS };
@@ -573,21 +580,14 @@ export async function createTranslationItem(
     cmsIdDbg("[CMS-ID]   allItems (לא deleted, ממוין):", allItems.length, "פריטים");
     cmsIdDbg("[CMS-ID]   orderedItemIds=", orderedItemIds.length <= 20 ? JSON.stringify(orderedItemIds) : `[${orderedItemIds.length} IDs: ${orderedItemIds.slice(0, 8).join(",")}...]`);
 
-    const idNorm = (v: unknown) =>
-        v != null && String(v).trim() !== "" ? String(v).trim() : "";
+    const idNorm = normalizeItemId;
     const baseKey = idNorm(baseItemId);
     let afterKey =
         afterItemId != null && String(afterItemId).trim() !== ""
             ? String(afterItemId).trim()
             : null;
 
-    /** linkedItem מתייחס ל-itemId של פריט הבסיס (מערך או ערך בודד). */
-    const linksToBaseItemId = (e: any, baseItemIdStr: string) => {
-        if (!baseItemIdStr) return false;
-        const link = e.values?.linkedItem;
-        if (Array.isArray(link)) return link.some((x: unknown) => idNorm(x) === baseItemIdStr);
-        return idNorm(link) === baseItemIdStr;
-    };
+    const linksToBaseItemId = entityLinksToBaseItemId;
 
     const rawItemRow = (baseItemIdsInPartOrder ?? []).map((x) => idNorm(x));
 
@@ -627,39 +627,12 @@ export async function createTranslationItem(
     cmsIdDbg("[CMS-ID]   baseKey=", baseKey, "afterKey (אחרי tryAnchor)=", afterKey ?? "(ריק)", "curBaseIdx=", curBaseIdx);
     cmsIdDbg("[CMS-ID]   rawItemRow (baseItemIdsInPartOrder)=", rawItemRow.length <= 20 ? JSON.stringify(rawItemRow) : `[${rawItemRow.length} IDs]`);
 
-    /** סימטריה לסריקה אחורה: מינימום itemId בין תרגומי שורת הבסיס הבאה (לפי סדר שורות) שיש לה תרגומים — כבסיס ל-idAfter. */
-    const nextBaseLinkedMinForInsert = ((): string | undefined => {
-        if (curBaseIdx < 0) return undefined;
-        for (let j = curBaseIdx + 1; j < rawItemRow.length; j++) {
-            const nextBaseItemId = rawItemRow[j];
-            if (!nextBaseItemId) continue;
-            const linkedToNext = allItems.filter((e: any) => linksToBaseItemId(e, nextBaseItemId));
-            if (linkedToNext.length > 0) {
-                const firstNext = linkedToNext[0];
-                const id = idNorm(firstNext.values?.itemId ?? firstNext.id);
-                return id !== "" ? id : undefined;
-            }
-        }
-        return undefined;
-    })();
-    const nextBaseItemIdForInsert = ((): string | undefined => {
-        if (curBaseIdx < 0) return undefined;
-        for (let j = curBaseIdx + 1; j < rawItemRow.length; j++) {
-            const nextBaseItemId = rawItemRow[j];
-            if (nextBaseItemId) return nextBaseItemId;
-        }
-        return undefined;
-    })();
-    const nextUpperCapForInsert = ((): string | undefined => {
-        const linkedCap = nextBaseLinkedMinForInsert;
-        const baseCap = nextBaseItemIdForInsert;
-        if (!linkedCap) return baseCap;
-        if (!baseCap) return linkedCap;
-        return Number(baseCap) <= Number(linkedCap) ? baseCap : linkedCap;
-    })();
+    const nextUpperCapForInsert = computeNextUpperCapForBaseRow(
+        rawItemRow,
+        curBaseIdx,
+        allItems
+    );
 
-    cmsIdDbg("[CMS-ID]   nextBaseLinkedMinForInsert=", nextBaseLinkedMinForInsert ?? "(ריק)");
-    cmsIdDbg("[CMS-ID]   nextBaseItemIdForInsert=", nextBaseItemIdForInsert ?? "(ריק)");
     cmsIdDbg("[CMS-ID]   nextUpperCapForInsert=", nextUpperCapForInsert ?? "(ריק)");
 
     let insertIndex: number;
@@ -1233,11 +1206,17 @@ export async function moveItemsToPart(
                     (oldToNewBaseMitId[oldBaseId] ?? newBaseId) !== newBaseId;
 
                 const baseIdx = baseOrderedIds.indexOf(newBaseId);
-                const nextBaseId = baseIdx >= 0 && baseIdx < baseOrderedIds.length - 1
-                    ? baseOrderedIds[baseIdx + 1]
-                    : undefined;
+                const translationItemsForCap = [
+                    ...targetItemsForTranslation,
+                    ...relatedToMove,
+                ];
+                const nextUpperCap = computeNextUpperCapForBaseRow(
+                    baseOrderedIds,
+                    baseIdx,
+                    translationItemsForCap
+                );
 
-                cmsIdDbg("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "nextBaseId=", nextBaseId ?? "(אין)", "baseIsParagraph=", baseIsParagraph);
+                cmsIdDbg("[CMS-ID] moveItemsToPart (translation) | tid=", tid, "oldBaseId=", oldBaseId, "newBaseId=", newBaseId, "nextUpperCap=", nextUpperCap ?? "(אין)", "baseIsParagraph=", baseIsParagraph);
 
                 let baseRefPos = translationOrderedIds.findIndex((id: string) => Number(id) > Number(newBaseId));
                 if (baseRefPos < 0) baseRefPos = translationOrderedIds.length;
@@ -1248,7 +1227,7 @@ export async function moveItemsToPart(
                     const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {
                         neighborBounds: tidNeighborBounds,
                         extraTakenIds: translationExtraTakenIds,
-                        ...(nextBaseId != null ? { nextBaseLinkedMinItemId: nextBaseId } : {}),
+                        ...(nextUpperCap != null ? { nextBaseLinkedMinItemId: nextUpperCap } : {}),
                     });
                     translationOrderedIds.splice(insertPos, 0, newTranslationItemId);
                     insertPos++;
@@ -1311,6 +1290,476 @@ export async function moveItemsToPart(
     }
 
     await commitAtomicWrites(pendingWrites);
+}
+
+// ─── Copy Items to Part ───────────────────────────────────────────────────────
+
+/** ממפה translationId מנוסח מקור לנוסח יעד (שומר prefix, מחליף tocId). */
+function mapTranslationIdToNusach(translationId: string, targetTocId: string): string {
+    const dash = translationId.indexOf("-");
+    if (dash < 0) return translationId;
+    return `${translationId.slice(0, dash + 1)}${targetTocId}`;
+}
+
+export type CopyItemsToPartParams = {
+    /** מזהה התרגום הבסיסי שממנו מעתיקים (0-{sourceTocId}) */
+    sourceTranslationId: string;
+    sourcePrayerId: string;
+    sourcePartId: string;
+    /** itemId-ים של פריטים להעתקה (כפי שהם בתרגום המקור) */
+    sourceItemIds: string[];
+    /** תרגום בסיס יעד (0-{targetTocId}) */
+    targetTranslationId: string;
+    /** מזהה נוסח יעד (ashkenaz, sefard וכו') */
+    targetTocId: string;
+    /** תפילה יעד – יכולה להיות זהה למקור */
+    targetPrayerId: string;
+    /** חלק תפילה יעד – יכול להיות זהה לחלק המקור (שכפול בתוך אותו חלק) */
+    targetPartId: string;
+    /** itemId של פריט שאחריו להכניס; null = בתחילת חלק היעד */
+    insertAfterItemId: string | null;
+    /**
+     * האם להעתיק גם את כל התרגומים המקושרים (enhancements) – אנגלית, הרב זקס וכו'.
+     * ממופים לפי prefix (1-*, 10-*) לנוסח היעד; תרגום שלא קיים בנוסח היעד מדולג.
+     */
+    copyLinkedTranslations: boolean;
+    /** translations array מנוסח המקור – לשליפת enhancements */
+    sourceTranslations: any[];
+    /** translations array מנוסח היעד – לחישוב partName, neighborBounds וכו' */
+    targetTranslations: any[];
+    /** נקרא כשצריך לשאול את המשתמש האם ליצור מזהה .5 בין שני מספרים צמודים. */
+    confirmUserWantsDecimalId?: () => boolean;
+};
+
+export type CopyItemsToPartResult = {
+    /** מיפוי itemId מקור → itemId חדש ביעד (לכל פריטי הבסיס) */
+    baseIdMap: Record<string, string>;
+    /** מיפוי entityId של תרגום מקושר במקור → itemId חדש שלו ביעד */
+    translationIdMap: Record<string, string>;
+    /** מספר פריטים שנוצרו ביעד (בסיס + תרגומים) */
+    createdCount: number;
+};
+
+/**
+ * מעתיק פריטים מחלק תפילה אחד לחלק אחר. בניגוד ל-moveItemsToPart, פריטי המקור נשארים.
+ *
+ * תכונות עיקריות:
+ * - יעד יכול להיות באותו נוסח/תפילה/חלק, או באחרים.
+ * - אם copyLinkedTranslations=true: גם פריטי תרגום מקושרים (1-*, 10-* וכו') מועתקים
+ *   לנוסח היעד לפי אותו prefix; תרגום שלא קיים ביעד מדולג.
+ * - itemId חדש נחשב דרך computeItemIdForInsert, עם extraTakenIds מ-deleted + נוסחים אחרים.
+ * - mit_id חדש: שומר על הסמנטיקה של פסקה — אם הפריט במקור היה חלק מפסקה שכל
+ *   הפסקה מועתקת, אז הקשר נשמר; אם רק חלק מהפסקה מועתק, הקשר נשבר ו-mit_id=itemId חדש.
+ */
+export async function copyItemsToPart(
+    dataSource: DataSource,
+    params: CopyItemsToPartParams
+): Promise<CopyItemsToPartResult> {
+    const {
+        sourceTranslationId,
+        sourcePrayerId,
+        sourcePartId,
+        sourceItemIds,
+        targetTranslationId,
+        targetTocId,
+        targetPrayerId,
+        targetPartId,
+        insertAfterItemId,
+        copyLinkedTranslations,
+        sourceTranslations,
+        targetTranslations,
+        confirmUserWantsDecimalId,
+    } = params;
+
+    if (sourceItemIds.length === 0) {
+        return { baseIdMap: {}, translationIdMap: {}, createdCount: 0 };
+    }
+
+    const sourceItemIdSet = new Set(sourceItemIds.map((id) => String(id)));
+    const idNorm = (v: unknown) =>
+        v != null && String(v).trim() !== "" ? String(v).trim() : "";
+
+    cmsIdDbg("[CMS-ID] ▶▶▶ copyItemsToPart – התחלה");
+    cmsIdDbg("[CMS-ID]   source: tid=", sourceTranslationId, "prayer=", sourcePrayerId, "part=", sourcePartId, "items=", JSON.stringify(sourceItemIds));
+    cmsIdDbg("[CMS-ID]   target: tid=", targetTranslationId, "prayer=", targetPrayerId, "part=", targetPartId, "insertAfter=", insertAfterItemId ?? "(תחילת חלק)");
+    cmsIdDbg("[CMS-ID]   copyLinkedTranslations=", copyLinkedTranslations);
+
+    // ─── טעינת מקור: כל פריטי הבסיס המועתקים (בסדר לפי itemId) ───────────────
+    const sourceBasePath = `translations/${sourceTranslationId}/prayers/${sourcePrayerId}/items`;
+    const sourceAllEntities = await dataSource.fetchCollection({
+        path: sourceBasePath,
+        collection: itemsCollection,
+        filter: { partId: ["==", sourcePartId] },
+    });
+    const sourceEntities = sourceAllEntities
+        .filter((e: any) => e.values?.deleted !== true)
+        .filter((e: any) => sourceItemIdSet.has(idNorm(e.values?.itemId)))
+        .sort((a: any, b: any) =>
+            (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, { numeric: true })
+        );
+
+    if (sourceEntities.length === 0) {
+        throw new Error("copyItemsToPart: no matching source items found for sourceItemIds");
+    }
+
+    // ─── טעינת יעד: פריטי החלק היעד + פריטים מנוסחים אחרים באותה תפילה יעד ──
+    const targetBasePath = `translations/${targetTranslationId}/prayers/${targetPrayerId}/items`;
+
+    const otherTranslationIds = targetTranslations
+        .map((t: any) => t?.translationId as string)
+        .filter((tid): tid is string => !!tid && tid !== targetTranslationId);
+
+    const [targetAllEntities, neighborBounds, otherTranslationsTargetEntities] = await Promise.all([
+        dataSource.fetchCollection({
+            path: targetBasePath,
+            collection: itemsCollection,
+            filter: { partId: ["==", targetPartId] },
+        }),
+        fetchNeighborItemIdBoundsForPart(dataSource, {
+            translationId: targetTranslationId,
+            selectedPrayerId: targetPrayerId,
+            partId: targetPartId,
+            translations: targetTranslations,
+        }),
+        Promise.all(
+            otherTranslationIds.map((tid) => {
+                const tPath = `translations/${tid}/prayers/${targetPrayerId}/items`;
+                return dataSource.fetchCollection({
+                    path: tPath,
+                    collection: itemsCollection,
+                    filter: { partId: ["==", targetPartId] },
+                });
+            })
+        ),
+    ]);
+
+    const targetActiveItems = targetAllEntities
+        .filter((e: any) => e.values?.deleted !== true)
+        .sort((a: any, b: any) =>
+            (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, { numeric: true })
+        );
+    const targetDeletedItemIds: string[] = targetAllEntities
+        .filter((e: any) => e.values?.deleted === true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => idNorm(id) !== "")
+        .map((id: any) => String(id));
+    const otherTranslationsItemIds: string[] = otherTranslationsTargetEntities
+        .flat()
+        .filter((e: any) => e.values?.deleted !== true)
+        .map((e: any) => e.values?.itemId)
+        .filter((id: any) => idNorm(id) !== "")
+        .map((id: any) => String(id));
+
+    cmsIdDbg("[CMS-ID]   target part: active=", targetActiveItems.length, "deleted=", targetDeletedItemIds.length, "otherTranslationsInTargetPart=", otherTranslationsItemIds.length);
+    cmsIdDbg("[CMS-ID]   neighborBounds(target)=", JSON.stringify(neighborBounds));
+
+    // ─── חישוב מיקום הכנסה ב-targetActiveItems ────────────────────────────────
+    const normalizedInsertAfter =
+        insertAfterItemId == null ? null : String(insertAfterItemId);
+    const insertAfterIdx =
+        normalizedInsertAfter === null
+            ? -1
+            : targetActiveItems.findIndex(
+                (e: any) => String(e.values?.itemId ?? "") === normalizedInsertAfter
+            );
+    if (normalizedInsertAfter !== null && insertAfterIdx === -1) {
+        throw new Error(
+            `copyItemsToPart: insertAfterItemId "${normalizedInsertAfter}" not found in target part "${targetPartId}"`
+        );
+    }
+
+    // baseOrderedIds = ה-itemIds של היעד כפי שהם רגע לפני ההכנסה הראשונה
+    const baseOrderedIds: string[] = targetActiveItems.map((e: any) => String(e.values?.itemId ?? ""));
+    let baseInsertIdx = insertAfterIdx + 1;
+
+    // ─── חישוב newItemId + newMitId לכל פריט בסיס מועתק ──────────────────────
+    const baseIdMap: Record<string, string> = {};
+    const newBaseMitIdByOldItemId: Record<string, string> = {};
+    /** mit_id של הפריט שמיד מעל מיקום ההכנסה ביעד (לפעמים שייך לפסקה). */
+    let prevTargetMitId: string | null =
+        insertAfterIdx >= 0 ? (targetActiveItems[insertAfterIdx].values?.mit_id ?? null) : null;
+    const sourceItemIdToMitId: Record<string, string> = {};
+
+    for (const item of sourceEntities) {
+        const oldBaseItemId = idNorm(item.values?.itemId);
+        const oldMitId = idNorm(item.values?.mit_id);
+        sourceItemIdToMitId[oldBaseItemId] = oldMitId;
+
+        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
+            neighborBounds,
+            extraTakenIds: [...targetDeletedItemIds, ...otherTranslationsItemIds],
+            confirmUserWantsDecimalId,
+        });
+        baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
+        baseInsertIdx++;
+        baseIdMap[oldBaseItemId] = newBaseItemId;
+
+        // האם הפריט במקור היה חלק מפסקה של הפריט הקודם במקור?
+        const isInParagraphInSource = oldMitId !== "" && oldMitId !== oldBaseItemId;
+        // האם פריט הבסיס הקודם בפסקה גם הוא הועתק (כדי שנשמר על הקשר)?
+        const prevSourceMitIdMatchesAnotherCopiedItem =
+            isInParagraphInSource &&
+            Object.entries(sourceItemIdToMitId).some(
+                ([prevOld, prevMit]) => prevOld !== oldBaseItemId && prevMit === oldMitId
+            );
+
+        let newBaseMitId: string;
+        if (isInParagraphInSource && prevSourceMitIdMatchesAnotherCopiedItem && prevTargetMitId != null && String(prevTargetMitId).trim() !== "") {
+            // הפסקה ממשיכה בתוך הפריטים המועתקים → mit_id של הפריט הקודם החדש
+            newBaseMitId = String(prevTargetMitId);
+        } else {
+            // הפריט עומד בעצמו (או ראש פסקה) → mit_id = itemId החדש
+            newBaseMitId = newBaseItemId;
+        }
+        newBaseMitIdByOldItemId[oldBaseItemId] = newBaseMitId;
+        prevTargetMitId = newBaseMitId;
+
+        cmsIdDbg("[CMS-ID] copyItemsToPart (base) | old=", oldBaseItemId, "→ new=", newBaseItemId, "oldMit=", oldMitId, "newMit=", newBaseMitId, "isInParagraph=", isInParagraphInSource);
+    }
+
+    // ─── עוזר: שם החלק תפילה לפי נוסח מעץ ה-TOC ────────────────────────────────
+    const getTargetPartName = (trans: any): string => {
+        for (const cat of trans?.categories ?? []) {
+            const prayer = (cat.prayers ?? []).find((p: any) => p.id === targetPrayerId);
+            if (prayer) {
+                const part = (prayer.parts ?? []).find((pt: any) => pt.id === targetPartId);
+                if (part) return part.name ?? "";
+            }
+        }
+        return "";
+    };
+
+    // ─── בניית PendingWrite[] עבור פריטי הבסיס ───────────────────────────────
+    const now = Date.now();
+    const pendingWrites: PendingWrite[] = [];
+
+    const targetTrans = targetTranslations.find((t: any) => t.translationId === targetTranslationId);
+    const targetPartName = targetTrans ? getTargetPartName(targetTrans) : "";
+    const targetPartIdAndName = `${targetPartId} ${targetPartName}`;
+
+    for (const item of sourceEntities) {
+        const oldItemId = idNorm(item.values?.itemId);
+        const newItemId = baseIdMap[oldItemId];
+        const newMitId = newBaseMitIdByOldItemId[oldItemId];
+
+        const newValues: Record<string, any> = {
+            ...item.values,
+            partId: targetPartId,
+            partName: targetPartName,
+            partIdAndName: targetPartIdAndName,
+            itemId: newItemId,
+            mit_id: newMitId,
+            timestamp: now,
+        };
+        // הסרת deleted אם קיים במקור (לא אמור לקרות כי סיננו, אבל למקרה הצורך)
+        delete newValues.deleted;
+        // הסרת linkedItem בפריטי בסיס (יש רק בתרגומים)
+        if (sourceTranslationId.startsWith("0-")) {
+            delete newValues.linkedItem;
+        }
+
+        pendingWrites.push({
+            collectionPath: targetBasePath,
+            docId: newItemId,
+            data: newValues,
+        });
+    }
+
+    const translationIdMap: Record<string, string> = {};
+
+    // ─── העתקת תרגומים מקושרים (enhancements) ─────────────────────────────────
+    if (copyLinkedTranslations) {
+        const targetTranslationIdSet = new Set(
+            targetTranslations.map((t: any) => t?.translationId as string).filter(Boolean)
+        );
+        const sourceEnhTranslationIds = sourceTranslations
+            .map((t: any) => t?.translationId as string)
+            .filter((tid): tid is string => !!tid && tid !== sourceTranslationId);
+
+        for (const sourceEnhTid of sourceEnhTranslationIds) {
+            const targetEnhTid = mapTranslationIdToNusach(sourceEnhTid, targetTocId);
+            if (!targetTranslationIdSet.has(targetEnhTid)) {
+                cmsIdDbg("[CMS-ID]   enhancements (", sourceEnhTid, "→", targetEnhTid, "): לא קיים בנוסח יעד – מדלג");
+                continue;
+            }
+
+            const sourceEnhTrans = sourceTranslations.find((t: any) => t.translationId === sourceEnhTid);
+            const targetEnhTrans = targetTranslations.find((t: any) => t.translationId === targetEnhTid);
+            if (!sourceEnhTrans || !targetEnhTrans) continue;
+
+            const enhPath = `translations/${targetEnhTid}/prayers/${targetPrayerId}/items`;
+            const enhPartName = getTargetPartName(targetEnhTrans);
+            const enhPartIdAndName = `${targetPartId} ${enhPartName}`;
+
+            // טעינת enhancements של פריטי המקור בנוסח המקור
+            const sourceEnhPath = `translations/${sourceEnhTid}/prayers/${sourcePrayerId}/items`;
+            const chunks = chunkArray([...sourceItemIdSet], 30);
+            const sourceEnhEntitiesMap = new Map<string, Entity<any>>();
+            for (const chunk of chunks) {
+                const related = (
+                    await dataSource.fetchCollection({
+                        path: sourceEnhPath,
+                        collection: itemsCollection,
+                        filter: { linkedItem: ["array-contains-any", chunk] },
+                    })
+                ).filter((e: any) => e.values?.deleted !== true);
+                for (const e of related) {
+                    if (!sourceEnhEntitiesMap.has(e.id)) sourceEnhEntitiesMap.set(e.id, e);
+                }
+            }
+            const sourceEnhEntities = [...sourceEnhEntitiesMap.values()];
+
+            if (sourceEnhEntities.length === 0) {
+                cmsIdDbg("[CMS-ID]   enhancements (", sourceEnhTid, "): אין פריטים מקושרים במקור");
+                continue;
+            }
+
+            cmsIdDbg("[CMS-ID]   enhancements (", sourceEnhTid, "→", targetEnhTid, "): ", sourceEnhEntities.length, "פריטים");
+
+            // טעינת מצב התפילה יעד עבור התרגום הזה: פריטים פעילים, מחוקים, גבולות
+            const [targetEnhEntities, targetEnhNeighborBounds] = await Promise.all([
+                dataSource.fetchCollection({
+                    path: enhPath,
+                    collection: itemsCollection,
+                    filter: { partId: ["==", targetPartId] },
+                }),
+                fetchNeighborItemIdBoundsForPart(dataSource, {
+                    translationId: targetEnhTid,
+                    selectedPrayerId: targetPrayerId,
+                    partId: targetPartId,
+                    translations: targetTranslations,
+                }),
+            ]);
+            const targetEnhActive = targetEnhEntities
+                .filter((e: any) => e.values?.deleted !== true)
+                .sort((a: any, b: any) =>
+                    (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, { numeric: true })
+                );
+            const targetEnhDeletedIds: string[] = targetEnhEntities
+                .filter((e: any) => e.values?.deleted === true)
+                .map((e: any) => e.values?.itemId)
+                .filter((id: any) => idNorm(id) !== "")
+                .map((id: any) => String(id));
+
+            // מקבץ enhancements לפי baseItemId של המקור (כדי להכניס בקבוצה ליד הבסיס המתאים)
+            const enhByBaseItemId = new Map<string, Entity<any>[]>();
+            for (const enh of sourceEnhEntities) {
+                const link = enh.values?.linkedItem;
+                const baseIds: string[] = Array.isArray(link)
+                    ? link.filter((x: any) => idNorm(x) !== "").map((x: any) => idNorm(x))
+                    : (idNorm(link) !== "" ? [idNorm(link)] : []);
+                const matchedBaseId = baseIds.find((id) => sourceItemIdSet.has(id));
+                if (!matchedBaseId) continue;
+                if (!enhByBaseItemId.has(matchedBaseId)) enhByBaseItemId.set(matchedBaseId, []);
+                enhByBaseItemId.get(matchedBaseId)!.push(enh);
+            }
+            enhByBaseItemId.forEach((list) =>
+                list.sort((a, b) =>
+                    (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, { numeric: true })
+                )
+            );
+
+            // לכל פריט בסיס מועתק בתורו: בונים enhancements חדשים מיד אחרי הבסיס החדש
+            const enhOrderedIds: string[] = targetEnhActive
+                .map((e: any) => idNorm(e.values?.itemId))
+                .filter((id) => id !== "");
+            const allNewBaseIds = Object.values(baseIdMap);
+            const enhExtraTakenIds = [...targetEnhDeletedIds, ...allNewBaseIds];
+
+            for (const sourceBaseEntity of sourceEntities) {
+                const oldBaseId = idNorm(sourceBaseEntity.values?.itemId);
+                const newBaseId = baseIdMap[oldBaseId];
+                const newBaseMitId = newBaseMitIdByOldItemId[oldBaseId];
+                const baseIsParagraph = newBaseMitId !== newBaseId;
+
+                const enhItems = enhByBaseItemId.get(oldBaseId) ?? [];
+                if (enhItems.length === 0) continue;
+
+                // מיקום הכנסה: מיד אחרי newBaseId (כמו moveItemsToPart)
+                let baseRefPos = enhOrderedIds.findIndex((id) => Number(id) > Number(newBaseId));
+                if (baseRefPos < 0) baseRefPos = enhOrderedIds.length;
+                if (!enhOrderedIds.includes(newBaseId)) {
+                    enhOrderedIds.splice(baseRefPos, 0, newBaseId);
+                } else {
+                    baseRefPos = enhOrderedIds.indexOf(newBaseId);
+                }
+                let insertPos = baseRefPos + 1;
+
+                // מציאת newBaseId הבא ב-baseIdMap (כדי לקבוע cap)
+                const orderedBaseIdsAfterCopy = Object.values(baseIdMap)
+                    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                const idxOfNewBase = orderedBaseIdsAfterCopy.indexOf(newBaseId);
+                const enhItemsForCap = [
+                    ...targetEnhActive,
+                    ...Array.from(enhByBaseItemId.values()).flat(),
+                ];
+                const nextUpperCap = computeNextUpperCapForBaseRow(
+                    orderedBaseIdsAfterCopy,
+                    idxOfNewBase,
+                    enhItemsForCap
+                );
+
+                for (const enh of enhItems) {
+                    const newEnhItemId = computeItemIdForInsert(enhOrderedIds, insertPos, {
+                        neighborBounds: targetEnhNeighborBounds,
+                        extraTakenIds: enhExtraTakenIds,
+                        minIdBefore: newBaseId,
+                        ...(nextUpperCap != null ? { nextBaseLinkedMinItemId: nextUpperCap } : {}),
+                        confirmUserWantsDecimalId,
+                    });
+                    enhOrderedIds.splice(insertPos, 0, newEnhItemId);
+                    insertPos++;
+                    translationIdMap[enh.id] = newEnhItemId;
+
+                    // עדכון linkedItem להצביע על ה-newBaseId
+                    const oldLink = enh.values?.linkedItem;
+                    let newLinkedItem: unknown;
+                    if (Array.isArray(oldLink)) {
+                        newLinkedItem = oldLink.map((v: unknown) =>
+                            sourceItemIdSet.has(idNorm(v)) ? baseIdMap[idNorm(v)] : v
+                        );
+                    } else if (idNorm(oldLink) !== "" && sourceItemIdSet.has(idNorm(oldLink))) {
+                        newLinkedItem = [baseIdMap[idNorm(oldLink)]];
+                    } else {
+                        newLinkedItem = oldLink;
+                    }
+
+                    const newEnhMitId = baseIsParagraph ? newBaseMitId : newEnhItemId;
+
+                    const newEnhValues: Record<string, any> = {
+                        ...enh.values,
+                        partId: targetPartId,
+                        partName: enhPartName,
+                        partIdAndName: enhPartIdAndName,
+                        itemId: newEnhItemId,
+                        mit_id: newEnhMitId,
+                        linkedItem: newLinkedItem,
+                        timestamp: now,
+                    };
+                    delete newEnhValues.deleted;
+
+                    pendingWrites.push({
+                        collectionPath: enhPath,
+                        docId: newEnhItemId,
+                        data: newEnhValues,
+                    });
+
+                    cmsIdDbg("[CMS-ID] copyItemsToPart (enh) | tid=", targetEnhTid, "oldEntityId=", enh.id, "oldItemId=", enh.values?.itemId, "→ newEnhItemId=", newEnhItemId, "newMitId=", newEnhMitId, "baseIsParagraph=", baseIsParagraph);
+                }
+            }
+        }
+    }
+
+    cmsIdDbg("[CMS-ID]   pendingWrites.length=", pendingWrites.length);
+    await commitAtomicWrites(pendingWrites);
+
+    cmsIdDbg("[CMS-ID] ◀◀◀ copyItemsToPart – הצלחה, נוצרו", pendingWrites.length, "פריטים");
+
+    return {
+        baseIdMap,
+        translationIdMap,
+        createdCount: pendingWrites.length,
+    };
 }
 
 // ─── Update Part Metadata in Items ────────────────────────────────────────────

@@ -2,7 +2,7 @@
  * PartItemRow – שורת פריט בודדת ברשימת העריכה
  *
  * מציג:
- *   - כרטיס: itemId, זמן עדכון + textarea לתוכן (עם עיצוב לפי type)
+ *   - כרטיס: itemId + textarea לתוכן (עם עיצוב לפי type)
  *   - בלוק מאפיינים (סוג, כותרת, גופן, תפקיד, וכו') – ניתן להרחבה
  *   - בלוק "תרגומים מקושרים": פריטים מתרגומים אחרים שמקושרים ל-itemId (linkedItem) – ניתן לעריכה
  *   - כפתור "הוסף פריט" / "הוסף הוראה כאן" / "הוסף תרגום לטקסט זה"
@@ -12,6 +12,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import type { DateSetLabelEntry } from "../hooks/useDateSetLabels";
+import { DeleteTrashIcon } from "./DeleteTrashIcon";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
@@ -250,7 +251,7 @@ export function PartItemRow({
                                 onClick={() => setShowProps((p) => !p)}
                                 className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                             >
-                                {showProps ? "הסתר מאפיינים" : "מאפיינים"}
+                                {showProps ? "הסתר" : "מאפיינים"}
                             </button>
                         )}
                         {/* ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———

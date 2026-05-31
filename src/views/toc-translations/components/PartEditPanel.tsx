@@ -182,14 +182,15 @@ export function PartEditPanel({
      * סינון פריטים מוצגים לפי relevantDateSetIds:
      *   - null = הצג הכל ללא סינון
      *   - string[] = הצג רק פריטים שאין להם dateSetId, או שה-dateSetId שלהם נמצא ברשימה
-     * הסינון אינו משנה את `allItems` עצמו — `changedIds`, שמירה ופרסום ממשיכים על הכל.
+     *   - פריטים שסומנו כ־changed (בעריכה) נשארים גלויים תמיד
+     * הסינון מבוסס על dateSetId השמור (item.values), לא על ערך ביניים בזמן הקלדה.
      */
     const visibleItems = relevantDateSetIds === null
         ? allItems
         : allItems.filter((item) => {
-            const dsId =
-                (localValues[item.id]?.dateSetId as string | undefined) ??
-                (item.values?.dateSetId as string | undefined);
+            // פריט בעריכה נשאר גלוי גם אם dateSetId המקומי עדיין לא תואם לסינון (למשל בעת הקלדה)
+            if (changedIds.has(item.id)) return true;
+            const dsId = item.values?.dateSetId as string | undefined;
             if (!dsId) return true;
             return relevantDateSetIds.includes(dsId);
         });

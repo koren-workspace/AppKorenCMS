@@ -108,11 +108,18 @@ export function computeNextAvailableItemId(
     cmsIdLog(`${ID_LOG_PREFIX} ─── computeNextAvailableItemId ───`);
     cmsIdLog(`${ID_LOG_PREFIX}   קלט: idBefore=${String(idBefore ?? "(ריק)")} idAfter=${String(idAfter ?? "(ריק)")} takenIds=${takenArr.length <= 30 ? JSON.stringify(takenArr) : `[${takenArr.length} IDs: ${takenArr.slice(0, 10).join(",")}...]`}`);
 
+    const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
+    const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
+    if (!Number.isNaN(idBeforeNum) && !Number.isNaN(idAfterNum) && idBeforeNum >= idAfterNum) {
+        cmsIdLog(
+            `${ID_LOG_PREFIX}   אין מרווח חוקי: idBefore(${idBeforeNum}) >= idAfter(${idAfterNum})`
+        );
+        throw new Error(NO_SPACE_BETWEEN_ITEMS);
+    }
+
     let result = getRoundedInitialItemId(idBefore, idAfter);
     cmsIdLog(`${ID_LOG_PREFIX}   ערך התחלתי (מעוגל מ-idBetween): ${result}`);
 
-    const idBeforeNum = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
-    const idAfterNum = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
     let step = 0;
     // די מיותר בגלל שלא יכול לקרות מקרה שבו יש  הID החדש תפוסם
     while (takenIds.has(result)) {
@@ -294,26 +301,21 @@ function applyNextBaseLinkedCap(
         cmsIdLog(`${ID_LOG_PREFIX}     ─ ערך לא מספרי (${nextBaseLinkedMinItemId}) – דילוג`);
         return;
     }
-    const beforeNum = b.idBefore != null && b.idBefore !== "" ? Number(b.idBefore) : NaN;
-    if (Number.isNaN(beforeNum) || capNum > beforeNum) {
-        if (b.idAfter == null || b.idAfter === "") {
+    if (b.idAfter == null || b.idAfter === "") {
+        const oldAfter = b.idAfter;
+        b.idAfter = nextBaseLinkedMinItemId;
+        b.idAfterSource = `nextBaseLinkedMinItemId (אין שכן מתחת): ${b.idAfter}`;
+        cmsIdLog(`${ID_LOG_PREFIX}     ✓ idAfter היה ${oldAfter ?? "(ריק)"} → עדכון ל-${b.idAfter}`);
+    } else {
+        const afterNum = Number(b.idAfter);
+        if (!Number.isNaN(afterNum) && capNum < afterNum) {
             const oldAfter = b.idAfter;
             b.idAfter = nextBaseLinkedMinItemId;
-            b.idAfterSource = `nextBaseLinkedMinItemId (אין שכן מתחת): ${b.idAfter}`;
-            cmsIdLog(`${ID_LOG_PREFIX}     ✓ idAfter היה ${oldAfter ?? "(ריק)"} → עדכון ל-${b.idAfter} (אין שכן מתחת, capNum ${capNum} > idBefore ${beforeNum})`);
+            b.idAfterSource = `MIN(שכן מתחת, nextBaseLinkedMinItemId) → ${b.idAfter}`;
+            cmsIdLog(`${ID_LOG_PREFIX}     ✓ capNum(${capNum}) < idAfter(${afterNum}) → idAfter עודכן מ-${oldAfter} ל-${b.idAfter}`);
         } else {
-            const afterNum = Number(b.idAfter);
-            if (!Number.isNaN(afterNum) && capNum < afterNum) {
-                const oldAfter = b.idAfter;
-                b.idAfter = nextBaseLinkedMinItemId;
-                b.idAfterSource = `MIN(שכן מתחת, nextBaseLinkedMinItemId) → ${b.idAfter}`;
-                cmsIdLog(`${ID_LOG_PREFIX}     ✓ capNum(${capNum}) < idAfter(${afterNum}) → idAfter עודכן מ-${oldAfter} ל-${b.idAfter}`);
-            } else {
-                cmsIdLog(`${ID_LOG_PREFIX}     ─ capNum(${capNum}) >= idAfter(${b.idAfter}) – ללא שינוי`);
-            }
+            cmsIdLog(`${ID_LOG_PREFIX}     ─ capNum(${capNum}) >= idAfter(${b.idAfter}) – ללא שינוי`);
         }
-    } else {
-        cmsIdLog(`${ID_LOG_PREFIX}     ─ capNum(${capNum}) <= idBefore(${beforeNum}) – ללא שינוי`);
     }
 }
 

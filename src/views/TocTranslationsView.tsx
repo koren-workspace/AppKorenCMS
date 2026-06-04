@@ -28,6 +28,7 @@ import { EditCategoryModal } from "./toc-translations/components/EditCategoryMod
 import { SplitPartModal } from "./toc-translations/components/SplitPartModal";
 import { MoveToPartModal } from "./toc-translations/components/MoveToPartModal";
 import { CopyItemsToPartModal } from "./toc-translations/components/CopyItemsToPartModal";
+import { ItemWarehousePanel } from "./toc-translations/components/ItemWarehousePanel";
 import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTranslationColumns";
 // ─── מושבת זמנית: עריכת נוסח ב־TOC — להפעלה בטל הערות ────────────────────────
 // import { EditTocModal } from "./toc-translations/components/EditTocModal";
@@ -331,7 +332,7 @@ export function TocTranslationsView() {
                 selectedTocId={nav.selectedTocId}
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
             />
-            {/* אזור העריכה: toolbar + רשימת פריטים (לאחר טעינה) */}
+            {/* אזור העריכה */}
             <PartEditPanel
                 selectedGroupId={partEdit.selectedGroupId}
                 selectedTocId={nav.selectedTocId}
@@ -380,7 +381,29 @@ export function TocTranslationsView() {
                 onReorderItems={partEdit.reorderItemsWithinPart}
                 dataSource={partEdit.dataSource}
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
+                warehouseEnabled={partEdit.warehouseEnabled}
+                warehouseEntries={partEdit.warehouseEntries}
+                warehouseSelectedEntryId={partEdit.warehouseSelectedEntryId}
+                onWarehouseSelectEntry={partEdit.setWarehouseSelectedEntryId}
+                onSaveItemToWarehouse={partEdit.saveBaseItemToWarehouse}
+                onOpenWarehousePasteAt={partEdit.openWarehousePasteModal}
+                onPasteFromWarehouse={partEdit.pasteFromWarehouse}
+                warehousePasteModalOpen={partEdit.warehousePasteModalOpen}
+                warehouseFixedInsertAfterItemId={partEdit.warehouseFixedInsertAfterItemId}
+                onCloseWarehousePasteModal={partEdit.closeWarehousePasteModal}
             />
+            {partEdit.warehouseEnabled && (
+                <ItemWarehousePanel
+                    open={partEdit.warehousePanelOpen}
+                    onToggleOpen={partEdit.toggleWarehousePanel}
+                    entries={partEdit.warehouseEntries}
+                    selectedEntryId={partEdit.warehouseSelectedEntryId}
+                    onSelectEntry={partEdit.setWarehouseSelectedEntryId}
+                    onRemoveEntry={partEdit.removeWarehouseItem}
+                    onClearAll={partEdit.clearWarehouse}
+                    disabled={!partEdit.selectedGroupId}
+                />
+            )}
             <AddItemModal
                 open={partEdit.addItemModalOpen}
                 onClose={partEdit.closeAddItemModal}

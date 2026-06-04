@@ -37,3 +37,10 @@ export function cmsSimpleBaseIntervalEnabled(): boolean {
     }
     return true;
 }
+
+/**
+ * מחסן הפריטים — תמיד פעיל.
+ */
+export function cmsItemClipboardEnabled(): boolean {
+    return true;
+}

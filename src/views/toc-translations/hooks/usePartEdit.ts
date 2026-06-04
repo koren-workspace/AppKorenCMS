@@ -33,7 +33,21 @@ import { getNusachDisplayLabel } from "../utils/nusachDisplay";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
 import { LOGGED_FIELDS } from "../constants/itemFields";
 import { defaultAddItemForm, type AddItemFormValues } from "../components/AddItemModal";
-import { cmsSimpleBaseIntervalEnabled, cmsDebugItemIdsEnabled } from "../utils/debugFlags";
+import { cmsSimpleBaseIntervalEnabled, cmsDebugItemIdsEnabled, cmsItemClipboardEnabled } from "../utils/debugFlags";
+import type { WarehouseEntry, WarehouseFieldSelection } from "../types/itemWarehouse";
+import {
+    addWarehouseEntry,
+    clearWarehouseEntries,
+    loadWarehouseEntries,
+    removeWarehouseEntry,
+} from "../services/itemWarehouseStorage";
+import {
+    buildWarehouseEntryFromRow,
+    filterWarehouseEntryBySelection,
+    warehouseEnhancementsToEntityMap,
+    warehouseEntrySourceItemIds,
+    warehouseSnapshotsToEntities,
+} from "../utils/itemWarehouseUtils";
 
 function cmsIdDbg(...args: unknown[]) {
     if (cmsDebugItemIdsEnabled()) console.log(...args);
@@ -243,6 +257,17 @@ export function usePartEdit(context: PartEditContext) {
     const [copyToPartModalOpen, setCopyToPartModalOpen] = useState(false);
     /** פריטי חלק היעד במודל ההעתקה (יכולים להיות מתפילה/נוסח אחרים) */
     const [copyTargetPartItems, setCopyTargetPartItems] = useState<Entity<any>[]>([]);
+    // מחסן פריטים (clipboard)
+    const warehouseEnabled = cmsItemClipboardEnabled();
+    const [warehouseEntries, setWarehouseEntries] = useState<WarehouseEntry[]>(() =>
+        warehouseEnabled ? loadWarehouseEntries() : []
+    );
+    const [warehouseSelectedEntryId, setWarehouseSelectedEntryId] = useState<string | null>(null);
+    const [warehousePanelOpen, setWarehousePanelOpen] = useState(true);
+    const toggleWarehousePanel = () => setWarehousePanelOpen((v) => !v);
+    const [warehousePasteModalOpen, setWarehousePasteModalOpen] = useState(false);
+    const [warehouseFixedInsertAfterItemId, setWarehouseFixedInsertAfterItemId] =
+        useState<string | null | undefined>(undefined);
 
     // מודל "הוסף תרגום" – פריט בסיס, תרגום יעד, מיקום, תוכן
     const [addTranslationOpen, setAddTranslationOpen] = useState(false);
@@ -853,6 +878,9 @@ export function usePartEdit(context: PartEditContext) {
     /** מעדכן זמן עדכון ב-Firestore + Bagel (SDK) – מפעיל סנכרון באפליקציה */
     const handleFinalPublish = async () => {
         if (!selectedTocId) return;
+        // שמירה אוטומטית לפני פרסום — כדי שמחיקות תלויות (pending deletes) ייכתבו
+        // לפייירסטור לפני שהאפליקציה מסתנכרנת עם הנתונים
+        await handleSaveGroup();
         setSaving(true);
         try {
             const publishTimestamp = Date.now();
@@ -2073,6 +2101,205 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
+    const saveBaseItemToWarehouse = (item: Entity<any>) => {
+        if (!warehouseEnabled || !selectedGroupId || !selectedPrayerId || !selectedTocId) return;
+        const canonical = resolveCanonicalBaseItemForTranslation(item);
+        const baseItemId =
+            getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues);
+        if (!baseItemId) {
+            snackbar.open({
+                type: "warning",
+                message: "לא ניתן לשמור למחסן: חסר itemId תקין בפריט",
+            });
+            return;
+        }
+        const relatedEnhancements = Object.entries(enhancements).flatMap(([tId, list]) =>
+            list
+                .filter((e) => {
+                    const link =
+                        enhancementLocalValues[e.id]?.linkedItem ?? e.values?.linkedItem;
+                    return Array.isArray(link)
+                        ? link.some((x: unknown) => String(x) === baseItemId)
+                        : String(link ?? "") === baseItemId;
+                })
+                .map((e) => ({ id: e.id, tId, values: e.values }))
+        );
+        const sourceMeta = {
+            sourceTocId: selectedTocId,
+            tocId: selectedTocId,
+            translationId: `0-${selectedTocId}`,
+            prayerId: selectedPrayerId,
+            partId: selectedGroupId,
+            itemIds: [baseItemId],
+            tocName: currentTocData?.nusach,
+            prayerName:
+                (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name ?? "",
+            partName:
+                (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
+                (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
+                "",
+        };
+        const entry = buildWarehouseEntryFromRow({
+            sourceMeta,
+            baseEntity: canonical,
+            baseLocalValues: localValues[canonical.id] ?? {},
+            relatedEnhancements,
+            enhancementLocalValues,
+            copyLinkedTranslations: true,
+        });
+        const next = addWarehouseEntry(entry);
+        setWarehouseEntries(next);
+        setWarehouseSelectedEntryId(entry.id);
+        snackbar.open({ type: "success", message: "הפריט נשמר במחסן" });
+    };
+
+    const removeWarehouseItem = (id: string) => {
+        const next = removeWarehouseEntry(id);
+        setWarehouseEntries(next);
+        if (warehouseSelectedEntryId === id) {
+            setWarehouseSelectedEntryId(next[0]?.id ?? null);
+        }
+    };
+
+    const clearWarehouse = () => {
+        clearWarehouseEntries();
+        setWarehouseEntries([]);
+        setWarehouseSelectedEntryId(null);
+    };
+
+    const openWarehousePasteModal = (insertAfterItemId?: string | null) => {
+        if (!warehouseEnabled) return;
+        if (!selectedGroupId || !selectedPrayerId || !selectedTocId) {
+            snackbar.open({
+                type: "warning",
+                message: "בחר נוסח/תפילה/מקטע לפני הדבקה מהמחסן",
+            });
+            return;
+        }
+        setWarehouseFixedInsertAfterItemId(insertAfterItemId);
+        setWarehousePasteModalOpen(true);
+    };
+
+    const closeWarehousePasteModal = () => {
+        setWarehousePasteModalOpen(false);
+        setWarehouseFixedInsertAfterItemId(undefined);
+    };
+
+    const pasteFromWarehouse = async (params: {
+        entryId: string;
+        insertAfterItemId: string | null;
+        selection: WarehouseFieldSelection;
+    }) => {
+        if (!warehouseEnabled || !selectedGroupId || !selectedPrayerId || !selectedTocId) return;
+        const entry = warehouseEntries.find((e) => e.id === params.entryId);
+        if (!entry) {
+            snackbar.open({ type: "error", message: "פריט מחסן לא נמצא" });
+            return;
+        }
+        const filteredEntry = filterWarehouseEntryBySelection(entry, params.selection);
+        const sourceTocId =
+            filteredEntry.sourceMeta.sourceTocId || filteredEntry.sourceMeta.tocId;
+        const sourceTocValues = tocItems.find((t) => t.id === sourceTocId)?.values;
+        const targetTocValues = tocItems.find((t) => t.id === selectedTocId)?.values;
+        const sourceTranslations = sourceTocValues?.translations ?? [];
+        const targetTranslations = targetTocValues?.translations ?? [];
+        if (filteredEntry.copyLinkedTranslations && sourceTranslations.length === 0) {
+            snackbar.open({
+                type: "error",
+                message:
+                    "לא נמצא עץ תרגומים של נוסח המקור במחסן. הפעולה נעצרה כדי למנוע מיפוי שגוי.",
+            });
+            return;
+        }
+        const sourceEntities = warehouseSnapshotsToEntities(filteredEntry.baseItems);
+        const sourceEnhancementsByTranslationId = warehouseEnhancementsToEntityMap(
+            filteredEntry.enhancementsByTranslationId
+        );
+        const sourceItemIds = warehouseEntrySourceItemIds(filteredEntry);
+        if (sourceEntities.length === 0 || sourceItemIds.length === 0) {
+            snackbar.open({
+                type: "error",
+                message: "פריט המחסן פגום או חסר itemId תקין",
+            });
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const result = await copyItemsToPart(dataSource, {
+                sourceTranslationId: filteredEntry.sourceMeta.translationId,
+                sourcePrayerId: filteredEntry.sourceMeta.prayerId,
+                sourcePartId: filteredEntry.sourceMeta.partId,
+                sourceItemIds,
+                targetTranslationId: `0-${selectedTocId}`,
+                targetTocId: selectedTocId,
+                targetPrayerId: selectedPrayerId,
+                targetPartId: selectedGroupId,
+                insertAfterItemId: params.insertAfterItemId,
+                copyLinkedTranslations: filteredEntry.copyLinkedTranslations,
+                sourceTranslations,
+                targetTranslations,
+                sourceTocId,
+                sourceEntities,
+                sourceEnhancementsByTranslationId,
+                confirmUserWantsDecimalId: () =>
+                    window.confirm(
+                        "בין שני פריטים צמודים אין מקום למספר שלם. האם ליצור מזהה עם .5?"
+                    ),
+            });
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "copy_items_to_part",
+                context: {
+                    tocId: selectedTocId,
+                    translationId: currentTranslationData?.translationId,
+                    prayerId: selectedPrayerId,
+                    partId: selectedGroupId,
+                    tocName: currentTocData?.nusach,
+                    prayerName:
+                        (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name,
+                    partName:
+                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.nameHe ??
+                        (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name,
+                },
+                details: {
+                    fromWarehouse: true,
+                    warehouseEntryId: filteredEntry.id,
+                    warehouseLabel: filteredEntry.label,
+                    sourceTocId,
+                    copiedItemIds: sourceItemIds,
+                    copiedItemsCount: result.createdCount,
+                    copyLinkedTranslations: filteredEntry.copyLinkedTranslations,
+                    selectedFields: params.selection,
+                    baseIdMap: result.baseIdMap,
+                },
+                savedToFirestore: true,
+            });
+            snackbar.open({
+                type: "success",
+                message: `${result.createdCount} פריטים נוצרו מהמחסן`,
+            });
+            closeWarehousePasteModal();
+            await fetchItemsWithEnhancements(selectedGroupId, {
+                preserveLocalEdits: true,
+            });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Paste from warehouse failed`, err);
+            const msg = err instanceof Error ? err.message : "";
+            if (msg.includes("copyItemsToPart: computed enhancement itemId")) {
+                snackbar.open({
+                    type: "error",
+                    message:
+                        "לא נמצא itemId תקין לתרגום בטווח הבסיס. הפעולה בוטלה כדי למנוע שבירת סדר.",
+                });
+            } else {
+                snackbar.open({ type: "error", message: "שגיאה ביצירה מהמחסן" });
+            }
+        } finally {
+            setSaving(false);
+        }
+    };
+
     /** שומר את פריט התרגום החדש וסוגר את המודל */
     const submitAddTranslation = async () => {
         if (
@@ -2326,6 +2553,20 @@ export function usePartEdit(context: PartEditContext) {
         handleCopyItemsToPart,
         copyTargetPartItems,
         loadCopyTargetPartItems,
+        warehouseEnabled,
+        warehouseEntries,
+        warehouseSelectedEntryId,
+        setWarehouseSelectedEntryId,
+        saveBaseItemToWarehouse,
+        removeWarehouseItem,
+        clearWarehouse,
+        warehousePanelOpen,
+        toggleWarehousePanel,
+        warehousePasteModalOpen,
+        warehouseFixedInsertAfterItemId,
+        openWarehousePasteModal,
+        closeWarehousePasteModal,
+        pasteFromWarehouse,
         addTranslationOpen,
         addTranslationBaseItem,
         addTranslationTargetId,

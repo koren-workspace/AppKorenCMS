@@ -11,8 +11,24 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const firestoreBatchWrites = vi.hoisted(() => [] as Array<{ ref: any; data: any }>);
+const firestoreBatchCommits = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
 // מונע טעינת @firecms/cloud ו-collections (שמושכים CSS וסביבת דפדפן)
 vi.mock("@firecms/cloud", () => ({ Entity: class {}, default: {} }));
+vi.mock("firebase/firestore", () => ({
+    getFirestore: vi.fn(() => ({})),
+    doc: vi.fn((_db: any, path: string, id: string) => ({ path, id })),
+    writeBatch: vi.fn(() => ({
+        set: (ref: any, data: any) => {
+            firestoreBatchWrites.push({ ref, data });
+        },
+        commit: firestoreBatchCommits,
+    })),
+}));
+vi.mock("../../../firebase_config", () => ({
+    getFirebaseApp: vi.fn(() => ({})),
+}));
 vi.mock("../collections", () => ({
     itemsCollection: {},
     dbUpdateTimeCollection: {},
@@ -23,6 +39,7 @@ import {
     splitPartItems,
     moveItemsToPart,
     createTranslationItem,
+    copyItemsToPart,
     type DeletePartItemParams,
     type SplitPartItemsParams,
     type MoveItemsToPartParams,
@@ -33,6 +50,7 @@ describe("partEditService – עדכון פריטים (savePartItems)", () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        firestoreBatchWrites.length = 0;
     });
 
     it("עדכון רשומה אחת – קורא ל-saveEntity פעם אחת עם path, entityId, values ו-timestamp", async () => {
@@ -358,6 +376,7 @@ describe("partEditService – מחיקות (deletePartItemAndRelatedTranslations
 describe("partEditService – splitPartItems", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        firestoreBatchWrites.length = 0;
     });
 
     /** בונה mock של fetchCollection שמחזיר פריטים לפי partId */
@@ -402,16 +421,16 @@ describe("partEditService – splitPartItems", () => {
         await splitPartItems(ds, params);
 
         // e2 ו-e3 צריכים לעבור (החתך מ-2 עד הסוף = insertBefore=false)
-        const savedIds = ds.saveEntity.mock.calls.map((c: any) => c[0].entityId);
-        expect(savedIds).toContain("e2");
-        expect(savedIds).toContain("e3");
-        expect(savedIds).not.toContain("e1");
+        const writtenIds = firestoreBatchWrites.map((w) => w.ref.id);
+        expect(writtenIds).toContain("e2");
+        expect(writtenIds).toContain("e3");
+        expect(writtenIds).not.toContain("e1");
 
-        const e2Call = ds.saveEntity.mock.calls.find((c: any) => c[0].entityId === "e2")![0];
-        expect(e2Call.values.partId).toBe("p2");
-        expect(e2Call.values.partName).toBe("חדש");
-        expect(e2Call.values.partIdAndName).toBe("p2 חדש");
-        expect(typeof e2Call.values.timestamp).toBe("number");
+        const e2Write = firestoreBatchWrites.find((w) => w.ref.id === "e2");
+        expect(e2Write?.data.partId).toBe("p2");
+        expect(e2Write?.data.partName).toBe("חדש");
+        expect(e2Write?.data.partIdAndName).toBe("p2 חדש");
+        expect(typeof e2Write?.data.timestamp).toBe("number");
     });
 
     it("insertBefore=true – מהתחלה עד פריט החתך (כולל) עוברים למקטע החדש", async () => {
@@ -437,10 +456,10 @@ describe("partEditService – splitPartItems", () => {
 
         await splitPartItems(ds, params);
 
-        const savedIds = ds.saveEntity.mock.calls.map((c: any) => c[0].entityId);
-        expect(savedIds).toContain("e1");
-        expect(savedIds).toContain("e2");
-        expect(savedIds).not.toContain("e3");
+        const writtenIds = firestoreBatchWrites.map((w) => w.ref.id);
+        expect(writtenIds).toContain("e1");
+        expect(writtenIds).toContain("e2");
+        expect(writtenIds).not.toContain("e3");
     });
 
     it("תרגום 1-ashkenaz מקבל שם אנגלי", async () => {
@@ -475,13 +494,13 @@ describe("partEditService – splitPartItems", () => {
         await splitPartItems(ds, params);
 
         // הפריט בתרגום 1-ashkenaz צריך לקבל שם אנגלי
-        const engCall = ds.saveEntity.mock.calls.find((c: any) => c[0].entityId === "e_eng")?.[0];
-        expect(engCall?.values.partName).toBe("New Part");
-        expect(engCall?.values.partIdAndName).toBe("p2 New Part");
+        const engWrite = firestoreBatchWrites.find((w) => w.ref.id === "e_eng");
+        expect(engWrite?.data.partName).toBe("New Part");
+        expect(engWrite?.data.partIdAndName).toBe("p2 New Part");
 
         // הפריט הבסיסי מקבל שם עברי
-        const baseCall = ds.saveEntity.mock.calls.find((c: any) => c[0].entityId === "e1")?.[0];
-        expect(baseCall?.values.partName).toBe("חדש");
+        const baseWrite = firestoreBatchWrites.find((w) => w.ref.id === "e1");
+        expect(baseWrite?.data.partName).toBe("חדש");
     });
 
     it("זורק שגיאה כשפריט החתך לא נמצא", async () => {
@@ -516,6 +535,7 @@ describe("partEditService – splitPartItems", () => {
 describe("partEditService – moveItemsToPart", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        firestoreBatchWrites.length = 0;
     });
 
     it("העברה למקטע ריק – לפריט בסיס מחושב itemId חדש וגם mit_id בהתאם", async () => {
@@ -554,22 +574,19 @@ describe("partEditService – moveItemsToPart", () => {
 
         await moveItemsToPart(ds, params);
 
-        expect(ds.saveEntity).toHaveBeenCalledTimes(2);
-        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
-        const createCall = saveCalls.find((c: any) => c.status === "new");
-        const softDeleteCall = saveCalls.find(
-            (c: any) => c.status === "existing" && c.values?.deleted === true
-        );
-        expect(createCall).toBeTruthy();
-        expect(softDeleteCall).toBeTruthy();
-        expect(createCall.values.partId).toBe("tgt");
-        expect(createCall.values.partName).toBe("יעד");
-        expect(createCall.values.partIdAndName).toBe("tgt יעד");
-        expect(createCall.values.itemId).toBe("1100"); // moved old ID "100" נשמר ב-extraTakenIds, לכן מתקדם ל-1100
-        expect(createCall.values.mit_id).toBe("1100");
-        expect(createCall.entityId).toBe(createCall.values.itemId);
-        expect(softDeleteCall.entityId).toBe("e1");
-        expect(typeof createCall.values.timestamp).toBe("number");
+        expect(firestoreBatchWrites.length).toBe(2);
+        const createWrite = firestoreBatchWrites.find((w) => !w.data.deleted);
+        const softDeleteWrite = firestoreBatchWrites.find((w) => w.data.deleted === true);
+        expect(createWrite).toBeTruthy();
+        expect(softDeleteWrite).toBeTruthy();
+        expect(createWrite!.data.partId).toBe("tgt");
+        expect(createWrite!.data.partName).toBe("יעד");
+        expect(createWrite!.data.partIdAndName).toBe("tgt יעד");
+        expect(createWrite!.data.itemId).toBe("1100"); // moved old ID "100" נשמר ב-extraTakenIds, לכן מתקדם ל-1100
+        expect(createWrite!.data.mit_id).toBe("1100");
+        expect(createWrite!.ref.id).toBe(createWrite!.data.itemId);
+        expect(softDeleteWrite!.ref.id).toBe("e1");
+        expect(typeof createWrite!.data.timestamp).toBe("number");
     });
 
     it("העברת שני פריטי בסיס – itemId מחושב לפי מיקום יעד, ו-mit_id לפי כלל הפסקה", async () => {
@@ -610,21 +627,18 @@ describe("partEditService – moveItemsToPart", () => {
 
         await moveItemsToPart(ds, params);
 
-        expect(ds.saveEntity).toHaveBeenCalledTimes(4);
+        expect(firestoreBatchWrites.length).toBe(4);
 
-        const createCalls = ds.saveEntity.mock.calls
-            .map((c: any) => c[0])
-            .filter((c: any) => c.status === "new")
-            .sort((a: any, b: any) =>
-                (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, {
-                    numeric: true,
-                })
+        const createWrites = firestoreBatchWrites
+            .filter((w) => !w.data.deleted)
+            .sort((a, b) =>
+                (a.data.itemId ?? "").localeCompare(b.data.itemId ?? "", undefined, { numeric: true })
             );
-        expect(createCalls.length).toBe(2);
-        const call1 = createCalls[0];
-        const call2 = createCalls[1];
-        const i1 = Number(call1.values.itemId);
-        const i2 = Number(call2.values.itemId);
+        expect(createWrites.length).toBe(2);
+        const write1 = createWrites[0];
+        const write2 = createWrites[1];
+        const i1 = Number(write1.data.itemId);
+        const i2 = Number(write2.data.itemId);
 
         // itemId מחושב בין 100 ל-200 ובסדר עולה
         expect(i1).toBeGreaterThan(100);
@@ -633,9 +647,9 @@ describe("partEditService – moveItemsToPart", () => {
         expect(i2).toBeLessThan(200);
 
         // פריט ראשון חלק מפסקה -> mit_id של הפריט הקודם ביעד (100)
-        expect(call1.values.mit_id).toBe("100");
+        expect(write1.data.mit_id).toBe("100");
         // פריט שני לא חלק מפסקה -> mit_id=itemId החדש שלו
-        expect(call2.values.mit_id).toBe(call2.values.itemId);
+        expect(write2.data.mit_id).toBe(write2.data.itemId);
     });
 
     it("תרגומים מקושרים מתעדכנים בנפרד: linkedItem חדש, itemId מחושב מקומית, mit_id לפי כלל הבסיס", async () => {
@@ -683,39 +697,36 @@ describe("partEditService – moveItemsToPart", () => {
 
         await moveItemsToPart(ds, params);
 
-        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
-        const baseCreateCalls = saveCalls.filter(
-            (c: any) =>
-                c.path.includes("translations/0-ashkenaz") &&
-                c.status === "new"
+        const baseCreateWrite = firestoreBatchWrites.find(
+            (w) =>
+                w.ref.path.includes("translations/0-ashkenaz") &&
+                !w.data.deleted
         );
-        const baseCall = baseCreateCalls[0];
-        const relCreateCalls = saveCalls.filter(
-            (c: any) =>
-                c.path.includes("translations/1-ashkenaz") &&
-                c.status === "new"
+        const relCreateWrites = firestoreBatchWrites.filter(
+            (w) =>
+                w.ref.path.includes("translations/1-ashkenaz") &&
+                !w.data.deleted
         );
-        const relSoftDeleteCalls = saveCalls.filter(
-            (c: any) =>
-                c.path.includes("translations/1-ashkenaz") &&
-                c.status === "existing" &&
-                c.values?.deleted === true
+        const relSoftDeleteWrites = firestoreBatchWrites.filter(
+            (w) =>
+                w.ref.path.includes("translations/1-ashkenaz") &&
+                w.data.deleted === true
         );
 
-        expect(baseCall).toBeTruthy();
-        // idBefore=100, idAfter=null + extraTakenIds=[105] → 1100 תפוס, לכן 1105
-        expect(baseCall.values.itemId).toBe("1105");
-        expect(baseCall.values.mit_id).toBe("100");
-        expect(baseCall.entityId).toBe("1105");
+        expect(baseCreateWrite).toBeTruthy();
+        // idBefore=100, idAfter=null + extraTakenIds=[105] → idBefore מוכמס ל-105, לכן 1105
+        expect(baseCreateWrite!.data.itemId).toBe("1105");
+        expect(baseCreateWrite!.data.mit_id).toBe("100");
+        expect(baseCreateWrite!.ref.id).toBe("1105");
 
-        expect(relCreateCalls.length).toBe(2);
-        expect(relSoftDeleteCalls.length).toBe(2);
-        relCreateCalls.forEach((c: any) => {
-            expect(c.values.partId).toBe("tgt");
-            expect(c.values.linkedItem).toContain("1105"); // linkedItem עודכן ל-itemId החדש של הבסיס
-            expect(c.values.mit_id).toBe("100"); // הבסיס חלק מפסקה -> אותו mit_id לתרגומים
-            expect(c.values.itemId).not.toBe("1105"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
-            expect(c.entityId).toBe(c.values.itemId);
+        expect(relCreateWrites.length).toBe(2);
+        expect(relSoftDeleteWrites.length).toBe(2);
+        relCreateWrites.forEach((w) => {
+            expect(w.data.partId).toBe("tgt");
+            expect(w.data.linkedItem).toContain("1105"); // linkedItem עודכן ל-itemId החדש של הבסיס
+            expect(w.data.mit_id).toBe("100"); // הבסיס חלק מפסקה -> אותו mit_id לתרגומים
+            expect(w.data.itemId).not.toBe("1105"); // מחושב בנפרד לתרגום ולא מועתק מהבסיס
+            expect(w.ref.id).toBe(w.data.itemId);
         });
     });
 
@@ -764,41 +775,117 @@ describe("partEditService – moveItemsToPart", () => {
 
         await moveItemsToPart(ds, params);
 
-        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
-        const baseNewCalls = saveCalls.filter(
-            (c: any) => c.path.includes("0-base") && c.status === "new"
+        const baseNewWrites = firestoreBatchWrites.filter(
+            (w) => w.ref.path.includes("0-base") && !w.data.deleted
         );
-        const transNewCalls = saveCalls.filter(
-            (c: any) => c.path.includes("1-trans") && c.status === "new"
+        const transNewWrites = firestoreBatchWrites.filter(
+            (w) => w.ref.path.includes("1-trans") && !w.data.deleted
         );
 
         // Base items: inserted between 100 and 200 → e.g. 150, 175
-        expect(baseNewCalls.length).toBe(2);
-        const baseId1 = Number(baseNewCalls[0].values.itemId);
-        const baseId2 = Number(baseNewCalls[1].values.itemId);
+        expect(baseNewWrites.length).toBe(2);
+        const baseId1 = Number(baseNewWrites[0].data.itemId);
+        const baseId2 = Number(baseNewWrites[1].data.itemId);
         expect(baseId1).toBeGreaterThan(100);
         expect(baseId1).toBeLessThan(200);
         expect(baseId2).toBeGreaterThan(baseId1);
         expect(baseId2).toBeLessThan(200);
 
         // Translation for base1: must be between baseId1 and baseId2 (capped by nextBaseId)
-        expect(transNewCalls.length).toBe(2);
-        const trForBase1 = transNewCalls.find(
-            (c: any) => c.values.linkedItem?.includes(String(baseId1))
+        expect(transNewWrites.length).toBe(2);
+        const trForBase1 = transNewWrites.find(
+            (w) => w.data.linkedItem?.includes(String(baseId1))
         );
-        const trForBase2 = transNewCalls.find(
-            (c: any) => c.values.linkedItem?.includes(String(baseId2))
+        const trForBase2 = transNewWrites.find(
+            (w) => w.data.linkedItem?.includes(String(baseId2))
         );
         expect(trForBase1).toBeTruthy();
         expect(trForBase2).toBeTruthy();
 
-        const trId1 = Number(trForBase1!.values.itemId);
-        const trId2 = Number(trForBase2!.values.itemId);
+        const trId1 = Number(trForBase1!.data.itemId);
+        const trId2 = Number(trForBase2!.data.itemId);
 
         // Critical: translation ID must stay below the NEXT base item
         expect(trId1).toBeGreaterThan(baseId1);
         expect(trId1).toBeLessThan(baseId2);
         expect(trId2).toBeGreaterThan(baseId2);
+    });
+
+    it("העברה: תרגום מקושר נשאר מעל newBaseId ומתחת לבסיס הבא", async () => {
+        const srcBase = { id: "10", values: { itemId: "10", mit_id: "10", partId: "src" } };
+        const tgtBase1 = { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt" } };
+        const tgtBase2 = { id: "200", values: { itemId: "200", mit_id: "200", partId: "tgt" } };
+
+        // תרגום מקור של הפריט המועבר
+        const srcRel = {
+            id: "tr_src",
+            values: { itemId: "11", mit_id: "11", partId: "src", linkedItem: ["10"] },
+        };
+        // תרגום קיים ביעד, כדי לייצר הקשר ריאלי של IDs קיימים
+        const tgtExistingRel = {
+            id: "tr_tgt_existing",
+            values: { itemId: "250", mit_id: "250", partId: "tgt", linkedItem: ["200"] },
+        };
+
+        const translations = [
+            {
+                translationId: "0-base",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "יעד" }] }] }],
+            },
+            {
+                translationId: "1-trans",
+                categories: [{ prayers: [{ id: "p", parts: [{ id: "tgt", name: "Target" }] }] }],
+            },
+        ];
+
+        const ds = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                const pid = filter?.partId?.[1];
+                if (path.includes("0-base") && pid === "src") return Promise.resolve([srcBase]);
+                if (path.includes("0-base") && pid === "tgt")
+                    return Promise.resolve([tgtBase1, tgtBase2]);
+                if (path.includes("1-trans") && pid === "tgt")
+                    return Promise.resolve([tgtExistingRel]);
+                if (path.includes("1-trans") && filter?.linkedItem)
+                    return Promise.resolve([srcRel]);
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        await moveItemsToPart(ds as any, {
+            currentTranslationId: "0-base",
+            selectedPrayerId: "p",
+            movedItemIds: ["10"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: "100",
+            translations,
+        });
+
+        const baseCreate = firestoreBatchWrites.find(
+            (w) =>
+                w.ref.path === "translations/0-base/prayers/p/items" &&
+                !Array.isArray(w.data?.linkedItem) &&
+                w.data?.partId === "tgt"
+        );
+        const translationCreate = firestoreBatchWrites.find(
+            (w) =>
+                w.ref.path === "translations/1-trans/prayers/p/items" &&
+                Array.isArray(w.data?.linkedItem) &&
+                w.data?.partId === "tgt"
+        );
+
+        expect(baseCreate).toBeTruthy();
+        expect(translationCreate).toBeTruthy();
+
+        const newBaseId = Number(baseCreate!.data.itemId);
+        const newRelId = Number(translationCreate!.data.itemId);
+        expect(newBaseId).toBeGreaterThan(100);
+        expect(newBaseId).toBeLessThan(200);
+        expect(newRelId).toBeGreaterThan(newBaseId);
+        expect(newRelId).toBeLessThan(200);
     });
 
     it("תרגום מקושר לשני בסיסים מועברים – כל הפניות ב-linkedItem מתעדכנות", async () => {
@@ -845,22 +932,21 @@ describe("partEditService – moveItemsToPart", () => {
 
         await moveItemsToPart(ds, params);
 
-        const saveCalls = ds.saveEntity.mock.calls.map((c: any) => c[0]);
-        const baseNewCalls = saveCalls.filter(
-            (c: any) => c.path.includes("0-base") && c.status === "new"
+        const baseNewWrites = firestoreBatchWrites.filter(
+            (w) => w.ref.path.includes("0-base") && !w.data.deleted
         );
-        const transNewCalls = saveCalls.filter(
-            (c: any) => c.path.includes("1-trans") && c.status === "new"
+        const transNewWrites = firestoreBatchWrites.filter(
+            (w) => w.ref.path.includes("1-trans") && !w.data.deleted
         );
 
-        const newBaseId1 = baseNewCalls[0].values.itemId;
-        const newBaseId2 = baseNewCalls[1].values.itemId;
+        const newBaseId1 = baseNewWrites[0]?.data.itemId;
+        const newBaseId2 = baseNewWrites[1]?.data.itemId;
 
         // Translation is only created once (no duplicates despite multi-link)
-        expect(transNewCalls.length).toBe(1);
+        expect(transNewWrites.length).toBe(1);
 
         // BOTH old base IDs replaced in linkedItem
-        const savedLinkedItem = transNewCalls[0].values.linkedItem;
+        const savedLinkedItem = transNewWrites[0].data.linkedItem;
         expect(savedLinkedItem).toContain(newBaseId1);
         expect(savedLinkedItem).toContain(newBaseId2);
         expect(savedLinkedItem).not.toContain("10");
@@ -935,6 +1021,266 @@ describe("partEditService – moveItemsToPart", () => {
             /insertAfterItemId "999" not found in target part/
         );
         expect(ds.saveEntity).not.toHaveBeenCalled();
+    });
+});
+
+describe("partEditService – copyItemsToPart (warehouse snapshots)", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        firestoreBatchWrites.length = 0;
+    });
+
+    const makeTranslations = (baseTid: string, prayerId: string, partId: string, partName: string) => [
+        {
+            translationId: baseTid,
+            categories: [
+                {
+                    prayers: [
+                        {
+                            id: prayerId,
+                            parts: [{ id: partId, name: partName }],
+                        },
+                    ],
+                },
+            ],
+        },
+    ];
+
+    it("creates new base item ids from preloaded source entities", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                if (path.includes("translations/0-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([
+                        { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt-part" } },
+                    ]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn(),
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await copyItemsToPart(dataSource as any, {
+            sourceTranslationId: "0-src",
+            sourcePrayerId: "p-src",
+            sourcePartId: "src-part",
+            sourceItemIds: [],
+            targetTranslationId: "0-dst",
+            targetTocId: "dst",
+            targetPrayerId: "p-dst",
+            targetPartId: "tgt-part",
+            insertAfterItemId: "100",
+            copyLinkedTranslations: false,
+            sourceTranslations: makeTranslations("0-src", "p-src", "src-part", "source"),
+            targetTranslations: makeTranslations("0-dst", "p-dst", "tgt-part", "target"),
+            sourceEntities: [
+                { id: "base-1", values: { itemId: "10", mit_id: "10", content: "Amen", partId: "src-part" } } as any,
+            ],
+            sourceEnhancementsByTranslationId: {},
+        });
+
+        const newBaseId = result.baseIdMap["10"];
+        expect(newBaseId).toBeTruthy();
+        expect(Number(newBaseId)).toBeGreaterThan(100);
+        expect(result.translationIdMap).toEqual({});
+
+        const baseWrite = firestoreBatchWrites.find(
+            (w) => w.ref.path === "translations/0-dst/prayers/p-dst/items"
+        );
+        expect(baseWrite).toBeTruthy();
+        expect(baseWrite!.data.itemId).toBe(newBaseId);
+        expect(baseWrite!.data.mit_id).toBe(newBaseId);
+        expect(baseWrite!.data.partId).toBe("tgt-part");
+    });
+
+    it("copies linked translations into matching target nusach with recalculated ids", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                if (path.includes("translations/0-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([
+                        { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt-part" } },
+                    ]);
+                }
+                if (path.includes("translations/1-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn(),
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await copyItemsToPart(dataSource as any, {
+            sourceTranslationId: "0-src",
+            sourcePrayerId: "p-src",
+            sourcePartId: "src-part",
+            sourceItemIds: [],
+            targetTranslationId: "0-dst",
+            targetTocId: "dst",
+            targetPrayerId: "p-dst",
+            targetPartId: "tgt-part",
+            insertAfterItemId: "100",
+            copyLinkedTranslations: true,
+            sourceTranslations: [
+                ...makeTranslations("0-src", "p-src", "src-part", "source"),
+                ...makeTranslations("1-src", "p-src", "src-part", "Source EN"),
+            ],
+            targetTranslations: [
+                ...makeTranslations("0-dst", "p-dst", "tgt-part", "target"),
+                ...makeTranslations("1-dst", "p-dst", "tgt-part", "Target EN"),
+            ],
+            sourceEntities: [
+                { id: "base-1", values: { itemId: "10", mit_id: "10", content: "Amen", partId: "src-part" } } as any,
+            ],
+            sourceEnhancementsByTranslationId: {
+                "1-src": [
+                    {
+                        id: "enh-1",
+                        values: {
+                            itemId: "11",
+                            mit_id: "11",
+                            linkedItem: ["10"],
+                            content: "Amen (EN)",
+                            partId: "src-part",
+                        },
+                    } as any,
+                ],
+            },
+        });
+
+        const newBaseId = result.baseIdMap["10"];
+        expect(newBaseId).toBeTruthy();
+        expect(result.translationIdMap["enh-1"]).toBeTruthy();
+
+        const enhWrite = firestoreBatchWrites.find(
+            (w) =>
+                w.ref.path === "translations/1-dst/prayers/p-dst/items" &&
+                Array.isArray(w.data.linkedItem)
+        );
+        expect(enhWrite).toBeTruthy();
+        expect(enhWrite!.data.linkedItem).toContain(newBaseId);
+        expect(enhWrite!.data.itemId).toBe(result.translationIdMap["enh-1"]);
+        expect(enhWrite!.data.itemId).not.toBe(newBaseId);
+    });
+
+    it("skips linked translations when copyLinkedTranslations is false", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                if (path.includes("translations/0-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([
+                        { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt-part" } },
+                    ]);
+                }
+                if (path.includes("translations/1-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn(),
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await copyItemsToPart(dataSource as any, {
+            sourceTranslationId: "0-src",
+            sourcePrayerId: "p-src",
+            sourcePartId: "src-part",
+            sourceItemIds: [],
+            targetTranslationId: "0-dst",
+            targetTocId: "dst",
+            targetPrayerId: "p-dst",
+            targetPartId: "tgt-part",
+            insertAfterItemId: "100",
+            copyLinkedTranslations: false,
+            sourceTranslations: [
+                ...makeTranslations("0-src", "p-src", "src-part", "source"),
+                ...makeTranslations("1-src", "p-src", "src-part", "Source EN"),
+            ],
+            targetTranslations: [
+                ...makeTranslations("0-dst", "p-dst", "tgt-part", "target"),
+                ...makeTranslations("1-dst", "p-dst", "tgt-part", "Target EN"),
+            ],
+            sourceEntities: [
+                { id: "base-1", values: { itemId: "10", mit_id: "10", content: "Amen", partId: "src-part" } } as any,
+            ],
+            sourceEnhancementsByTranslationId: {
+                "1-src": [
+                    {
+                        id: "enh-1",
+                        values: { itemId: "11", mit_id: "11", linkedItem: ["10"], content: "Amen (EN)" },
+                    } as any,
+                ],
+            },
+        });
+
+        expect(result.translationIdMap).toEqual({});
+        const enhWrites = firestoreBatchWrites.filter((w) =>
+            w.ref.path.includes("translations/1-dst/prayers/p-dst/items")
+        );
+        expect(enhWrites).toHaveLength(0);
+    });
+
+    it("keeps copied translation below the next existing base item in target part", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                if (path.includes("translations/0-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([
+                        { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt-part" } },
+                        { id: "200", values: { itemId: "200", mit_id: "200", partId: "tgt-part" } },
+                    ]);
+                }
+                if (path.includes("translations/1-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn(),
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await copyItemsToPart(dataSource as any, {
+            sourceTranslationId: "0-src",
+            sourcePrayerId: "p-src",
+            sourcePartId: "src-part",
+            sourceItemIds: [],
+            targetTranslationId: "0-dst",
+            targetTocId: "dst",
+            targetPrayerId: "p-dst",
+            targetPartId: "tgt-part",
+            insertAfterItemId: "100",
+            copyLinkedTranslations: true,
+            sourceTranslations: [
+                ...makeTranslations("0-src", "p-src", "src-part", "source"),
+                ...makeTranslations("1-src", "p-src", "src-part", "Source EN"),
+            ],
+            targetTranslations: [
+                ...makeTranslations("0-dst", "p-dst", "tgt-part", "target"),
+                ...makeTranslations("1-dst", "p-dst", "tgt-part", "Target EN"),
+            ],
+            sourceEntities: [
+                { id: "base-1", values: { itemId: "10", mit_id: "10", content: "Amen", partId: "src-part" } } as any,
+            ],
+            sourceEnhancementsByTranslationId: {
+                "1-src": [
+                    {
+                        id: "enh-1",
+                        values: {
+                            itemId: "11",
+                            mit_id: "11",
+                            linkedItem: ["10"],
+                            content: "Amen (EN)",
+                            partId: "src-part",
+                        },
+                    } as any,
+                ],
+            },
+        });
+
+        const newBaseId = Number(result.baseIdMap["10"]);
+        const newEnhId = Number(result.translationIdMap["enh-1"]);
+        expect(newBaseId).toBeGreaterThan(100);
+        expect(newBaseId).toBeLessThan(200);
+        expect(newEnhId).toBeGreaterThan(newBaseId);
+        expect(newEnhId).toBeLessThan(200);
     });
 });
 

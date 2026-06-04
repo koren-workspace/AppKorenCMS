@@ -13,6 +13,7 @@ import {
     computeItemIdForInsert,
     computeNextUpperCap,
     computeNextUpperCapForBaseRow,
+    NO_SPACE_BETWEEN_ITEMS,
 } from "./itemUtils";
 
 describe("nusachIdPolicy", () => {
@@ -200,5 +201,13 @@ describe("nusachIdPolicy", () => {
         expect(Number(idWithGapBlocker)).toBeGreaterThan(Number(idWithoutGapBlocker));
         expect(Number(idWithGapBlocker)).toBeGreaterThan(150);
         expect(Number(idWithGapBlocker)).toBeLessThan(200);
+    });
+
+    it("throws NO_SPACE when upper cap is already below/at the anchor", () => {
+        expect(() =>
+            computeItemIdForInsert(["250"], 1, {
+                nextBaseLinkedMinItemId: "200",
+            })
+        ).toThrow(NO_SPACE_BETWEEN_ITEMS);
     });
 });

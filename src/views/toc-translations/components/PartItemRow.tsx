@@ -80,8 +80,12 @@ type PartItemRowProps = {
     currentTranslationId?: string | null;
     /** מוצג רק בנוסח הבסיסי (0-*); בשאר הנוסחים – עריכה בלבד */
     onAddAfter?: () => void;
+    /** מוצג רק בנוסח בסיס: פותח בחירה מהמחסן למיקום אחרי השורה */
+    onAddFromWarehouseAfter?: () => void;
     /** מוצג רק בתרגום: הוסף פריט הוראה אחרי שורה זו */
     onAddInstructionAfter?: () => void;
+    /** שמירת שורת בסיס למחסן */
+    onSaveToWarehouse?: (item: Entity<any>) => void;
     /** פותח מודל הוספת תרגום לפריט הזה */
     onAddTranslation?: (item: Entity<any>) => void;
     /** מנוטרל עד שמירת פריט (פריט חדש) */
@@ -124,7 +128,9 @@ export function PartItemRow({
     isBaseTranslation = false,
     currentTranslationId = null,
     onAddAfter,
+    onAddFromWarehouseAfter,
     onAddInstructionAfter,
+    onSaveToWarehouse,
     onAddTranslation,
     isAddTranslationBlocked = false,
     restrictTypeToInstructions = false,
@@ -260,6 +266,16 @@ export function PartItemRow({
                                 className="inline-flex items-center px-1.5 py-px text-gray-500 hover:bg-gray-100 border border-gray-200 rounded text-xs leading-none whitespace-nowrap"
                             >
                                 {showProps ? "הסתר מאפיינים" : "מאפיינים"}
+                            </button>
+                        )}
+                        {onSaveToWarehouse && (
+                            <button
+                                type="button"
+                                onClick={() => onSaveToWarehouse(item)}
+                                className="inline-flex items-center px-1.5 py-px text-violet-700 hover:bg-violet-50 border border-violet-200 rounded text-xs leading-none whitespace-nowrap"
+                                title="שמור פריט בסיס זה במחסן לשימוש חוזר"
+                            >
+                                למחסן
                             </button>
                         )}
                         {/* ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
@@ -881,7 +897,7 @@ export function PartItemRow({
                     })}
                 </div>
             )}
-            {(onAddTranslation || onAddAfter || onAddInstructionAfter) && (
+            {(onAddTranslation || onAddAfter || onAddFromWarehouseAfter || onAddInstructionAfter) && (
                 <div className="mt-1.5 flex flex-col gap-1 w-full">
                     {onAddTranslation && (
                         <>
@@ -909,15 +925,29 @@ export function PartItemRow({
                             )}
                         </>
                     )}
-                    {onAddAfter && (
-                        <button
-                            type="button"
-                            onClick={onAddAfter}
-                            title="הוסף פריט חדש אחרי הפריט שמעל"
-                            className="w-full px-3 py-1 rounded text-sm font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                        >
-                            + הוסף פריט
-                        </button>
+                    {(onAddAfter || onAddFromWarehouseAfter) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                            {onAddAfter && (
+                                <button
+                                    type="button"
+                                    onClick={onAddAfter}
+                                    title="הוסף פריט חדש אחרי הפריט שמעל"
+                                    className="w-full px-3 py-1 rounded text-sm font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                                >
+                                    + הוסף פריט
+                                </button>
+                            )}
+                            {onAddFromWarehouseAfter && (
+                                <button
+                                    type="button"
+                                    onClick={onAddFromWarehouseAfter}
+                                    title="הוסף פריט מהמחסן אחרי הפריט שמעל"
+                                    className="w-full px-3 py-1 rounded text-sm font-semibold bg-violet-50 text-violet-800 border border-violet-200 hover:bg-violet-100 transition-colors"
+                                >
+                                    + הוסף מהמחסן
+                                </button>
+                            )}
+                        </div>
                     )}
                     {onAddInstructionAfter && (
                         <button

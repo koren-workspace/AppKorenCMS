@@ -13,6 +13,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Entity } from "@firecms/core";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
+import { WarehousePasteModal } from "./WarehousePasteModal";
+import type { WarehouseEntry, WarehouseFieldSelection } from "../types/itemWarehouse";
 import { useDateSetLabels, type DateSetLabelEntry } from "../hooks/useDateSetLabels";
 // ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
 // import {
@@ -99,6 +101,20 @@ export type PartEditPanelProps = {
      * הסינון הוא להצגה בלבד — `allItems`, `changedIds`, שמירה ופרסום ממשיכים לפעול על כל הפריטים.
      */
     relevantDateSetIds?: string[] | null;
+    warehouseEnabled?: boolean;
+    warehouseEntries?: WarehouseEntry[];
+    warehouseSelectedEntryId?: string | null;
+    onWarehouseSelectEntry?: (id: string) => void;
+    onSaveItemToWarehouse?: (item: Entity<any>) => void;
+    onOpenWarehousePasteAt?: (insertAfterItemId: string | null) => void;
+    onPasteFromWarehouse?: (params: {
+        entryId: string;
+        insertAfterItemId: string | null;
+        selection: WarehouseFieldSelection;
+    }) => void;
+    warehousePasteModalOpen?: boolean;
+    warehouseFixedInsertAfterItemId?: string | null | undefined;
+    onCloseWarehousePasteModal?: () => void;
 };
 
 // ——— גרירת פריטים בתוך החלק תפילה (מושבתת זמנית) ———
@@ -167,6 +183,16 @@ export function PartEditPanel({
     onReorderItems: _onReorderItems,
     dataSource,
     relevantDateSetIds = null,
+    warehouseEnabled = false,
+    warehouseEntries = [],
+    warehouseSelectedEntryId = null,
+    onWarehouseSelectEntry,
+    onSaveItemToWarehouse,
+    onOpenWarehousePasteAt,
+    onPasteFromWarehouse,
+    warehousePasteModalOpen = false,
+    warehouseFixedInsertAfterItemId = undefined,
+    onCloseWarehousePasteModal,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges =
@@ -320,13 +346,24 @@ export function PartEditPanel({
                     <div className="overflow-auto flex-1 space-y-4 px-2 pb-10">
                         {/* הוספת פריט בתחילת הרשימה – רק בנוסח הבסיסי (0-*) */}
                         {allowAddPart && q === "" && (
-                            <button
-                                type="button"
-                                onClick={() => onAddNewItemAt(0)}
-                                className="w-full px-3 py-1 rounded text-sm font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                            >
-                                + הוסף פריט
-                            </button>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => onAddNewItemAt(0)}
+                                    className="w-full px-3 py-1 rounded text-sm font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                                >
+                                    + הוסף פריט
+                                </button>
+                                {warehouseEnabled && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenWarehousePasteAt?.(null)}
+                                        className="w-full px-3 py-1 rounded text-sm font-semibold bg-violet-50 text-violet-800 border border-violet-200 hover:bg-violet-100 transition-colors"
+                                    >
+                                        + הוסף מהמחסן
+                                    </button>
+                                )}
+                            </div>
                         )}
                         {/* הוספת הוראה – רק בתרגום (לא בבסיס); הוראות לא מקושרות לבסיס */}
                         {allowAddInstruction && onAddNewInstructionAt && q === "" && (
@@ -401,6 +438,19 @@ export function PartEditPanel({
                                                 ? () => onAddNewItemAt(fullIndex + 1)
                                                 : undefined
                                         }
+                                        onAddFromWarehouseAfter={
+                                            allowAddPart && warehouseEnabled
+                                                ? () => {
+                                                    const afterItemId =
+                                                        String(
+                                                            localValues[item.id]?.itemId ??
+                                                            item.values?.itemId ??
+                                                            ""
+                                                        ).trim() || null;
+                                                    onOpenWarehousePasteAt?.(afterItemId);
+                                                }
+                                                : undefined
+                                        }
                                         onAddInstructionAfter={
                                             allowAddInstruction && onAddNewInstructionAt
                                                 ? () => onAddNewInstructionAt(fullIndex + 1)
@@ -422,6 +472,11 @@ export function PartEditPanel({
                                         pendingEnhancementDeleteIds={pendingEnhancementDeleteIds}
                                         onRestoreEnhancementItem={
                                             isBaseTranslation ? onRestoreEnhancementItem : undefined
+                                        }
+                                        onSaveToWarehouse={
+                                            isBaseTranslation && warehouseEnabled
+                                                ? onSaveItemToWarehouse
+                                                : undefined
                                         }
                                     />
                                 </div>
@@ -506,6 +561,20 @@ export function PartEditPanel({
                     </div>
                     </div>
                 )
+            )}
+            {warehouseEnabled && onWarehouseSelectEntry && onPasteFromWarehouse && onCloseWarehousePasteModal && (
+                <WarehousePasteModal
+                    open={warehousePasteModalOpen}
+                    entries={warehouseEntries}
+                    selectedEntryId={warehouseSelectedEntryId}
+                    onSelectEntry={onWarehouseSelectEntry}
+                    items={allItems}
+                    localValues={localValues}
+                    saving={saving}
+                    onClose={onCloseWarehousePasteModal}
+                    fixedInsertAfterItemId={warehouseFixedInsertAfterItemId}
+                    onSubmit={onPasteFromWarehouse}
+                />
             )}
         </div>
     );

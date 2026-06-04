@@ -1321,10 +1321,14 @@ export function useTocNavigation() {
             String(t.translationId ?? "").startsWith("0-")
         ) ?? trans;
         const allParts = getParts(baseTrans);
-        const partIds = allParts.map((p: any) => p.id).filter(Boolean);
+        // כל המקטעים מכל התפילות — לחישוב candidate ולמניעת collision גלובלי
+        const allGlobalParts: Array<{ id?: string }> = (baseTrans?.categories ?? [])
+            .flatMap((cat: any) => cat.prayers ?? [])
+            .flatMap((p: any) => p.parts ?? []);
+        const allPartIdsGlobal = allGlobalParts.map((pt) => String(pt.id)).filter(Boolean);
         const digitPart = resolveDigitMillions(baseTrans, selectedTocId!);
-        const candidatePart = allocateNewPartId(allParts, afterPartId, digitPart);
-        const newPartId = allocateIdWithCollision(candidatePart, new Set(partIds.map(String)));
+        const candidatePart = allocateNewPartId(allParts, afterPartId, digitPart, allGlobalParts);
+        const newPartId = allocateIdWithCollision(candidatePart, new Set(allPartIdsGlobal));
         console.log(
             "[CMS-ID] addPart | digitM=",
             digitPart,

@@ -207,11 +207,17 @@ export function allocateNewPrayerId(
 export function allocateNewPartId(
     allParts: Array<{ id?: string }>,
     afterPartId: string | null,
-    digitMillions: number
+    digitMillions: number,
+    /** כל המקטעים מכל התפילות — לחישוב נקודת התחלה כשהתפילה הנוכחית ריקה */
+    allGlobalParts?: Array<{ id?: string }>
 ): string {
     const withIds = allParts.map((p) => String(p.id)).filter(Boolean);
     if (withIds.length === 0) {
-        return String(partMinFloor(digitMillions, "11"));
+        const globalIds = (allGlobalParts ?? []).map((p) => String(p.id)).filter(Boolean);
+        const globalMax = globalIds.length ? maxNumeric(globalIds) : -Infinity;
+        const floor = partMinFloor(digitMillions, "11");
+        const base = Number.isFinite(globalMax) && globalMax >= floor ? globalMax : floor - DEFAULT_ID_GAP;
+        return String(base + DEFAULT_ID_GAP);
     }
 
     let block: "11" | "12" = "11";

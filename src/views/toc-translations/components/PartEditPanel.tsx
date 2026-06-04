@@ -441,12 +441,9 @@ export function PartEditPanel({
                                         onAddFromWarehouseAfter={
                                             allowAddPart && warehouseEnabled
                                                 ? () => {
+                                                    // משתמשים בערך השרת בלבד — insertAfterItemId חייב להיות קיים ב-Firestore
                                                     const afterItemId =
-                                                        String(
-                                                            localValues[item.id]?.itemId ??
-                                                            item.values?.itemId ??
-                                                            ""
-                                                        ).trim() || null;
+                                                        String(item.values?.itemId ?? "").trim() || null;
                                                     onOpenWarehousePasteAt?.(afterItemId);
                                                 }
                                                 : undefined

@@ -22,6 +22,7 @@ import {
     NO_SPACE_BETWEEN_ITEMS,
 } from "../utils/itemUtils";
 import { cmsDebugItemIdsEnabled } from "../utils/debugFlags";
+import { itemMinIdBefore, resolveDigitMillions } from "../utils/nusachIdPolicy";
 
 export { NO_SPACE_BETWEEN_ITEMS };
 
@@ -1055,6 +1056,17 @@ export async function moveItemsToPart(
         .filter((id: any) => id != null && String(id).trim() !== "")
         .map((id: any) => String(id));
 
+    // כמו copyPreparedItemsToPart: כשחלק היעד ריק ואין שכנים, יש לאכוף רצפת מזהים
+    // כדי שהפריטים לא יקבלו IDs כמו 0, 1000, 2000...
+    const targetTransForPolicy = translations.find((t: any) => t.translationId === currentTranslationId);
+    const digitMillionsForMove = resolveDigitMillions(targetTransForPolicy, currentTranslationId);
+    const minIdBeforeForMove = itemMinIdBefore(digitMillionsForMove, targetPartId);
+    const isEmptyTargetPartForMove =
+        targetItems.length === 0 &&
+        !neighborBounds?.prevLastItemId &&
+        !neighborBounds?.nextFirstItemId;
+    cmsIdDbg("[CMS-ID] moveItemsToPart | isEmptyTargetPart=", isEmptyTargetPartForMove, "digitMillions=", digitMillionsForMove, "minIdBefore=", minIdBeforeForMove);
+
     const oldToNewBaseItemId: Record<string, string> = {};
     const oldToNewBaseMitId: Record<string, string> = {};
     let prevBaseMitId: string | null =
@@ -1070,6 +1082,7 @@ export async function moveItemsToPart(
             neighborBounds,
             // Reserve old moved IDs too, so new entity IDs never collide before soft-delete.
             extraTakenIds: [...baseDeletedItemIds, ...otherTranslationsItemIds, ...movedBaseOldItemIds],
+            ...(isEmptyTargetPartForMove ? { minIdBefore: minIdBeforeForMove } : {}),
         });
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
@@ -1374,6 +1387,8 @@ export type CopyItemsToPartResult = {
     translationIdMap: Record<string, string>;
     /** מספר פריטים שנוצרו ביעד (בסיס + תרגומים) */
     createdCount: number;
+    /** תרגומים שנדחו כי לא קיימים בנוסח היעד (לצורך הצגת אזהרה ל-UI) */
+    skippedTranslationIds: string[];
 };
 
 /**
@@ -1416,7 +1431,7 @@ async function copyPreparedItemsToPart(
         Array.isArray(preparedSourceEntities) && preparedSourceEntities.length > 0;
 
     if (sourceItemIds.length === 0 && !hasPreparedSource) {
-        return { baseIdMap: {}, translationIdMap: {}, createdCount: 0 };
+        return { baseIdMap: {}, translationIdMap: {}, createdCount: 0, skippedTranslationIds: [] };
     }
 
     const sourceItemIdSet = new Set(
@@ -1532,6 +1547,17 @@ async function copyPreparedItemsToPart(
     cmsIdDbg("[CMS-ID]   target part: active=", targetActiveItems.length, "deleted=", targetDeletedItemIds.length, "otherTranslationsInTargetPart=", otherTranslationsItemIds.length);
     cmsIdDbg("[CMS-ID]   neighborBounds(target)=", JSON.stringify(neighborBounds));
 
+    // כאשר חלק היעד ריק לחלוטין ואין שכן מלפנים או מאחור, יש לאכוף רצפת מזהים
+    // (כמו isNewPrayer ב-usePartEdit) כדי שהפריטים לא יקבלו IDs כמו 0, 1000, 2000...
+    const targetTransForPolicy = targetTranslations.find((t: any) => t.translationId === targetTranslationId);
+    const digitMillionsForCopy = resolveDigitMillions(targetTransForPolicy, targetTocId);
+    const minIdBeforeForCopy = itemMinIdBefore(digitMillionsForCopy, targetPartId);
+    const isEmptyTargetPart =
+        targetActiveItems.length === 0 &&
+        !neighborBounds?.prevLastItemId &&
+        !neighborBounds?.nextFirstItemId;
+    cmsIdDbg("[CMS-ID]   isEmptyTargetPart=", isEmptyTargetPart, "digitMillions=", digitMillionsForCopy, "minIdBeforeForCopy=", minIdBeforeForCopy);
+
     // ─── חישוב מיקום הכנסה ב-targetActiveItems ────────────────────────────────
     const normalizedInsertAfter =
         insertAfterItemId == null ? null : String(insertAfterItemId);
@@ -1568,6 +1594,7 @@ async function copyPreparedItemsToPart(
             neighborBounds,
             extraTakenIds: [...targetDeletedItemIds, ...otherTranslationsItemIds],
             confirmUserWantsDecimalId,
+            ...(isEmptyTargetPart ? { minIdBefore: minIdBeforeForCopy } : {}),
         });
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
@@ -1645,6 +1672,7 @@ async function copyPreparedItemsToPart(
     }
 
     const translationIdMap: Record<string, string> = {};
+    const skippedTranslationIds: string[] = [];
 
     // ─── העתקת תרגומים מקושרים (enhancements) ─────────────────────────────────
     if (copyLinkedTranslations) {
@@ -1663,6 +1691,7 @@ async function copyPreparedItemsToPart(
             );
             if (!targetTranslationIdSet.has(targetEnhTid)) {
                 cmsIdDbg("[CMS-ID]   enhancements (", sourceEnhTid, "→", targetEnhTid, "): לא קיים בנוסח יעד – מדלג");
+                skippedTranslationIds.push(sourceEnhTid);
                 continue;
             }
 
@@ -1872,6 +1901,7 @@ async function copyPreparedItemsToPart(
         baseIdMap,
         translationIdMap,
         createdCount: pendingWrites.length,
+        skippedTranslationIds,
     };
 }
 

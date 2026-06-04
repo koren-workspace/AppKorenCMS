@@ -78,16 +78,17 @@ function loadRaw(): WarehouseEntry[] {
     }
 }
 
-function persist(entries: WarehouseEntry[]): void {
-    if (typeof localStorage === "undefined") return;
+function persist(entries: WarehouseEntry[]): boolean {
+    if (typeof localStorage === "undefined") return false;
     try {
         const normalized = entries
             .filter(isValidEntry)
             .map(normalizeEntry)
             .slice(0, MAX_ENTRIES);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        return true;
     } catch {
-        // localStorage מלא או לא זמין
+        return false;
     }
 }
 
@@ -95,10 +96,20 @@ export function loadWarehouseEntries(): WarehouseEntry[] {
     return loadRaw().sort((a, b) => b.savedAt - a.savedAt);
 }
 
-export function addWarehouseEntry(entry: WarehouseEntry): WarehouseEntry[] {
-    const next = [normalizeEntry(entry), ...loadRaw()].slice(0, MAX_ENTRIES);
-    persist(next);
-    return next;
+export type AddWarehouseEntryResult = {
+    entries: WarehouseEntry[];
+    /** false אם localStorage מלא או חסום — הנתונים אבדו */
+    persisted: boolean;
+    /** true אם רשומה ישנה נמחקה כי המחסן הגיע ל-MAX_ENTRIES */
+    droppedOldest: boolean;
+};
+
+export function addWarehouseEntry(entry: WarehouseEntry): AddWarehouseEntryResult {
+    const existing = loadRaw();
+    const droppedOldest = existing.length >= MAX_ENTRIES;
+    const next = [normalizeEntry(entry), ...existing].slice(0, MAX_ENTRIES);
+    const persisted = persist(next);
+    return { entries: next, persisted, droppedOldest };
 }
 
 export function removeWarehouseEntry(id: string): WarehouseEntry[] {

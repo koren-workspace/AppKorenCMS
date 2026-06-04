@@ -40,6 +40,7 @@ import {
     clearWarehouseEntries,
     loadWarehouseEntries,
     removeWarehouseEntry,
+    type AddWarehouseEntryResult,
 } from "../services/itemWarehouseStorage";
 import {
     buildWarehouseEntryFromRow,
@@ -2065,6 +2066,12 @@ export function usePartEdit(context: PartEditContext) {
                 type: "success",
                 message: `${result.createdCount} פריטים הועתקו בהצלחה`,
             });
+            if (result.skippedTranslationIds.length > 0) {
+                snackbar.open({
+                    type: "warning",
+                    message: `${result.skippedTranslationIds.length} תרגומים לא הועתקו — לא נמצאו בנוסח היעד (${result.skippedTranslationIds.join(", ")})`,
+                });
+            }
             closeCopyToPartModal();
             // רענון מקטע נוכחי רק אם היעד = המקטע הנוכחי (אחרת הנתונים המוצגים לא משתנים)
             if (
@@ -2113,9 +2120,13 @@ export function usePartEdit(context: PartEditContext) {
             });
             return;
         }
+        const pendingEnhancementDeleteIds = new Set(
+            pendingEnhancementDeletes.map((p) => p.entity.id)
+        );
         const relatedEnhancements = Object.entries(enhancements).flatMap(([tId, list]) =>
             list
                 .filter((e) => {
+                    if (pendingEnhancementDeleteIds.has(e.id)) return false;
                     const link =
                         enhancementLocalValues[e.id]?.linkedItem ?? e.values?.linkedItem;
                     return Array.isArray(link)
@@ -2147,10 +2158,22 @@ export function usePartEdit(context: PartEditContext) {
             enhancementLocalValues,
             copyLinkedTranslations: true,
         });
-        const next = addWarehouseEntry(entry);
+        const { entries: next, persisted, droppedOldest }: AddWarehouseEntryResult = addWarehouseEntry(entry);
         setWarehouseEntries(next);
         setWarehouseSelectedEntryId(entry.id);
-        snackbar.open({ type: "success", message: "הפריט נשמר במחסן" });
+        if (!persisted) {
+            snackbar.open({
+                type: "error",
+                message: "הפריט לא נשמר במחסן — אחסון הדפדפן מלא או חסום",
+            });
+        } else if (droppedOldest) {
+            snackbar.open({
+                type: "warning",
+                message: "הפריט נשמר במחסן — פריט ישן נמחק כי המחסן הגיע ל-50 רשומות",
+            });
+        } else {
+            snackbar.open({ type: "success", message: "הפריט נשמר במחסן" });
+        }
     };
 
     const removeWarehouseItem = (id: string) => {
@@ -2175,6 +2198,19 @@ export function usePartEdit(context: PartEditContext) {
                 message: "בחר נוסח/תפילה/מקטע לפני הדבקה מהמחסן",
             });
             return;
+        }
+        // פריט שטרם נשמר (new_xxx) לא קיים ב-Firestore — הדבקה "אחריו" תיכשל
+        if (insertAfterItemId) {
+            const refItem = allItems.find(
+                (it) => String(it.values?.itemId ?? "") === insertAfterItemId
+            );
+            if (refItem?.id.startsWith("new_")) {
+                snackbar.open({
+                    type: "warning",
+                    message: "שמור את הפריטים לפני הדבקה מהמחסן אחרי פריט חדש שטרם נשמר",
+                });
+                return;
+            }
         }
         setWarehouseFixedInsertAfterItemId(insertAfterItemId);
         setWarehousePasteModalOpen(true);
@@ -2279,6 +2315,12 @@ export function usePartEdit(context: PartEditContext) {
                 type: "success",
                 message: `${result.createdCount} פריטים נוצרו מהמחסן`,
             });
+            if (result.skippedTranslationIds.length > 0) {
+                snackbar.open({
+                    type: "warning",
+                    message: `${result.skippedTranslationIds.length} תרגומים לא הועתקו — לא נמצאו בנוסח היעד (${result.skippedTranslationIds.join(", ")})`,
+                });
+            }
             closeWarehousePasteModal();
             await fetchItemsWithEnhancements(selectedGroupId, {
                 preserveLocalEdits: true,
@@ -2286,7 +2328,23 @@ export function usePartEdit(context: PartEditContext) {
         } catch (err) {
             console.error(`${LOG_PREFIX} Paste from warehouse failed`, err);
             const msg = err instanceof Error ? err.message : "";
-            if (msg.includes("copyItemsToPart: computed enhancement itemId")) {
+            if (err instanceof Error && err.message === NO_SPACE_BETWEEN_ITEMS) {
+                snackbar.open({
+                    type: "error",
+                    message: "אין מקום פנוי בין הפריטים – לא ניתן להדביק ללא עקיפת הסדר.",
+                });
+            } else if (msg.includes("copyItemsToPart: no matching source items found")) {
+                snackbar.open({
+                    type: "warning",
+                    message: "לא נמצאו פריטים תואמים להדבקה, הפעולה לא בוצעה",
+                });
+            } else if (msg.includes("copyItemsToPart: insertAfterItemId")) {
+                snackbar.open({
+                    type: "error",
+                    message:
+                        "פריט הייחוס להכנסה לא נמצא במקטע היעד – ייתכן שהנתונים השתנו. נסה לרענן ולנסות שוב.",
+                });
+            } else if (msg.includes("copyItemsToPart: computed enhancement itemId")) {
                 snackbar.open({
                     type: "error",
                     message:

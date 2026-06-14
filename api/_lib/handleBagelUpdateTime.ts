@@ -1,5 +1,5 @@
-import { updateBagelTimestampOnServer, type BagelEnv } from "./bagelProxy";
-import { isEmailAllowed, verifyFirebaseToken } from "./verifyFirebaseToken";
+import { updateBagelTimestampOnServer, type BagelEnv } from "./bagelProxy.js";
+import { isEmailAllowed, verifyFirebaseToken } from "./verifyFirebaseToken.js";
 
 export type BagelUpdateTimeBody = {
     id?: string;
@@ -37,6 +37,11 @@ export async function handleBagelUpdateTimeRequest(
         return { status: 400, body: { error: "Prod Firebase is not configured" } };
     }
 
+    const firebaseProjectId = config.firebaseProjectId.trim();
+    if (!firebaseProjectId) {
+        return { status: 500, body: { error: "Missing FIREBASE_PROJECT_ID on server" } };
+    }
+
     const bearerPrefix = "Bearer ";
     if (!authHeader?.startsWith(bearerPrefix)) {
         return { status: 401, body: { error: "Missing authorization" } };
@@ -48,7 +53,7 @@ export async function handleBagelUpdateTimeRequest(
     }
 
     const projectId =
-        env === "prod" ? config.prodFirebaseProjectId!.trim() : config.firebaseProjectId.trim();
+        env === "prod" ? config.prodFirebaseProjectId!.trim() : firebaseProjectId;
 
     try {
         const user = await verifyFirebaseToken(idToken, projectId);
@@ -59,16 +64,20 @@ export async function handleBagelUpdateTimeRequest(
         return { status: 401, body: { error: "Invalid token" } };
     }
 
-    const result = await updateBagelTimestampOnServer(id, timestamp, env, {
-        stage: config.bagelToken,
-        prod: config.prodBagelToken,
-    });
+    try {
+        const result = await updateBagelTimestampOnServer(id, timestamp, env, {
+            stage: config.bagelToken,
+            prod: config.prodBagelToken,
+        });
 
-    if (!result.ok) {
-        if (result.status === 500) {
-            return { status: 500, body: { error: "Missing Bagel token on server" } };
+        if (!result.ok) {
+            if (result.status === 500) {
+                return { status: 500, body: { error: "Missing Bagel token on server" } };
+            }
+            return { status: result.status, body: { error: `Bagel API error (${result.status})` } };
         }
-        return { status: result.status, body: { error: "Bagel update failed" } };
+    } catch {
+        return { status: 502, body: { error: "Bagel API unreachable" } };
     }
 
     return { status: 200 };

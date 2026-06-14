@@ -6,7 +6,7 @@ import path from "path"
 import fs from "fs"
 import { createRequire } from "module"
 import type * as XLSXTypes from "xlsx"
-import { handleBagelUpdateTimeRequest } from "./server/handleBagelUpdateTime"
+import { handleBagelUpdateTimeRequest } from "./api/_lib/handleBagelUpdateTime"
 
 // xlsx הוא מודול CJS – createRequire מבטיח טעינה תקינה גם בסביבת ESM
 const _require = createRequire(import.meta.url)

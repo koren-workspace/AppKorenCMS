@@ -1,11 +1,12 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from "vite"
+import { defineConfig, loadEnv } from "vite"
 import react from "@vitejs/plugin-react"
 import federation from "@originjs/vite-plugin-federation"
 import path from "path"
 import fs from "fs"
 import { createRequire } from "module"
 import type * as XLSXTypes from "xlsx"
+import { handleBagelUpdateTimeRequest } from "./server/handleBagelUpdateTime"
 
 // xlsx הוא מודול CJS – createRequire מבטיח טעינה תקינה גם בסביבת ESM
 const _require = createRequire(import.meta.url)
@@ -405,8 +406,57 @@ function cmsChangelogPlugin() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BAGEL_UPDATE_TIME_ENDPOINT = "/api/bagel/update-time"
+
+/** Vite plugin: מדמה את Vercel Function ל-Bagel בזמן dev */
+function bagelApiDevPlugin(env: Record<string, string>) {
+    return {
+        name: "bagel-api-dev",
+        configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
+            server.middlewares.use((req: any, res: any, next: () => void) => {
+                if (req.method !== "PUT" || !req.url?.startsWith(BAGEL_UPDATE_TIME_ENDPOINT)) return next()
+                const chunks: Buffer[] = []
+                req.on("data", (chunk: Buffer) => chunks.push(chunk))
+                req.on("end", async () => {
+                    try {
+                        const body = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+                        const result = await handleBagelUpdateTimeRequest(
+                            "PUT",
+                            req.headers.authorization as string | undefined,
+                            body,
+                            {
+                                firebaseProjectId: env.FIREBASE_PROJECT_ID || env.VITE_FIREBASE_PROJECT_ID || "",
+                                prodFirebaseProjectId: env.PROD_FIREBASE_PROJECT_ID || env.VITE_PROD_FIREBASE_PROJECT_ID,
+                                bagelToken: env.BAGEL_TOKEN,
+                                prodBagelToken: env.PROD_BAGEL_TOKEN,
+                                allowedEmails: env.ALLOWED_EMAILS || env.VITE_ALLOWED_EMAILS,
+                            }
+                        )
+                        res.statusCode = result.status
+                        if (result.body) {
+                            res.setHeader("Content-Type", "application/json")
+                            res.end(JSON.stringify(result.body))
+                        } else {
+                            res.end()
+                        }
+                    } catch (err) {
+                        console.error("[bagel-api] dev handler failed:", err)
+                        res.statusCode = 500
+                        res.end()
+                    }
+                })
+            })
+        },
+    }
+}
+
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, process.cwd(), "")
+
+    return {
     test: {
         environment: "node",
         include: ["src/**/*.test.ts", "src/**/*.spec.ts"],
@@ -418,6 +468,11 @@ export default defineConfig({
                 target: "https://api.firecms.co",
                 changeOrigin: true,
                 rewrite: (path) => path.replace(/^\/api/, ""),
+                bypass: (req) => {
+                    if (req.url?.startsWith("/api/bagel")) {
+                        return req.url;
+                    }
+                },
             },
         },
     },
@@ -430,6 +485,7 @@ export default defineConfig({
     plugins: [
         cmsChangelogPlugin(),
         cmsExcelPlugin(),
+        bagelApiDevPlugin(env),
         react(),
         federation({
             name: "remote_app",
@@ -459,5 +515,6 @@ export default defineConfig({
         minify: false,
         target: "ESNEXT",
         cssCodeSplit: false,
+    }
     }
 });

@@ -25,7 +25,7 @@ Note: If this file is not used by runtime code, keep it aligned anyway to avoid 
 ## 3) Update environment variables and secrets
 
 - Review `.env.local` and replace project-specific values.
-- Verify any external API tokens (for example `VITE_BAGEL_TOKEN`) are correct for the new environment.
+- Verify Bagel API tokens (`BAGEL_TOKEN`, `PROD_BAGEL_TOKEN`) are set as server env vars (not `VITE_`).
 - If CI/CD exists, update secrets in pipeline settings too.
 
 ## 4) Verify Firebase backend setup

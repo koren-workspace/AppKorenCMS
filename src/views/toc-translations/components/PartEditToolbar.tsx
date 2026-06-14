@@ -22,6 +22,9 @@ export type PartEditToolbarProps = {
     onSplitPart?: () => void;
     onMoveItemsToPart?: () => void;
     onCopyItemsToPart?: () => void;
+    /** Prod dual-write */
+    onSavePartToProd?: () => void;
+    pendingProdCount?: number;
 };
 
 export function PartEditToolbar({
@@ -34,6 +37,8 @@ export function PartEditToolbar({
     onSplitPart,
     onMoveItemsToPart,
     onCopyItemsToPart,
+    onSavePartToProd,
+    pendingProdCount = 0,
 }: PartEditToolbarProps) {
     const hasPart = !!selectedGroupId;
 
@@ -65,10 +70,51 @@ export function PartEditToolbar({
                             disabled={saving || !hasChanges}
                             className={`${actionBtn} font-bold px-2.5`}
                             style={btn(1)}
-                            title="שמור שינויים בחלק תפילה זה"
+                            title="שמור שינויים בחלק זה ל-Firestore של סטייג'"
                         >
-                            {saving ? "שומר…" : "שמור"}
+                            {saving ? "שומר · סטייג'…" : "שמור · סטייג'"}
                         </button>
+                        {onSavePartToProd && (
+                            <button
+                                type="button"
+                                onClick={onSavePartToProd}
+                                disabled={saving || pendingProdCount === 0}
+                                className={`${actionBtn} font-bold px-2.5`}
+                                style={{
+                                    backgroundColor: pendingProdCount > 0 ? "#1565c0" : "#90a4ae",
+                                    color: "#fff",
+                                    borderColor: pendingProdCount > 0 ? "#1565c0" : "#90a4ae",
+                                    position: "relative",
+                                }}
+                                title={
+                                    pendingProdCount > 0
+                                        ? `שמור ${pendingProdCount} פריטים שכבר נשמרו בסטייג' — ל-Firestore של פרוד`
+                                        : "אין פריטים שממתינים לשמירה בפרוד (קודם שמור בסטייג')"
+                                }
+                            >
+                                שמור · פרוד
+                                {pendingProdCount > 0 && (
+                                    <span
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            marginRight: 4,
+                                            minWidth: 16,
+                                            height: 16,
+                                            borderRadius: 8,
+                                            background: "#fff",
+                                            color: "#1565c0",
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            padding: "0 3px",
+                                        }}
+                                    >
+                                        {pendingProdCount}
+                                    </span>
+                                )}
+                            </button>
+                        )}
                         {allowSplitAndMove && (
                             <>
                                 <button

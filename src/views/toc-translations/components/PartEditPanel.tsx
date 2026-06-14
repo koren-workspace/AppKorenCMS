@@ -112,6 +112,10 @@ export type PartEditPanelProps = {
         insertAfterItemId: string | null;
         selection: WarehouseFieldSelection;
     }) => void;
+    /** Prod dual-write */
+    pendingProdItemIds?: Set<string>;
+    onSavePartToProd?: () => void;
+    pendingProdCount?: number;
     warehousePasteModalOpen?: boolean;
     warehouseFixedInsertAfterItemId?: string | null | undefined;
     onCloseWarehousePasteModal?: () => void;
@@ -193,6 +197,9 @@ export function PartEditPanel({
     warehousePasteModalOpen = false,
     warehouseFixedInsertAfterItemId = undefined,
     onCloseWarehousePasteModal,
+    pendingProdItemIds = new Set(),
+    onSavePartToProd,
+    pendingProdCount = 0,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges =
@@ -288,6 +295,8 @@ export function PartEditPanel({
                 onSplitPart={onSplitPart}
                 onMoveItemsToPart={onMoveItemsToPart}
                 onCopyItemsToPart={onCopyItemsToPart}
+                onSavePartToProd={onSavePartToProd}
+                pendingProdCount={pendingProdCount}
             />
             {loading ? (
                 <div className="m-auto font-bold text-blue-500 animate-pulse text-lg">
@@ -475,6 +484,8 @@ export function PartEditPanel({
                                                 ? onSaveItemToWarehouse
                                                 : undefined
                                         }
+                                        isPendingProd={pendingProdItemIds.has(item.id)}
+                                        pendingProdItemIds={pendingProdItemIds}
                                     />
                                 </div>
                             );

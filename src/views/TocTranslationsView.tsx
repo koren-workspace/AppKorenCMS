@@ -14,6 +14,7 @@
  */
 
 import React, { useState } from "react";
+import { useAuthController } from "@firecms/core";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
 import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
@@ -34,6 +35,7 @@ import { TocAndTranslationColumns } from "./toc-translations/components/TocAndTr
 // import { EditTocModal } from "./toc-translations/components/EditTocModal";
 import { EditorGuideBanner } from "./toc-translations/components/EditorGuideBanner";
 import { DateFilterBar } from "./toc-translations/components/DateFilterBar";
+import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
 import { useDateFilter } from "./toc-translations/hooks/useDateFilter";
@@ -41,6 +43,8 @@ import { isBaseTranslation, isTranslationEditable } from "./toc-translations/ser
 import { getNusachDisplayLabel } from "./toc-translations/utils/nusachDisplay";
 
 export function TocTranslationsView() {
+    const auth = useAuthController();
+    const currentUserEmail = (auth.user as any)?.email ?? "";
     const nav = useTocNavigation();
     const isBase = isBaseTranslation(nav.currentTranslationData?.translationId);
     const canEditNames = isTranslationEditable(nav.currentTranslationData?.translationId);
@@ -271,6 +275,7 @@ export function TocTranslationsView() {
                 )}
                 saving={partEdit.saving}
                 onFinalPublish={partEdit.handleFinalPublish}
+                onPublishToProd={partEdit.isProdFeatureEnabled ? partEdit.handlePublishToProd : undefined}
             />
             <div className="flex flex-1 min-h-0 gap-1">
             {/* עמודה 1–2: בחירת נוסח (TOC) ותרגום */}
@@ -391,6 +396,9 @@ export function TocTranslationsView() {
                 warehousePasteModalOpen={partEdit.warehousePasteModalOpen}
                 warehouseFixedInsertAfterItemId={partEdit.warehouseFixedInsertAfterItemId}
                 onCloseWarehousePasteModal={partEdit.closeWarehousePasteModal}
+                pendingProdItemIds={partEdit.pendingProdItemIds}
+                onSavePartToProd={partEdit.isProdFeatureEnabled ? partEdit.handleSavePartToProd : undefined}
+                pendingProdCount={partEdit.pendingProdCount}
             />
             {partEdit.warehouseEnabled && (
                 <ItemWarehousePanel
@@ -573,6 +581,14 @@ export function TocTranslationsView() {
                 onSubmit={partEdit.handleCopyItemsToPart}
                 saving={partEdit.saving}
             />
+            {partEdit.isProdFeatureEnabled && (
+                <ProdAuthModal
+                    open={partEdit.prodAuthModalOpen}
+                    email={currentUserEmail}
+                    onSuccess={partEdit.onProdAuthSuccess}
+                    onClose={partEdit.closeProdAuthModal}
+                />
+            )}
             </div>
         </div>
     );

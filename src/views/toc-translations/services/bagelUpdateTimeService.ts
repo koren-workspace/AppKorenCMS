@@ -23,9 +23,24 @@ export type BagelUpdateTimeItem = {
 
 
 function getBagelToken(): string {
-    const token = (import.meta as any).env.VITE_BAGEL_TOKEN;
-    if (!token?.trim()) {
+    const token = (import.meta.env.VITE_BAGEL_TOKEN as string | undefined)?.trim();
+    if (!token) {
         throw new Error("חסר טוקן Bagel (VITE_BAGEL_TOKEN) – בדוק את קובץ .env");
+    }
+    return token;
+}
+
+/** טוקן Bagel של פרוד — חובה כשיש 2 פרויקטים נפרדים */
+export function getProdBagelToken(): string {
+    const token = (import.meta.env.VITE_PROD_BAGEL_TOKEN as string | undefined)?.trim();
+    if (!token) {
+        throw new Error("חסר טוקן Bagel לפרוד (VITE_PROD_BAGEL_TOKEN) – בדוק את קובץ .env");
+    }
+    const parts = token.split(".");
+    if (parts.length !== 3 || parts[2].length < 400) {
+        throw new Error(
+            "טוקן Bagel לפרוד (VITE_PROD_BAGEL_TOKEN) נראה קטוע — העתק את כל ה-token מ-Bagel Dashboard"
+        );
     }
     return token;
 }
@@ -67,6 +82,32 @@ export async function updateBagelTimestamp(id: string, timestamp: number): Promi
     const response = await fetch(url, {
         method: "PUT",
         headers: getHeaders(),
+        body: JSON.stringify({ timestamp }),
+    });
+    if (!response.ok) {
+        throw new Error(`Bagel update failed (${response.status})`);
+    }
+}
+
+/**
+ * עדכון timestamp עם token מפורש — לשימוש עם סביבת פרוד.
+ * @param id        – מזהה הפריט
+ * @param timestamp – timestamp UNIX
+ * @param token     – Bearer token של פרויקט Bagel הרצוי (למשל VITE_PROD_BAGEL_TOKEN)
+ */
+export async function updateBagelTimestampWithToken(
+    id: string,
+    timestamp: number,
+    token: string
+): Promise<void> {
+    const url = `${BAGEL_PUBLIC_API}/collection/${COLLECTION_ID}/items/${encodeURIComponent(id)}`;
+    const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Accept-Version": "v1",
+            "Content-Type": "application/json",
+        },
         body: JSON.stringify({ timestamp }),
     });
     if (!response.ok) {

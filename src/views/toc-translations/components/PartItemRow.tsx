@@ -104,6 +104,10 @@ type PartItemRowProps = {
     pendingEnhancementDeleteIds?: Set<string>;
     /** מחזיר פריט תרגום מרשימת המחיקות המתינות */
     onRestoreEnhancementItem?: (entityId: string) => void;
+    /** האם הפריט ממתין לשמירה לפרוד (נשמר לסטייג' אך לא לפרוד) */
+    isPendingProd?: boolean;
+    /** מזהי כל הפריטים (כולל תרגומים מקושרים) שממתינים לפרוד */
+    pendingProdItemIds?: Set<string>;
     // ——— גרירת פריט בתוך המקטע (מושבתת זמנית) ———
     // /** props לידית גרירה */
     // dragHandleProps?: {
@@ -140,6 +144,8 @@ export function PartItemRow({
     onDeleteEnhancementItem,
     pendingEnhancementDeleteIds = new Set(),
     onRestoreEnhancementItem,
+    isPendingProd = false,
+    pendingProdItemIds = new Set(),
     // dragHandleProps,
 }: PartItemRowProps) {
     const curId = localVal.itemId;
@@ -201,7 +207,28 @@ export function PartItemRow({
         <React.Fragment>
             <div
                 className={`p-2 border rounded ${isPendingDelete ? "bg-red-50 border-red-300 border-2 opacity-95" : isChanged ? "border-orange-300" : isDateRestricted ? "border-violet-300 bg-violet-50/40" : "border-gray-200"}`}
+                style={!isPendingDelete && !isChanged && isPendingProd ? { borderColor: "#90caf9", borderWidth: 1.5 } : undefined}
             >
+                {isPendingProd && !isPendingDelete && (
+                    <div
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            marginBottom: 4,
+                            padding: "1px 7px",
+                            borderRadius: 10,
+                            background: "#e3f2fd",
+                            color: "#1565c0",
+                            fontSize: 11,
+                            fontWeight: 600,
+                        }}
+                        title="פריט זה נשמר לסטייג' אך טרם נשמר לפרוד"
+                    >
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1565c0", display: "inline-block" }} />
+                        ממתין לפרוד
+                    </div>
+                )}
                 {isPendingDelete && (
                     <div className="flex items-center gap-2 mb-2 py-2 px-2 bg-red-100 border border-red-300 rounded text-base font-bold text-red-800">
                         <span>
@@ -586,11 +613,33 @@ export function PartItemRow({
                         const enhEntry = enhIsDateRestricted ? (dateSetLabels[displayVal.dateSetId] ?? null) : null;
                         const enhShort = enhEntry?.short ?? (enhIsDateRestricted ? `ID ${displayVal.dateSetId}` : null);
                         const enhFull = enhEntry?.full ?? enhShort;
+                        const enhIsPendingProd = pendingProdItemIds.has(enh.id);
                         return (
                             <div
                                 key={enh.id}
-                                className={`p-2 rounded text-base ${relatedWillBeDeleted || isEnhancementPendingDelete ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
+                                className={`p-2 rounded text-base ${relatedWillBeDeleted || isEnhancementPendingDelete ? "bg-red-50 border-2 border-red-300" : enhChanged ? "bg-amber-50 border border-amber-200" : enhIsPendingProd ? "bg-blue-50 border border-blue-300" : enhIsDateRestricted ? "bg-violet-50 border border-violet-200" : "bg-blue-50 border border-blue-100"}`}
+                                style={!relatedWillBeDeleted && !isEnhancementPendingDelete && !enhChanged && enhIsPendingProd ? { borderColor: "#90caf9", borderWidth: 1.5 } : undefined}
                             >
+                                {enhIsPendingProd && !relatedWillBeDeleted && !isEnhancementPendingDelete && (
+                                    <div
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: 4,
+                                            marginBottom: 4,
+                                            padding: "1px 7px",
+                                            borderRadius: 10,
+                                            background: "#e3f2fd",
+                                            color: "#1565c0",
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                        }}
+                                        title="פריט תרגום זה נשמר לסטייג' אך טרם נשמר לפרוד"
+                                    >
+                                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1565c0", display: "inline-block" }} />
+                                        ממתין לפרוד
+                                    </div>
+                                )}
                                 {isEnhancementPendingDelete && !relatedWillBeDeleted && (
                                     <div className="flex items-center gap-2 mb-1 py-1 px-2 bg-red-100 border border-red-300 rounded text-xs font-bold text-red-800">
                                         <span>ימוחק בשמירה</span>

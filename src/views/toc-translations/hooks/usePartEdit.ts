@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Entity, useDataSource, useSnackbarController } from "@firecms/core";
+import { doc, writeBatch, setDoc } from "firebase/firestore";
 import {
     fetchPartWithEnhancements,
     fetchPartItems,
@@ -26,7 +27,9 @@ import {
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
-import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
+import { updateBagelTimestamp, updateBagelTimestampWithToken, getProdBagelToken } from "../services/bagelUpdateTimeService";
+import { isProdConfigured } from "../../../firebase_config";
+import { isProdAuthenticated, getProdFirestore } from "../services/prodAuthService";
 import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS, splitParagraphSentences } from "../utils/itemUtils";
 import { itemMinIdBefore, resolveDigitMillions } from "../utils/nusachIdPolicy";
 import { getNusachDisplayLabel } from "../utils/nusachDisplay";
@@ -199,6 +202,18 @@ export function usePartEdit(context: PartEditContext) {
     >({});
     const [localValues, setLocalValues] = useState<Record<string, any>>({});
     const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
+
+    // ── Prod dual-write state ────────────────────────────────────────────────
+    /** פריטים שנשמרו לסטייג' ועדיין לא נשמרו לפרוד */
+    const [pendingProdItems, setPendingProdItems] = useState<
+        Map<string, { path: string; entityId: string; values: Record<string, any> }>
+    >(new Map());
+    /** האם מודל הסיסמה לפרוד פתוח */
+    const [prodAuthModalOpen, setProdAuthModalOpen] = useState(false);
+    /** הפעולה שתבוצע מיד לאחר אימות מוצלח לפרוד */
+    const pendingProdActionRef = useRef<(() => void) | null>(null);
+    // ────────────────────────────────────────────────────────────────────────
+
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     /** מזהה הפריט שנוסף לאחרונה – להעברת פוקוס (מנוקה אחרי זמן קצר) */
@@ -858,6 +873,37 @@ export function usePartEdit(context: PartEditContext) {
             }
             // --- סוף יומן שינויים ---
 
+            // ── Prod dual-write: סמן פריטים שנשמרו לסטייג' כממתינים לפרוד ──
+            if (isProdConfigured()) {
+                const savedNow = Date.now();
+                setPendingProdItems((prev) => {
+                    const next = new Map(prev);
+                    // פריטים ראשיים (מהתרגום הנוכחי)
+                    changedIdList.forEach((id) => {
+                        const isNew = id.startsWith("new_");
+                        const vals = { ...localValues[id], timestamp: savedNow };
+                        const entityId = isNew ? String(localValues[id]?.itemId ?? id) : id;
+                        next.set(entityId, { path, entityId, values: vals });
+                    });
+                    // enhancements (תרגומים מקושרים)
+                    if (hadEnhancementChanges) {
+                        enhancementChangedIds.forEach((eid) => {
+                            if (pendingEnhancementDeleteIds.has(eid)) return;
+                            const tid = enhancementTranslationIds[eid];
+                            if (!tid || !selectedPrayerId) return;
+                            const enhPath = `translations/${tid}/prayers/${selectedPrayerId}/items`;
+                            const ents = enhancements[tid] ?? [];
+                            const ent = ents.find((e: any) => e.id === eid);
+                            const base = ent?.values ?? {};
+                            const vals = { ...base, ...enhancementLocalValues[eid], timestamp: savedNow };
+                            next.set(eid, { path: enhPath, entityId: eid, values: vals });
+                        });
+                    }
+                    return next;
+                });
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             setChangedIds(new Set());
             if (
                 (hasNewItems ||
@@ -922,6 +968,97 @@ export function usePartEdit(context: PartEditContext) {
             setSaving(false);
         }
     };
+
+    // ── Prod dual-write: שמירה לפרוד ─────────────────────────────────────────
+
+    /** ביצוע בפועל של שמירת pendingProdItems ל-Firestore של פרוד */
+    const doSavePartToProd = async () => {
+        if (pendingProdItems.size === 0) return;
+        setSaving(true);
+        try {
+            const db = getProdFirestore();
+            const entries = Array.from(pendingProdItems.values());
+            // חלוקה ל-chunks של 490 (מגבלת Firestore batch = 500)
+            const chunkSize = 490;
+            for (let i = 0; i < entries.length; i += chunkSize) {
+                const chunk = entries.slice(i, i + chunkSize);
+                const batch = writeBatch(db);
+                chunk.forEach(({ path, entityId, values }) => {
+                    const ref = doc(db, path, entityId);
+                    batch.set(ref, values, { merge: true });
+                });
+                await batch.commit();
+            }
+            setPendingProdItems(new Map());
+            snackbar.open({ type: "success", message: "נשמר לפרוד בהצלחה ✓" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Save to Prod failed`, err);
+            snackbar.open({ type: "error", message: "שגיאה בשמירה לפרוד" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    /** שמירת הפריטים הממתינים לפרוד. אם המשתמש לא מחובר לפרוד — פותח מודל סיסמה */
+    const handleSavePartToProd = async () => {
+        if (!isProdConfigured() || pendingProdItems.size === 0) return;
+        if (!isProdAuthenticated()) {
+            pendingProdActionRef.current = doSavePartToProd;
+            setProdAuthModalOpen(true);
+            return;
+        }
+        await doSavePartToProd();
+    };
+
+    /** ביצוע בפועל של פרסום לפרוד (db-update-time + Bagel) */
+    const doPublishToProd = async () => {
+        if (!selectedTocId) return;
+        setSaving(true);
+        try {
+            const publishTimestamp = Date.now();
+            const db = getProdFirestore();
+            const tsRef = doc(db, "db-update-time", selectedTocId);
+            await setDoc(tsRef, { maxTimestamp: publishTimestamp }, { merge: true });
+            await updateBagelTimestampWithToken(
+                selectedTocId,
+                publishTimestamp,
+                getProdBagelToken()
+            );
+            const nusachLabel = getNusachDisplayLabel(selectedTocId ?? "", currentTocData?.nusach).trim();
+            const scope = nusachLabel.length > 0
+                ? `הנוסח «${nusachLabel}» פורסם לפרוד — האפליקציה תסנכרן.`
+                : "הנוסח הנבחר פורסם לפרוד.";
+            snackbar.open({ type: "success", message: scope });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Publish to Prod failed`, err);
+            const message =
+                err instanceof Error ? err.message : "שגיאה בפרסום לפרוד";
+            snackbar.open({ type: "error", message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    /** פרסום לפרוד. אם המשתמש לא מחובר לפרוד — פותח מודל סיסמה */
+    const handlePublishToProd = async () => {
+        if (!selectedTocId || !isProdConfigured()) return;
+        if (!isProdAuthenticated()) {
+            pendingProdActionRef.current = doPublishToProd;
+            setProdAuthModalOpen(true);
+            return;
+        }
+        await doPublishToProd();
+    };
+
+    /** נקרא לאחר אימות מוצלח במודל הסיסמה – מריץ את הפעולה הממתינה */
+    const onProdAuthSuccess = () => {
+        setProdAuthModalOpen(false);
+        const action = pendingProdActionRef.current;
+        pendingProdActionRef.current = null;
+        action?.();
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     /** מסמן פריט למחיקה מקומית; המחיקה ב-Firestore מתבצעת רק בלחיצה על "שמור מקטע". הפריט נשאר ברשימה ומסומן כ"ימוחק". */
     const handleDeleteItem = (item: Entity<any>, itemId: string) => {
@@ -2581,6 +2718,15 @@ export function usePartEdit(context: PartEditContext) {
         updateEnhancementLocalItem,
         handleSaveGroup,
         handleFinalPublish,
+        // Prod dual-write
+        pendingProdCount: pendingProdItems.size,
+        pendingProdItemIds: new Set(pendingProdItems.keys()),
+        handleSavePartToProd,
+        handlePublishToProd,
+        prodAuthModalOpen,
+        closeProdAuthModal: () => setProdAuthModalOpen(false),
+        onProdAuthSuccess,
+        isProdFeatureEnabled: isProdConfigured(),
         addNewItemAt,
         addNewInstructionAt,
         reorderItemsWithinPart,

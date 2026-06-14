@@ -11,9 +11,10 @@
  * כל הנתונים והפעולות מגיעים ב-props (controlled) — ה-state נמצא ב-useDateFilter / usePartEdit.
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { HebrewSingleDatePicker } from "./HebrewSingleDatePicker";
 import { getNusachPalette } from "../utils/nusachPalette";
+import { PublishConfirmModal, type PublishEnvironment } from "./PublishConfirmModal";
 
 export type DateFilterBarProps = {
     filterDate: Date;
@@ -28,6 +29,8 @@ export type DateFilterBarProps = {
     publishNusachLabel?: string | null;
     saving?: boolean;
     onFinalPublish?: () => void;
+    /** Prod dual-write */
+    onPublishToProd?: () => void;
 };
 
 /** משווה האם שני תאריכים מתייחסים לאותו יום קלנדרי (לפי שעון מקומי) */
@@ -50,6 +53,7 @@ export function DateFilterBar({
     publishNusachLabel,
     saving = false,
     onFinalPublish,
+    onPublishToProd,
 }: DateFilterBarProps) {
     const isToday = isSameDay(filterDate, new Date());
     const activeCount = relevantDateSetIds?.length ?? 0;
@@ -65,14 +69,37 @@ export function DateFilterBar({
     const trimmedNusach = publishNusachLabel?.trim() ?? "";
     const hasNusachLabel = trimmedNusach.length > 0;
     const publishTitle = hasNusachLabel
-        ? `מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל. האפליקציה מסנכרנת את כל התרגומים של נוסח זה — לא רק את החלק תפילה הפתוח.`
-        : "מסמן שהנוסח הנבחר התעדכן בבייגל; האפליקציה מסנכרנת לפי נוסח (לא לפי חלק תפילה בודד).";
+        ? `פרסם בסטייג': מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל של סטייג'. האפליקציה מסנכרנת את כל התרגומים של נוסח זה.`
+        : "פרסם בסטייג': מסמן שהנוסח הנבחר התעדכן בבייגל של סטייג'.";
     const publishButtonLabel = hasNusachLabel
-        ? `פרסום ${trimmedNusach} לאפליקציה`
-        : "פרסום לאפליקציה";
+        ? `פרסם ${trimmedNusach} · סטייג'`
+        : "פרסם · סטייג'";
+    const prodPublishTitle = hasNusachLabel
+        ? `פרסם בפרוד: מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל של פרוד. האפליקציה בפרוד תסנכרן.`
+        : "פרסם בפרוד: מסמן שהנוסח הנבחר התעדכן בבייגל של פרוד.";
+    const prodPublishButtonLabel = hasNusachLabel
+        ? `פרסם ${trimmedNusach} · פרוד`
+        : "פרסם · פרוד";
     const publishDisabledTitle = canPublish
         ? publishTitle
-        : "בחר נוסח בעמודות השמאליות כדי לפרסם לאפליקציה.";
+        : "בחר נוסח בעמודות השמאליות כדי לפרסם.";
+
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmEnv, setConfirmEnv] = useState<PublishEnvironment>("stage");
+
+    const openPublishConfirm = (env: PublishEnvironment) => {
+        setConfirmEnv(env);
+        setConfirmOpen(true);
+    };
+
+    const handlePublishConfirm = () => {
+        setConfirmOpen(false);
+        if (confirmEnv === "prod") {
+            onPublishToProd?.();
+        } else {
+            onFinalPublish?.();
+        }
+    };
 
     const handleResetToToday = () => {
         onDateChange(new Date());
@@ -132,7 +159,7 @@ export function DateFilterBar({
                     <span className="hidden sm:inline w-px h-5 bg-gray-200 shrink-0" aria-hidden="true" />
                     <button
                         type="button"
-                        onClick={onFinalPublish}
+                        onClick={() => openPublishConfirm("stage")}
                         disabled={saving || !canPublish}
                         className="ms-auto shrink-0 px-3 py-1 rounded font-bold border-2 text-sm max-w-[min(100%,18rem)] truncate disabled:opacity-30"
                         style={publishBtnStyle}
@@ -142,6 +169,33 @@ export function DateFilterBar({
                     </button>
                 </>
             )}
+            {onPublishToProd && (
+                <>
+                    <span className="hidden sm:inline w-px h-5 bg-gray-200 shrink-0" aria-hidden="true" />
+                    <button
+                        type="button"
+                        onClick={() => openPublishConfirm("prod")}
+                        disabled={saving || !canPublish}
+                        className="shrink-0 px-3 py-1 rounded font-bold border-2 text-sm max-w-[min(100%,18rem)] truncate disabled:opacity-30"
+                        style={{
+                            backgroundColor: canPublish ? "#1565c0" : "#90a4ae",
+                            color: "#fff",
+                            borderColor: canPublish ? "#1565c0" : "#90a4ae",
+                        }}
+                        title={canPublish ? prodPublishTitle : "בחר נוסח כדי לפרסם בפרוד"}
+                    >
+                        🚀 {prodPublishButtonLabel}
+                    </button>
+                </>
+            )}
+            <PublishConfirmModal
+                open={confirmOpen}
+                environment={confirmEnv}
+                nusachLabel={trimmedNusach || null}
+                saving={saving}
+                onConfirm={handlePublishConfirm}
+                onClose={() => setConfirmOpen(false)}
+            />
         </div>
     );
 }

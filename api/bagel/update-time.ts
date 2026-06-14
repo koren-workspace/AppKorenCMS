@@ -1,20 +1,36 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleBagelUpdateTimeRequest, type BagelUpdateTimeBody } from "../../server/handleBagelUpdateTime";
+import { handleBagelUpdateTimeRequest, type BagelUpdateTimeBody } from "../_lib/handleBagelUpdateTime.js";
+
+function parseBody(raw: unknown): BagelUpdateTimeBody {
+    if (typeof raw === "string") {
+        try {
+            return JSON.parse(raw) as BagelUpdateTimeBody;
+        } catch {
+            return {};
+        }
+    }
+    return (raw ?? {}) as BagelUpdateTimeBody;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    const body = (req.body ?? {}) as BagelUpdateTimeBody;
-    const authHeader = req.headers.authorization;
+    try {
+        const body = parseBody(req.body);
+        const authHeader = req.headers.authorization;
 
-    const result = await handleBagelUpdateTimeRequest(req.method ?? "GET", authHeader, body, {
-        firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? "",
-        prodFirebaseProjectId: process.env.PROD_FIREBASE_PROJECT_ID,
-        bagelToken: process.env.BAGEL_TOKEN,
-        prodBagelToken: process.env.PROD_BAGEL_TOKEN,
-        allowedEmails: process.env.ALLOWED_EMAILS,
-    });
+        const result = await handleBagelUpdateTimeRequest(req.method ?? "GET", authHeader, body, {
+            firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? "",
+            prodFirebaseProjectId: process.env.PROD_FIREBASE_PROJECT_ID,
+            bagelToken: process.env.BAGEL_TOKEN,
+            prodBagelToken: process.env.PROD_BAGEL_TOKEN,
+            allowedEmails: process.env.ALLOWED_EMAILS,
+        });
 
-    if (result.body) {
-        return res.status(result.status).json(result.body);
+        if (result.body) {
+            return res.status(result.status).json(result.body);
+        }
+        return res.status(result.status).end();
+    } catch (err) {
+        console.error("[bagel/update-time]", err);
+        return res.status(500).json({ error: "Internal server error" });
     }
-    return res.status(result.status).end();
 }

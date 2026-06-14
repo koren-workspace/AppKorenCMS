@@ -27,7 +27,7 @@ import {
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
-import { updateBagelTimestamp, updateBagelTimestampWithToken, getProdBagelToken } from "../services/bagelUpdateTimeService";
+import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
 import { isProdConfigured } from "../../../firebase_config";
 import { isProdAuthenticated, getProdFirestore } from "../services/prodAuthService";
 import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS, splitParagraphSentences } from "../utils/itemUtils";
@@ -1019,11 +1019,7 @@ export function usePartEdit(context: PartEditContext) {
             const db = getProdFirestore();
             const tsRef = doc(db, "db-update-time", selectedTocId);
             await setDoc(tsRef, { maxTimestamp: publishTimestamp }, { merge: true });
-            await updateBagelTimestampWithToken(
-                selectedTocId,
-                publishTimestamp,
-                getProdBagelToken()
-            );
+            await updateBagelTimestamp(selectedTocId, publishTimestamp, "prod");
             const nusachLabel = getNusachDisplayLabel(selectedTocId ?? "", currentTocData?.nusach).trim();
             const scope = nusachLabel.length > 0
                 ? `הנוסח «${nusachLabel}» פורסם לפרוד — האפליקציה תסנכרן.`

@@ -13,7 +13,7 @@
  *   - הקומפוננטות מקבלות את כל הנתונים ב-props (controlled).
  */
 
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useAuthController } from "@firecms/core";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
@@ -41,7 +41,8 @@ import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
 import { useDateFilter } from "./toc-translations/hooks/useDateFilter";
 import { isBaseTranslation, isTranslationEditable } from "./toc-translations/services/navigationService";
 import { getNusachDisplayLabel } from "./toc-translations/utils/nusachDisplay";
-import type { PendingWrite } from "./toc-translations/services/partEditService";
+import { PrayerStructureWarningBanner } from "./toc-translations/components/PrayerStructureWarningBanner";
+import { usePrayerStructureWarnings } from "./toc-translations/hooks/usePrayerStructureWarnings";
 
 export function TocTranslationsView() {
     const auth = useAuthController();
@@ -88,6 +89,20 @@ export function TocTranslationsView() {
 
     const dateFilter = useDateFilter(partEdit.dataSource);
 
+    const baseTranslationId = useMemo(() => {
+        const base = nav.currentTocData?.translations?.find((t: any) =>
+            String(t?.translationId ?? "").startsWith("0-")
+        );
+        return base?.translationId ?? null;
+    }, [nav.currentTocData?.translations]);
+
+    const prayerStructureWarnings = usePrayerStructureWarnings({
+        baseTranslationId,
+        selectedPrayerId: nav.selectedPrayerId,
+        currentPrayers: nav.currentPrayers,
+        prodFeatureEnabled: partEdit.isProdFeatureEnabled,
+    });
+
     const openAddPartModal = () => {
         setAddPartAfterPartId(nav.currentParts.at(-1)?.id ?? null);
         setAddPartModalOpen(true);
@@ -101,6 +116,12 @@ export function TocTranslationsView() {
         minyan: boolean | null;
         afterPartId: string | null;
     }) => {
+        if (prayerStructureWarnings.selectedWarning) {
+            const proceed = window.confirm(
+                `${prayerStructureWarnings.selectedWarning}\n\nלהמשיך ולהוסיף חלק תפילה בכל זאת?`
+            );
+            if (!proceed) return;
+        }
         const tocId = nav.selectedTocId;
         if (!tocId) return;
         const dateSetIds = params.dateSetIds.length ? params.dateSetIds : ["100"];
@@ -268,6 +289,7 @@ export function TocTranslationsView() {
                 translationId={nav.currentTranslationData?.translationId}
                 hasSelection={hasTranslationSelection}
             />
+            <PrayerStructureWarningBanner message={prayerStructureWarnings.selectedWarning} />
             <DateFilterBar
                 filterDate={dateFilter.filterDate}
                 onDateChange={dateFilter.setFilterDate}
@@ -349,6 +371,8 @@ export function TocTranslationsView() {
                 selectedTocId={nav.selectedTocId}
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
                 pendingProdNavEntityKeys={nav.pendingProdNavEntityKeys}
+                prayersMissingInStage={prayerStructureWarnings.prayersMissingInStage}
+                prayersMissingInProd={prayerStructureWarnings.prayersMissingInProd}
             />
             {/* אזור העריכה */}
             <PartEditPanel

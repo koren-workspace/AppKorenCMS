@@ -80,6 +80,9 @@ type PrayerNavigationColumnsProps = {
     relevantDateSetIds?: string[] | null;
     /** מזהי ישויות מבנה (part:/category:/prayer:) שממתינות לשמירת מבנה לפרוד */
     pendingProdNavEntityKeys?: Set<string>;
+    /** תפילות שמופיעות ב-TOC אך חסרות ב-Firestore */
+    prayersMissingInStage?: Set<string>;
+    prayersMissingInProd?: Set<string>;
 };
 
 /** מקטע יחיד ברשימה הניתן לגרירה */
@@ -216,6 +219,8 @@ export function PrayerNavigationColumns({
     selectedTocId,
     relevantDateSetIds = null,
     pendingProdNavEntityKeys,
+    prayersMissingInStage,
+    prayersMissingInProd,
 }: PrayerNavigationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const palette = getNusachPalette(selectedTocId);
@@ -371,13 +376,23 @@ export function PrayerNavigationColumns({
                         "prayer",
                         String(prayer.id)
                     );
+                    const missingInStage = prayersMissingInStage?.has(String(prayer.id)) ?? false;
+                    const missingInProd = prayersMissingInProd?.has(String(prayer.id)) ?? false;
                     const selText3 = dark3 ? "text-gray-900" : "text-white";
                     const selHover3 = dark3 ? "hover:bg-black/5" : "hover:bg-white/10";
                     return (
                         <div
                             key={prayer.id}
-                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText3 : "border-gray-200 bg-gray-50"} ${isPendingProd && !sel ? "border-blue-300 bg-blue-50/60" : ""}`}
-                            style={sel ? { backgroundColor: c3, borderColor: c3 } : isPendingProd ? { borderColor: "#90caf9", borderWidth: 1.5 } : undefined}
+                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText3 : "border-gray-200 bg-gray-50"} ${(missingInStage || missingInProd) && !sel ? "border-amber-300 bg-amber-50/50" : ""} ${isPendingProd && !sel && !missingInStage && !missingInProd ? "border-blue-300 bg-blue-50/60" : ""}`}
+                            style={
+                                sel
+                                    ? { backgroundColor: c3, borderColor: c3 }
+                                    : missingInStage || missingInProd
+                                      ? { borderColor: "#ffb74d", borderWidth: 1.5 }
+                                      : isPendingProd
+                                        ? { borderColor: "#90caf9", borderWidth: 1.5 }
+                                        : undefined
+                            }
                         >
                             <button
                                 type="button"
@@ -386,8 +401,24 @@ export function PrayerNavigationColumns({
                                 title={typeof prayer.name === "string" ? prayer.name : undefined}
                                 className={`${NAV_LABEL_BTN} ${sel ? `${selText3} ${selHover3}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                             >
-                                <span className={`${NAV_LABEL_TEXT} flex items-center gap-1`}>
+                                <span className={`${NAV_LABEL_TEXT} flex items-center gap-1 flex-wrap`}>
                                     <span className="min-w-0 flex-1">{prayer.name}</span>
+                                    {missingInStage && (
+                                        <span
+                                            className="inline-flex shrink-0 items-center rounded-full bg-amber-100 px-1 py-px text-[9px] font-semibold leading-none text-amber-900"
+                                            title="מופיעה ב-TOC אך חסרה ב-Firestore בסטייג'"
+                                        >
+                                            חסר בסטייג'
+                                        </span>
+                                    )}
+                                    {!missingInStage && missingInProd && (
+                                        <span
+                                            className="inline-flex shrink-0 items-center rounded-full bg-orange-100 px-1 py-px text-[9px] font-semibold leading-none text-orange-900"
+                                            title="קיימת בסטייג' אך חסרה בפרוד"
+                                        >
+                                            חסר בפרוד
+                                        </span>
+                                    )}
                                     {isPendingProd && <PendingProdNavBadge compact />}
                                 </span>
                             </button>

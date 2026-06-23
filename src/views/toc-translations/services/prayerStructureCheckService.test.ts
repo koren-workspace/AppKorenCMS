@@ -7,6 +7,7 @@ describe("prayerStructureCheckService – buildPrayerStructureWarning", () => {
             stageExists: false,
             prodExists: null,
             prodChecked: false,
+            prodNeedsAuth: false,
         });
         expect(msg).toContain("3015135");
         expect(msg).toContain("סטייג'");
@@ -17,8 +18,19 @@ describe("prayerStructureCheckService – buildPrayerStructureWarning", () => {
             stageExists: true,
             prodExists: false,
             prodChecked: true,
+            prodNeedsAuth: false,
         });
         expect(msg).toContain("שמור מבנה · פרוד");
+    });
+
+    it("warns when prod check needs auth", () => {
+        const msg = buildPrayerStructureWarning("ערבית", "3015135", {
+            stageExists: true,
+            prodExists: null,
+            prodChecked: false,
+            prodNeedsAuth: true,
+        });
+        expect(msg).toContain("התחבר");
     });
 
     it("returns null when structure is aligned", () => {
@@ -26,6 +38,7 @@ describe("prayerStructureCheckService – buildPrayerStructureWarning", () => {
             stageExists: true,
             prodExists: true,
             prodChecked: true,
+            prodNeedsAuth: false,
         });
         expect(msg).toBeNull();
     });

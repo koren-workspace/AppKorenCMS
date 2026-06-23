@@ -1,13 +1,20 @@
 import { doc, getDoc, getFirestore, type Firestore } from "firebase/firestore";
 import { getFirebaseApp, isProdConfigured } from "../../../firebase_config";
-import { getProdFirestore } from "./prodAuthService";
+import { getProdFirestore, isProdAuthenticated } from "./prodAuthService";
 
 export type PrayerStructureStatus = {
     stageExists: boolean;
     prodExists: boolean | null;
     /** false כשפרוד לא מוגדר או שלא ניתן היה לבדוק */
     prodChecked: boolean;
+    /** יש לבדוק פרוד אך אין סשן / אין הרשאת קריאה */
+    prodNeedsAuth: boolean;
 };
+
+function isPermissionDeniedError(err: unknown): boolean {
+    const code = (err as { code?: string })?.code;
+    return code === "permission-denied" || code === "unauthenticated";
+}
 
 export function getStageFirestore(): Firestore {
     return getFirestore(getFirebaseApp());
@@ -42,7 +49,21 @@ export async function checkPrayerStructureStatus(
 
     const shouldCheckProd = options?.checkProd !== false && isProdConfigured();
     if (!shouldCheckProd) {
-        return { stageExists, prodExists: null, prodChecked: false };
+        return {
+            stageExists,
+            prodExists: null,
+            prodChecked: false,
+            prodNeedsAuth: false,
+        };
+    }
+
+    if (!isProdAuthenticated()) {
+        return {
+            stageExists,
+            prodExists: null,
+            prodChecked: false,
+            prodNeedsAuth: true,
+        };
     }
 
     try {
@@ -52,9 +73,19 @@ export async function checkPrayerStructureStatus(
             baseTranslationId,
             prayerId
         );
-        return { stageExists, prodExists, prodChecked: true };
-    } catch {
-        return { stageExists, prodExists: null, prodChecked: false };
+        return {
+            stageExists,
+            prodExists,
+            prodChecked: true,
+            prodNeedsAuth: false,
+        };
+    } catch (err) {
+        return {
+            stageExists,
+            prodExists: null,
+            prodChecked: false,
+            prodNeedsAuth: isPermissionDeniedError(err),
+        };
     }
 }
 
@@ -68,6 +99,9 @@ export function buildPrayerStructureWarning(
     }
     if (status.prodChecked && status.prodExists === false) {
         return `תפילה «${prayerName}» (${prayerId}) קיימת בסטייג' אך חסרה בפרוד. יש לבצע «שמור מבנה · פרוד» (ויש לוודא שמסמך התפילה נכלל בסנכרון) לפני פרסום.`;
+    }
+    if (status.prodNeedsAuth && status.stageExists && isProdConfigured()) {
+        return `תפילה «${prayerName}» (${prayerId}) — לא ניתן לבדוק אם היא קיימת בפרוד ללא התחברות. התחבר דרך «שמור · פרוד» או «שמור מבנה · פרוד», ואז בחר שוב את התפילה.`;
     }
     return null;
 }

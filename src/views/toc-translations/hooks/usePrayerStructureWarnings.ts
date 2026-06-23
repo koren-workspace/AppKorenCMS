@@ -1,22 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { isProdConfigured } from "../../../firebase_config";
+import { onAuthStateChanged } from "firebase/auth";
+import { getAuth } from "firebase/auth";
+import { getProdFirebaseApp, isProdConfigured } from "../../../firebase_config";
 import {
     buildPrayerStructureWarning,
     checkPrayerStructureStatus,
 } from "../services/prayerStructureCheckService";
+import { isProdAuthenticated } from "../services/prodAuthService";
 
 type UsePrayerStructureWarningsParams = {
     baseTranslationId: string | null;
     selectedPrayerId: string | null;
     currentPrayers: Array<{ id?: string; name?: string }>;
-    prodFeatureEnabled: boolean;
 };
 
 export function usePrayerStructureWarnings({
     baseTranslationId,
     selectedPrayerId,
     currentPrayers,
-    prodFeatureEnabled,
 }: UsePrayerStructureWarningsParams) {
     const [selectedWarning, setSelectedWarning] = useState<string | null>(null);
     const [prayersMissingInStage, setPrayersMissingInStage] = useState<Set<string>>(
@@ -25,7 +26,19 @@ export function usePrayerStructureWarnings({
     const [prayersMissingInProd, setPrayersMissingInProd] = useState<Set<string>>(
         new Set()
     );
+    const [prayersNeedProdAuth, setPrayersNeedProdAuth] = useState<Set<string>>(
+        new Set()
+    );
+    const [prodAuthTick, setProdAuthTick] = useState(0);
     const checkGenRef = useRef(0);
+
+    useEffect(() => {
+        if (!isProdConfigured()) return;
+        const auth = getAuth(getProdFirebaseApp());
+        return onAuthStateChanged(auth, () => {
+            setProdAuthTick((t) => t + 1);
+        });
+    }, []);
 
     const prayerNameById = useMemo(() => {
         const map = new Map<string, string>();
@@ -35,8 +48,17 @@ export function usePrayerStructureWarnings({
         return map;
     }, [currentPrayers]);
 
+    const prayerIdsKey = useMemo(
+        () =>
+            currentPrayers
+                .map((p) => String(p.id ?? ""))
+                .filter(Boolean)
+                .join(","),
+        [currentPrayers]
+    );
+
     useEffect(() => {
-        if (!baseTranslationId || !selectedPrayerId || !prodFeatureEnabled) {
+        if (!baseTranslationId || !selectedPrayerId) {
             setSelectedWarning(null);
             return;
         }
@@ -58,23 +80,23 @@ export function usePrayerStructureWarnings({
         return () => {
             cancelled = true;
         };
-    }, [baseTranslationId, selectedPrayerId, prodFeatureEnabled, prayerNameById]);
+    }, [baseTranslationId, selectedPrayerId, prayerNameById, prodAuthTick]);
 
     useEffect(() => {
-        if (!baseTranslationId || !prodFeatureEnabled || currentPrayers.length === 0) {
+        if (!baseTranslationId || !prayerIdsKey) {
             setPrayersMissingInStage(new Set());
             setPrayersMissingInProd(new Set());
+            setPrayersNeedProdAuth(new Set());
             return;
         }
 
         const gen = ++checkGenRef.current;
-        const prayerIds = currentPrayers
-            .map((p) => String(p.id ?? ""))
-            .filter(Boolean);
+        const prayerIds = prayerIdsKey.split(",").filter(Boolean);
 
         (async () => {
             const missingStage = new Set<string>();
             const missingProd = new Set<string>();
+            const needAuth = new Set<string>();
 
             await Promise.all(
                 prayerIds.map(async (prayerId) => {
@@ -88,22 +110,28 @@ export function usePrayerStructureWarnings({
                     if (status.prodChecked && status.prodExists === false) {
                         missingProd.add(prayerId);
                     }
+                    if (status.prodNeedsAuth && status.stageExists) {
+                        needAuth.add(prayerId);
+                    }
                 })
             );
 
             if (gen !== checkGenRef.current) return;
             setPrayersMissingInStage(missingStage);
             setPrayersMissingInProd(missingProd);
+            setPrayersNeedProdAuth(needAuth);
         })();
 
         return () => {
             checkGenRef.current += 1;
         };
-    }, [baseTranslationId, currentPrayers, prodFeatureEnabled]);
+    }, [baseTranslationId, prayerIdsKey, prodAuthTick]);
 
     return {
         selectedWarning,
         prayersMissingInStage,
         prayersMissingInProd,
+        prayersNeedProdAuth,
+        isProdAuthenticated: isProdAuthenticated(),
     };
 }

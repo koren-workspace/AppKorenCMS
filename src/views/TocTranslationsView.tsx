@@ -100,7 +100,6 @@ export function TocTranslationsView() {
         baseTranslationId,
         selectedPrayerId: nav.selectedPrayerId,
         currentPrayers: nav.currentPrayers,
-        prodFeatureEnabled: partEdit.isProdFeatureEnabled,
     });
 
     const openAddPartModal = () => {
@@ -373,6 +372,7 @@ export function TocTranslationsView() {
                 pendingProdNavEntityKeys={nav.pendingProdNavEntityKeys}
                 prayersMissingInStage={prayerStructureWarnings.prayersMissingInStage}
                 prayersMissingInProd={prayerStructureWarnings.prayersMissingInProd}
+                prayersNeedProdAuth={prayerStructureWarnings.prayersNeedProdAuth}
             />
             {/* אזור העריכה */}
             <PartEditPanel

@@ -83,6 +83,7 @@ type PrayerNavigationColumnsProps = {
     /** תפילות שמופיעות ב-TOC אך חסרות ב-Firestore */
     prayersMissingInStage?: Set<string>;
     prayersMissingInProd?: Set<string>;
+    prayersNeedProdAuth?: Set<string>;
 };
 
 /** מקטע יחיד ברשימה הניתן לגרירה */
@@ -221,6 +222,7 @@ export function PrayerNavigationColumns({
     pendingProdNavEntityKeys,
     prayersMissingInStage,
     prayersMissingInProd,
+    prayersNeedProdAuth,
 }: PrayerNavigationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const palette = getNusachPalette(selectedTocId);
@@ -378,6 +380,10 @@ export function PrayerNavigationColumns({
                     );
                     const missingInStage = prayersMissingInStage?.has(String(prayer.id)) ?? false;
                     const missingInProd = prayersMissingInProd?.has(String(prayer.id)) ?? false;
+                    const needProdAuth =
+                        (prayersNeedProdAuth?.has(String(prayer.id)) ?? false) &&
+                        !missingInProd &&
+                        !missingInStage;
                     const selText3 = dark3 ? "text-gray-900" : "text-white";
                     const selHover3 = dark3 ? "hover:bg-black/5" : "hover:bg-white/10";
                     return (
@@ -417,6 +423,14 @@ export function PrayerNavigationColumns({
                                             title="קיימת בסטייג' אך חסרה בפרוד"
                                         >
                                             חסר בפרוד
+                                        </span>
+                                    )}
+                                    {needProdAuth && (
+                                        <span
+                                            className="inline-flex shrink-0 items-center rounded-full bg-slate-100 px-1 py-px text-[9px] font-semibold leading-none text-slate-700"
+                                            title="יש להתחבר לפרוד כדי לבדוק סנכרון"
+                                        >
+                                            בדוק פרוד
                                         </span>
                                     )}
                                     {isPendingProd && <PendingProdNavBadge compact />}

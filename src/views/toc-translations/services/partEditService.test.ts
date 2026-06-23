@@ -40,6 +40,7 @@ import {
     moveItemsToPart,
     createTranslationItem,
     copyItemsToPart,
+    updatePartMetadataInItems,
     type DeletePartItemParams,
     type SplitPartItemsParams,
     type MoveItemsToPartParams,
@@ -582,8 +583,8 @@ describe("partEditService – moveItemsToPart", () => {
         expect(createWrite!.data.partId).toBe("tgt");
         expect(createWrite!.data.partName).toBe("יעד");
         expect(createWrite!.data.partIdAndName).toBe("tgt יעד");
-        expect(createWrite!.data.itemId).toBe("1100"); // moved old ID "100" נשמר ב-extraTakenIds, לכן מתקדם ל-1100
-        expect(createWrite!.data.mit_id).toBe("1100");
+        expect(createWrite!.data.itemId).toBe("101002211000");
+        expect(createWrite!.data.mit_id).toBe("101002211000");
         expect(createWrite!.ref.id).toBe(createWrite!.data.itemId);
         expect(softDeleteWrite!.ref.id).toBe("e1");
         expect(typeof createWrite!.data.timestamp).toBe("number");
@@ -1399,5 +1400,194 @@ describe("partEditService – createTranslationItem", () => {
         expect(Number(result.newItemId)).toBeGreaterThan(100);
         expect(Number(result.newItemId)).toBeLessThan(200);
         expect(saveEntity).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("partEditService – pending writes return contracts", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        firestoreBatchWrites.length = 0;
+    });
+
+    it("splitPartItems returns writes list for prod pending sync", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ filter }: any) => {
+                if (filter?.partId?.[1] === "p1") {
+                    return Promise.resolve([
+                        { id: "e1", values: { itemId: "1", partId: "p1", content: "א" } },
+                        { id: "e2", values: { itemId: "2", partId: "p1", content: "ב" } },
+                    ]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const writes = await splitPartItems(dataSource as any, {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "prayer1",
+            tocId: "ashkenaz",
+            currentPartId: "p1",
+            splitAtItemId: "2",
+            insertBefore: false,
+            newPartId: "p2",
+            newPartNameHe: "חדש",
+            newPartNameEn: "New",
+            translations: [{ translationId: "0-ashkenaz" }],
+        });
+
+        expect(writes.length).toBe(1);
+        expect(writes[0].docId).toBe("e2");
+        expect(writes[0].collectionPath).toBe("translations/0-ashkenaz/prayers/prayer1/items");
+        expect(firestoreBatchWrites.length).toBe(writes.length);
+    });
+
+    it("moveItemsToPart returns create+soft-delete writes", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ filter }: any) => {
+                if (filter?.partId?.[1] === "src") {
+                    return Promise.resolve([
+                        {
+                            id: "s1",
+                            values: { itemId: "100", mit_id: "100", partId: "src", partName: "מקור" },
+                        },
+                    ]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+        const translations = [
+            {
+                translationId: "0-ashkenaz",
+                categories: [{ prayers: [{ id: "prayer1", parts: [{ id: "tgt", name: "יעד" }] }] }],
+            },
+        ];
+
+        const writes = await moveItemsToPart(dataSource as any, {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "prayer1",
+            movedItemIds: ["100"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: null,
+            translations,
+        });
+
+        expect(writes.length).toBe(2);
+        expect(writes.some((w) => w.data.deleted === true)).toBe(true);
+        expect(writes.some((w) => w.data.deleted !== true)).toBe(true);
+        expect(firestoreBatchWrites.length).toBe(writes.length);
+    });
+
+    it("copyItemsToPart result includes writes used by pending prod", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                if (path.includes("translations/0-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([
+                        { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt-part" } },
+                    ]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn(),
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await copyItemsToPart(dataSource as any, {
+            sourceTranslationId: "0-src",
+            sourcePrayerId: "p-src",
+            sourcePartId: "src-part",
+            sourceItemIds: [],
+            targetTranslationId: "0-dst",
+            targetTocId: "dst",
+            targetPrayerId: "p-dst",
+            targetPartId: "tgt-part",
+            insertAfterItemId: "100",
+            copyLinkedTranslations: false,
+            sourceTranslations: [
+                {
+                    translationId: "0-src",
+                    categories: [{ prayers: [{ id: "p-src", parts: [{ id: "src-part", name: "source" }] }] }],
+                },
+            ],
+            targetTranslations: [
+                {
+                    translationId: "0-dst",
+                    categories: [{ prayers: [{ id: "p-dst", parts: [{ id: "tgt-part", name: "target" }] }] }],
+                },
+            ],
+            sourceEntities: [
+                { id: "base-1", values: { itemId: "10", mit_id: "10", content: "Amen", partId: "src-part" } } as any,
+            ],
+            sourceEnhancementsByTranslationId: {},
+        });
+
+        expect(result.writes.length).toBe(result.createdCount);
+        expect(result.writes[0].collectionPath).toBe("translations/0-dst/prayers/p-dst/items");
+    });
+
+    it("deletePartItemAndRelatedTranslations returns all soft-delete writes", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockResolvedValue([
+                {
+                    id: "rel-1",
+                    path: "translations/1-a/prayers/p1/items",
+                    values: { linkedItem: ["1"], itemId: "1.1" },
+                },
+            ]),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+        const itemEntity = {
+            id: "item-1",
+            path: "translations/0-a/prayers/p1/items",
+            values: { itemId: "1", content: "x" },
+        };
+
+        const writes = await deletePartItemAndRelatedTranslations(dataSource as any, {
+            itemEntity: itemEntity as any,
+            itemId: "1",
+            currentTranslationId: "0-a",
+            selectedPrayerId: "p1",
+            translations: [{ translationId: "0-a" }, { translationId: "1-a" }],
+        });
+
+        expect(writes).toHaveLength(2);
+        expect(writes.every((w) => w.data.deleted === true)).toBe(true);
+    });
+
+    it("updatePartMetadataInItems returns writes for all touched translations", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ path }: any) => {
+                if (String(path).includes("translations/0-a")) {
+                    return Promise.resolve([{ id: "i1", values: { partId: "p10", content: "a" } }]);
+                }
+                return Promise.resolve([{ id: "i2", values: { partId: "p10", content: "b" } }]);
+            }),
+            saveEntity: vi.fn().mockResolvedValue(undefined),
+            deleteEntity: vi.fn(),
+        };
+
+        const writes = await updatePartMetadataInItems(dataSource as any, {
+            selectedPrayerId: "pr1",
+            partId: "p10",
+            translations: [
+                {
+                    translationId: "0-a",
+                    categories: [{ prayers: [{ id: "pr1", parts: [{ id: "p10", name: "חלק בסיס" }] }] }],
+                },
+                {
+                    translationId: "1-a",
+                    categories: [{ prayers: [{ id: "pr1", parts: [{ id: "p10", name: "Part EN" }] }] }],
+                },
+            ],
+        });
+
+        expect(writes).toHaveLength(2);
+        expect(writes.map((w) => w.docId)).toEqual(expect.arrayContaining(["i1", "i2"]));
+        expect(dataSource.saveEntity).toHaveBeenCalledTimes(2);
     });
 });

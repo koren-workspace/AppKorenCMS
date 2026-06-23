@@ -15,9 +15,17 @@ export type ProdAuthModalProps = {
     email: string;
     onSuccess: () => void;
     onClose: () => void;
+    /** מאפשר החלפת מנגנון הזדהות בבדיקות E2E */
+    authenticate?: (email: string, password: string) => Promise<void>;
 };
 
-export function ProdAuthModal({ open, email, onSuccess, onClose }: ProdAuthModalProps) {
+export function ProdAuthModal({
+    open,
+    email,
+    onSuccess,
+    onClose,
+    authenticate,
+}: ProdAuthModalProps) {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -38,7 +46,7 @@ export function ProdAuthModal({ open, email, onSuccess, onClose }: ProdAuthModal
         setError(null);
         setLoading(true);
         try {
-            await signInToProd(email, password);
+            await (authenticate ?? signInToProd)(email, password);
             onSuccess();
         } catch (err: any) {
             const code: string = err?.code ?? "";

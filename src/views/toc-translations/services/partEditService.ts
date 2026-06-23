@@ -37,7 +37,7 @@ type DataSource = {
     deleteEntity: (opts: any) => Promise<void>;
 };
 
-type PendingWrite = { collectionPath: string; docId: string; data: Record<string, any> };
+export type PendingWrite = { collectionPath: string; docId: string; data: Record<string, any> };
 
 const FIRESTORE_BATCH_LIMIT = 500;
 
@@ -273,19 +273,25 @@ export type DeletePartItemParams = {
     translations: any[];
 };
 
-async function softDeleteEntity(dataSource: DataSource, entity: Entity<any>): Promise<void> {
+async function softDeleteEntity(dataSource: DataSource, entity: Entity<any>): Promise<PendingWrite> {
+    const data = { ...entity.values, deleted: true, timestamp: Date.now() };
     await dataSource.saveEntity({
         path: entity.path,
         entityId: entity.id,
-        values: { ...entity.values, deleted: true, timestamp: Date.now() },
+        values: data,
         status: "existing",
     });
+    return {
+        collectionPath: entity.path,
+        docId: entity.id,
+        data,
+    };
 }
 
 export async function deletePartItemAndRelatedTranslations(
     dataSource: DataSource,
     params: DeletePartItemParams
-): Promise<void> {
+): Promise<PendingWrite[]> {
     const {
         itemEntity,
         itemId,
@@ -294,7 +300,8 @@ export async function deletePartItemAndRelatedTranslations(
         translations,
     } = params;
 
-    await softDeleteEntity(dataSource, itemEntity);
+    const pendingWrites: PendingWrite[] = [];
+    pendingWrites.push(await softDeleteEntity(dataSource, itemEntity));
 
     const otherTranslations = translations.filter(
         (t) => t?.translationId && t.translationId !== currentTranslationId
@@ -338,6 +345,11 @@ export async function deletePartItemAndRelatedTranslations(
               ]
             : []
     );
+    results.forEach((result) => {
+        if (result.status === "fulfilled") {
+            pendingWrites.push(result.value);
+        }
+    });
 
     if (failures.length > 0) {
         const detail = failures
@@ -347,6 +359,8 @@ export async function deletePartItemAndRelatedTranslations(
             `deletePartItemAndRelatedTranslations: ${failures.length} related soft-delete(s) failed (${detail})`
         );
     }
+
+    return pendingWrites;
 }
 
 /**
@@ -818,7 +832,7 @@ export type SplitPartItemsParams = {
 export async function splitPartItems(
     dataSource: DataSource,
     params: SplitPartItemsParams
-): Promise<void> {
+): Promise<PendingWrite[]> {
     const {
         currentTranslationId,
         selectedPrayerId,
@@ -900,6 +914,7 @@ export async function splitPartItems(
     }
 
     await commitAtomicWrites(pendingWrites);
+    return pendingWrites;
 }
 
 // ─── Move Items to Part ───────────────────────────────────────────────────────
@@ -931,7 +946,7 @@ export type MoveItemsToPartParams = {
 export async function moveItemsToPart(
     dataSource: DataSource,
     params: MoveItemsToPartParams
-): Promise<void> {
+): Promise<PendingWrite[]> {
     const {
         currentTranslationId,
         selectedPrayerId,
@@ -943,7 +958,7 @@ export async function moveItemsToPart(
         translations,
     } = params;
 
-    if (movedItemIds.length === 0) return;
+    if (movedItemIds.length === 0) return [];
 
     const movedIdSet = new Set(movedItemIds);
 
@@ -1326,6 +1341,7 @@ export async function moveItemsToPart(
     }
 
     await commitAtomicWrites(pendingWrites);
+    return pendingWrites;
 }
 
 // ─── Copy Items to Part ───────────────────────────────────────────────────────
@@ -1389,6 +1405,8 @@ export type CopyItemsToPartResult = {
     createdCount: number;
     /** תרגומים שנדחו כי לא קיימים בנוסח היעד (לצורך הצגת אזהרה ל-UI) */
     skippedTranslationIds: string[];
+    /** כל הכתיבות שבוצעו בפועל (לשימוש pending prod sync) */
+    writes: PendingWrite[];
 };
 
 /**
@@ -1431,7 +1449,13 @@ async function copyPreparedItemsToPart(
         Array.isArray(preparedSourceEntities) && preparedSourceEntities.length > 0;
 
     if (sourceItemIds.length === 0 && !hasPreparedSource) {
-        return { baseIdMap: {}, translationIdMap: {}, createdCount: 0, skippedTranslationIds: [] };
+        return {
+            baseIdMap: {},
+            translationIdMap: {},
+            createdCount: 0,
+            skippedTranslationIds: [],
+            writes: [],
+        };
     }
 
     const sourceItemIdSet = new Set(
@@ -1902,6 +1926,7 @@ async function copyPreparedItemsToPart(
         translationIdMap,
         createdCount: pendingWrites.length,
         skippedTranslationIds,
+        writes: pendingWrites,
     };
 }
 
@@ -1932,7 +1957,7 @@ export type UpdatePartMetadataParams = {
 export async function updatePartMetadataInItems(
     dataSource: DataSource,
     params: UpdatePartMetadataParams
-): Promise<void> {
+): Promise<PendingWrite[]> {
     const { selectedPrayerId, partId, translations } = params;
 
     const getPartName = (trans: any): string => {
@@ -1947,6 +1972,7 @@ export async function updatePartMetadataInItems(
     };
 
     const now = Date.now();
+    const pendingWrites: PendingWrite[] = [];
 
     for (const trans of translations) {
         const tid = trans?.translationId as string | undefined;
@@ -1964,20 +1990,28 @@ export async function updatePartMetadataInItems(
 
         const toUpdate = items.filter((e: any) => e.values?.deleted !== true);
         for (const item of toUpdate) {
+            const data = {
+                ...item.values,
+                partName,
+                partIdAndName,
+                timestamp: now,
+            };
+            pendingWrites.push({
+                collectionPath: path,
+                docId: item.id,
+                data,
+            });
             await dataSource.saveEntity({
                 path,
                 entityId: item.id,
-                values: {
-                    ...item.values,
-                    partName,
-                    partIdAndName,
-                    timestamp: now,
-                },
+                values: data,
                 status: "existing",
                 collection: itemsCollection,
             });
         }
     }
+
+    return pendingWrites;
 }
 
 /**

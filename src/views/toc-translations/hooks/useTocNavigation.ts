@@ -12,8 +12,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Entity, useDataSource, useSnackbarController } from "@firecms/core";
-import { getFirestore, collection as firestoreCollection, onSnapshot, doc, getDoc } from "firebase/firestore";
-import { getFirebaseApp } from "../../../firebase_config";
+import {
+    getFirestore,
+    collection as firestoreCollection,
+    onSnapshot,
+    doc,
+    getDoc,
+    writeBatch,
+} from "firebase/firestore";
+import { getFirebaseApp, isProdConfigured } from "../../../firebase_config";
 import {
     getPrayerCategoriesFromTranslation,
     getPrayersForCategory,
@@ -21,7 +28,8 @@ import {
 } from "../services/navigationService";
 import { baseColl, dbUpdateTimeCollection } from "../collections";
 import { appendChangeLog } from "../services/changeLogService";
-import { updatePartMetadataInItems } from "../services/partEditService";
+import { updatePartMetadataInItems, type PendingWrite } from "../services/partEditService";
+import { getProdFirestore, isProdAuthenticated } from "../services/prodAuthService";
 import {
     allocateIdWithCollision,
     allocateNewCategoryId,
@@ -36,7 +44,18 @@ const LOG_PREFIX = "[TocTranslations]";
 const isSoftDeletedToc = (values: any): boolean =>
     values?.deleted === true || values?.deleted === "true" || values?.deleted === 1;
 
-export function useTocNavigation() {
+type PendingNavWrite = {
+    collectionPath: string;
+    docId: string;
+    data: Record<string, any>;
+};
+
+type TocNavigationOptions = {
+    onItemsMetadataUpdated?: (writes: PendingWrite[]) => void;
+    ensureProdAuth?: () => Promise<boolean>;
+};
+
+export function useTocNavigation(options?: TocNavigationOptions) {
     const dataSource = useDataSource();
     const snackbar = useSnackbarController();
 
@@ -48,9 +67,24 @@ export function useTocNavigation() {
     const [selectedPrayerId, setSelectedPrayerId] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [savingMessage, setSavingMessage] = useState<string | null>(null);
+    const [pendingProdNavWrites, setPendingProdNavWrites] = useState<
+        Map<string, PendingNavWrite>
+    >(new Map());
 
     const snackbarRef = useRef(snackbar);
     snackbarRef.current = snackbar;
+
+    const queueNavWrites = (writes: PendingNavWrite[]) => {
+        if (!isProdConfigured() || writes.length === 0) return;
+        setPendingProdNavWrites((prev) => {
+            const next = new Map(prev);
+            writes.forEach((write) => {
+                const key = `${write.collectionPath}/${write.docId}`;
+                next.set(key, write);
+            });
+            return next;
+        });
+    };
 
     // האזנה בזמן אמת לשינויים ב-TOC – מסנן מסמכים מחוקים ומעדכן state אוטומטית
     useEffect(() => {
@@ -110,6 +144,16 @@ export function useTocNavigation() {
         });
 
         return newVersion;
+    };
+
+    const queueTocWrite = (tocId: string, values: any, version: number) => {
+        queueNavWrites([
+            {
+                collectionPath: "toc",
+                docId: tocId,
+                data: { ...values, _tocVersion: version },
+            },
+        ]);
     };
 
     // —— נתונים נגזרים: מחפשים במבנה לפי הבחירות ——
@@ -208,6 +252,13 @@ export function useTocNavigation() {
                 status: "new",
                 collection: baseColl,
             });
+            queueNavWrites([
+                {
+                    collectionPath: "toc",
+                    docId: newId,
+                    data: values,
+                },
+            ]);
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "add_toc",
@@ -262,11 +313,23 @@ export function useTocNavigation() {
                 status: "new",
                 collection: baseColl,
             });
+            queueNavWrites([
+                {
+                    collectionPath: "translations",
+                    docId: id,
+                    data: {},
+                },
+            ]);
             const tocEntity = tocItems.find((t) => t.id === selectedTocId);
             if (!tocEntity) return;
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -385,6 +448,11 @@ export function useTocNavigation() {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -503,6 +571,11 @@ export function useTocNavigation() {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -556,6 +629,11 @@ export function useTocNavigation() {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -585,12 +663,24 @@ export function useTocNavigation() {
                             collection: baseColl,
                         });
                         for (const item of itemsList) {
+                            const itemValues = {
+                                ...item.values,
+                                deleted: true,
+                                timestamp: Date.now(),
+                            };
                             await dataSource.saveEntity({
                                 path: item.path,
                                 entityId: item.id,
-                                values: { ...item.values, deleted: true, timestamp: Date.now() },
+                                values: itemValues,
                                 status: "existing",
                             });
+                            queueNavWrites([
+                                {
+                                    collectionPath: item.path,
+                                    docId: item.id,
+                                    data: itemValues,
+                                },
+                            ]);
                         }
                         const prayersList = await dataSource.fetchCollection({
                             path: prayersPath,
@@ -598,12 +688,24 @@ export function useTocNavigation() {
                         });
                         const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
                         if (prayerEntity) {
+                            const prayerValues = {
+                                ...prayerEntity.values,
+                                deleted: true,
+                                timestamp: Date.now(),
+                            };
                             await dataSource.saveEntity({
                                 path: prayerEntity.path,
                                 entityId: prayerEntity.id,
-                                values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
+                                values: prayerValues,
                                 status: "existing",
                             });
+                            queueNavWrites([
+                                {
+                                    collectionPath: prayerEntity.path,
+                                    docId: prayerEntity.id,
+                                    data: prayerValues,
+                                },
+                            ]);
                         }
                     } catch (cascadeErr) {
                         cascadeFailures++;
@@ -761,28 +863,41 @@ export function useTocNavigation() {
         setSavingMessage("מוסיף תפילה...");
         try {
             for (const target of prayerPaths) {
+                const prayerValues = {
+                    nusach: selectedTocId,
+                    tefilaId: newPrayerId,
+                    timestamp: Date.now(),
+                    translationId: target.translationId,
+                    type:
+                        options?.nameEn &&
+                        options?.tocId &&
+                        target.translationId === `1-${options.tocId}`
+                            ? options.nameEn
+                            : name,
+                };
                 await dataSource.saveEntity({
                     path: target.path,
                     entityId: newPrayerId,
-                    values: {
-                        nusach: selectedTocId,
-                        tefilaId: newPrayerId,
-                        timestamp: Date.now(),
-                        translationId: target.translationId,
-                        type:
-                            options?.nameEn &&
-                            options?.tocId &&
-                            target.translationId === `1-${options.tocId}`
-                                ? options.nameEn
-                                : name,
-                    },
+                    values: prayerValues,
                     status: "new",
                     collection: baseColl,
                 });
+                queueNavWrites([
+                    {
+                        collectionPath: target.path,
+                        docId: newPrayerId,
+                        data: prayerValues,
+                    },
+                ]);
             }
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -906,19 +1021,36 @@ export function useTocNavigation() {
                 const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
                 if (prayerEntity) {
                     const pathToUse = (prayerEntity as any).path ?? prayersPath;
+                    const prayerValues = {
+                        ...prayerEntity.values,
+                        type: typeName,
+                        timestamp: Date.now(),
+                    };
                     await dataSource.saveEntity({
                         path: pathToUse,
                         entityId: prayerEntity.id,
-                        values: { ...prayerEntity.values, type: typeName, timestamp: Date.now() },
+                        values: prayerValues,
                         status: "existing",
                         collection: baseColl,
                     });
+                    queueNavWrites([
+                        {
+                            collectionPath: pathToUse,
+                            docId: prayerEntity.id,
+                            data: prayerValues,
+                        },
+                    ]);
                 }
             }
 
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -1028,12 +1160,24 @@ export function useTocNavigation() {
                         collection: baseColl,
                     });
                     for (const item of itemsList) {
+                        const itemValues = {
+                            ...item.values,
+                            deleted: true,
+                            timestamp: Date.now(),
+                        };
                         await dataSource.saveEntity({
                             path: item.path,
                             entityId: item.id,
-                            values: { ...item.values, deleted: true, timestamp: Date.now() },
+                            values: itemValues,
                             status: "existing",
                         });
+                        queueNavWrites([
+                            {
+                                collectionPath: item.path,
+                                docId: item.id,
+                                data: itemValues,
+                            },
+                        ]);
                     }
                     const prayersList = await dataSource.fetchCollection({
                         path: prayersPath,
@@ -1041,12 +1185,24 @@ export function useTocNavigation() {
                     });
                     const prayerEntity = prayersList.find((e: any) => e.id === prayerId);
                     if (prayerEntity) {
+                        const prayerValues = {
+                            ...prayerEntity.values,
+                            deleted: true,
+                            timestamp: Date.now(),
+                        };
                         await dataSource.saveEntity({
                             path: prayerEntity.path,
                             entityId: prayerEntity.id,
-                            values: { ...prayerEntity.values, deleted: true, timestamp: Date.now() },
+                            values: prayerValues,
                             status: "existing",
                         });
+                        queueNavWrites([
+                            {
+                                collectionPath: prayerEntity.path,
+                                docId: prayerEntity.id,
+                                data: prayerValues,
+                            },
+                        ]);
                     }
                 } catch (cascadeErr) {
                     cascadeFailures++;
@@ -1097,21 +1253,79 @@ export function useTocNavigation() {
                     collection: baseColl,
                 });
                 for (const item of itemsList) {
-                    await dataSource.saveEntity({ path: item.path, entityId: item.id, values: { ...item.values, deleted: true, timestamp: Date.now() }, status: "existing" });
+                    const itemValues = {
+                        ...item.values,
+                        deleted: true,
+                        timestamp: Date.now(),
+                    };
+                    await dataSource.saveEntity({
+                        path: item.path,
+                        entityId: item.id,
+                        values: itemValues,
+                        status: "existing",
+                    });
+                    queueNavWrites([
+                        {
+                            collectionPath: item.path,
+                            docId: item.id,
+                            data: itemValues,
+                        },
+                    ]);
                 }
-                await dataSource.saveEntity({ path: prayer.path, entityId: prayer.id, values: { ...prayer.values, deleted: true, timestamp: Date.now() }, status: "existing" });
+                const prayerValues = {
+                    ...prayer.values,
+                    deleted: true,
+                    timestamp: Date.now(),
+                };
+                await dataSource.saveEntity({
+                    path: prayer.path,
+                    entityId: prayer.id,
+                    values: prayerValues,
+                    status: "existing",
+                });
+                queueNavWrites([
+                    {
+                        collectionPath: prayer.path,
+                        docId: prayer.id,
+                        data: prayerValues,
+                    },
+                ]);
             }
             const transList = await dataSource.fetchCollection({
                 path: "translations",
                 collection: baseColl,
             });
             const transEntity = transList.find((e) => e.id === translationId);
-            if (transEntity) await dataSource.saveEntity({ path: transEntity.path, entityId: transEntity.id, values: { ...transEntity.values, deleted: true, timestamp: Date.now() }, status: "existing" });
+            if (transEntity) {
+                const transValues = {
+                    ...transEntity.values,
+                    deleted: true,
+                    timestamp: Date.now(),
+                };
+                await dataSource.saveEntity({
+                    path: transEntity.path,
+                    entityId: transEntity.id,
+                    values: transValues,
+                    status: "existing",
+                });
+                queueNavWrites([
+                    {
+                        collectionPath: transEntity.path,
+                        docId: transEntity.id,
+                        data: transValues,
+                    },
+                ]);
+            }
             const tocEntity = tocItems.find((t) => t.id === selectedTocId);
             if (!tocEntity) return;
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updated, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updated, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -1156,6 +1370,11 @@ export function useTocNavigation() {
             const expectedVersion = (toc.values as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(tocId, { ...toc.values, nusach: params.nusach.trim(), timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                tocId,
+                { ...toc.values, nusach: params.nusach.trim(), timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === tocId
@@ -1194,7 +1413,25 @@ export function useTocNavigation() {
                 snackbar.open({ type: "error", message: "המסמך שונה על ידי משתמש אחר – הנתונים התעדכנו אוטומטית. בדוק ונסה שוב." });
                 return;
             }
-            await dataSource.saveEntity({ path: toc.path, entityId: toc.id, values: { ...toc.values, deleted: true, timestamp: Date.now(), _tocVersion: expectedVersion + 1 }, status: "existing" });
+            const tocDeleteValues = {
+                ...toc.values,
+                deleted: true,
+                timestamp: Date.now(),
+                _tocVersion: expectedVersion + 1,
+            };
+            await dataSource.saveEntity({
+                path: toc.path,
+                entityId: toc.id,
+                values: tocDeleteValues,
+                status: "existing",
+            });
+            queueNavWrites([
+                {
+                    collectionPath: toc.path,
+                    docId: toc.id,
+                    data: tocDeleteValues,
+                },
+            ]);
 
             const tocData = toc.values as any;
             const translations = tocData?.translations ?? [];
@@ -1215,19 +1452,43 @@ export function useTocNavigation() {
                             collection: baseColl,
                         });
                         for (const item of itemsList) {
+                            const itemValues = {
+                                ...item.values,
+                                deleted: true,
+                                timestamp: Date.now(),
+                            };
                             await dataSource.saveEntity({
                                 path: item.path,
                                 entityId: item.id,
-                                values: { ...item.values, deleted: true, timestamp: Date.now() },
+                                values: itemValues,
                                 status: "existing",
                             });
+                            queueNavWrites([
+                                {
+                                    collectionPath: item.path,
+                                    docId: item.id,
+                                    data: itemValues,
+                                },
+                            ]);
                         }
+                        const prayerValues = {
+                            ...prayer.values,
+                            deleted: true,
+                            timestamp: Date.now(),
+                        };
                         await dataSource.saveEntity({
                             path: prayer.path,
                             entityId: prayer.id,
-                            values: { ...prayer.values, deleted: true, timestamp: Date.now() },
+                            values: prayerValues,
                             status: "existing",
                         });
+                        queueNavWrites([
+                            {
+                                collectionPath: prayer.path,
+                                docId: prayer.id,
+                                data: prayerValues,
+                            },
+                        ]);
                     }
                     const transList = await dataSource.fetchCollection({
                         path: "translations",
@@ -1235,12 +1496,24 @@ export function useTocNavigation() {
                     });
                     const transEntity = transList.find((e) => e.id === tid);
                     if (transEntity) {
+                        const transValues = {
+                            ...transEntity.values,
+                            deleted: true,
+                            timestamp: Date.now(),
+                        };
                         await dataSource.saveEntity({
                             path: transEntity.path,
                             entityId: transEntity.id,
-                            values: { ...transEntity.values, deleted: true, timestamp: Date.now() },
+                            values: transValues,
                             status: "existing",
                         });
+                        queueNavWrites([
+                            {
+                                collectionPath: transEntity.path,
+                                docId: transEntity.id,
+                                data: transValues,
+                            },
+                        ]);
                     }
                 } catch (cascadeErr) {
                     cascadeFailures++;
@@ -1335,7 +1608,7 @@ export function useTocNavigation() {
             "selectedPrayerId=",
             selectedPrayerId,
             "existingPartIds=",
-            partIds,
+            allPartIdsGlobal,
             "afterPartId=",
             afterPartId ?? "(none)",
             "=> newPartId=",
@@ -1394,6 +1667,11 @@ export function useTocNavigation() {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return null;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -1527,6 +1805,11 @@ export function useTocNavigation() {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return false;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -1535,11 +1818,12 @@ export function useTocNavigation() {
                 )
             );
 
-            await updatePartMetadataInItems(dataSource, {
+            const metadataWrites = await updatePartMetadataInItems(dataSource, {
                 selectedPrayerId,
                 partId,
                 translations: updatedTranslations,
             });
+            options?.onItemsMetadataUpdated?.(metadataWrites);
 
             appendChangeLog({
                 timestamp: Date.now(),
@@ -1597,6 +1881,11 @@ export function useTocNavigation() {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -1676,17 +1965,34 @@ export function useTocNavigation() {
                     filter: { partId: ["==", partId] },
                 });
                 for (const item of itemsList) {
+                    const itemValues = {
+                        ...item.values,
+                        deleted: true,
+                        timestamp: Date.now(),
+                    };
                     await dataSource.saveEntity({
                         path: item.path,
                         entityId: item.id,
-                        values: { ...item.values, deleted: true, timestamp: Date.now() },
+                        values: itemValues,
                         status: "existing",
                     });
+                    queueNavWrites([
+                        {
+                            collectionPath: item.path,
+                            docId: item.id,
+                            data: itemValues,
+                        },
+                    ]);
                 }
             }
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId
@@ -1706,6 +2012,43 @@ export function useTocNavigation() {
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete part failed`, err);
             snackbar.open({ type: "error", message: "שגיאה במחיקת מקטע" });
+        } finally {
+            setIsSaving(false);
+            setSavingMessage(null);
+        }
+    };
+
+    const handleSaveTocToProd = async () => {
+        if (!isProdConfigured() || pendingProdNavWrites.size === 0) return;
+
+        const hasProdSession = isProdAuthenticated();
+        if (!hasProdSession) {
+            const ensured = await options?.ensureProdAuth?.();
+            if (!ensured) return;
+        }
+
+        setIsSaving(true);
+        setSavingMessage("שומר מבנה לפרוד...");
+        try {
+            const db = getProdFirestore();
+            const writes = Array.from(pendingProdNavWrites.values());
+            const chunkSize = 490;
+            for (let i = 0; i < writes.length; i += chunkSize) {
+                const chunk = writes.slice(i, i + chunkSize);
+                const batch = writeBatch(db);
+                chunk.forEach((write) => {
+                    const ref = doc(db, write.collectionPath, write.docId);
+                    batch.set(ref, write.data, { merge: true });
+                });
+                await batch.commit();
+            }
+            setPendingProdNavWrites(new Map());
+            snackbar.open({ type: "success", message: "מבנה נשמר לפרוד בהצלחה ✓" });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} Save TOC to Prod failed`, err);
+            const message =
+                err instanceof Error ? err.message : "שגיאה בשמירת מבנה לפרוד";
+            snackbar.open({ type: "error", message });
         } finally {
             setIsSaving(false);
             setSavingMessage(null);
@@ -1761,6 +2104,9 @@ export function useTocNavigation() {
         selectedPrayerId,
         isSaving,
         savingMessage,
+        pendingProdNavWrites,
+        pendingProdNavCount: pendingProdNavWrites.size,
+        handleSaveTocToProd,
         currentTocData,
         currentTranslationData,
         currentCategories,

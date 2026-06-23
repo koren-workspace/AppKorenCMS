@@ -8,10 +8,15 @@ import React, { useState, useEffect } from "react";
 import {
     defaultDateSetIdFormValues,
     entityValuesToFormValues,
+    formValuesToPayload,
     type DateSetIdFormValues,
     type DateRange,
 } from "../constants/calendarTypes";
-import { resolveDateSetId, fetchCalendarEntryById } from "../services/calendarService";
+import {
+    buildCalendarEntryValues,
+    resolveDateSetId,
+    fetchCalendarEntryById,
+} from "../services/calendarService";
 import { HebrewCalendarPicker } from "./HebrewCalendarPicker";
 
 export type DateSetIdConfigModalProps = {
@@ -19,8 +24,11 @@ export type DateSetIdConfigModalProps = {
     onClose: () => void;
     /** מקור נתונים (dataSource) ל-Firestore */
     dataSource: { fetchCollection: (opts: any) => Promise<any[]>; saveEntity: (opts: any) => Promise<any> };
-    /** לאחר resolve: מחזיר את ה-dateSetId */
-    onSelect: (dateSetId: string) => void;
+    /** לאחר resolve: מחזיר את ה-dateSetId + רשומת calendar חדשה אם נוצרה */
+    onSelect: (
+        dateSetId: string,
+        createdEntry?: { collectionPath: string; docId: string; data: Record<string, any> }
+    ) => void;
     /** כותרת מודל (למשל "הגדר סט תאריכים למקטע") */
     title?: string;
     /** כשמוגדר – טוען את רשומת הלוח עם ה-ID ומציג את המאפיינים לעריכה */
@@ -78,9 +86,16 @@ export function DateSetIdConfigModal({
         setSaving(true);
         setError(null);
         try {
-            const { dateSetId } = await resolveDateSetId(dataSource, form);
+            const { dateSetId, created } = await resolveDateSetId(dataSource, form);
             setResolvedId(dateSetId);
-            onSelect(dateSetId);
+            const createdEntry = created
+                ? {
+                      collectionPath: "calendar",
+                      docId: dateSetId,
+                      data: buildCalendarEntryValues(dateSetId, formValuesToPayload(form)),
+                  }
+                : undefined;
+            onSelect(dateSetId, createdEntry);
             onClose();
         } catch (e) {
             setError(e instanceof Error ? e.message : "שגיאה בשמירת סט תאריכים");

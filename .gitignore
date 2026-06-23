@@ -6,6 +6,8 @@ node_modules
 .env.example
 .google-service-account.json
 dist/
+playwright-report/
+test-results/
 
 # STAGE test scripts – backup and local config (contains paths)
 scripts/.stage-test-backup.json

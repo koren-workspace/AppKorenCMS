@@ -2,6 +2,7 @@ import React from "react";
 import { FireCMSFirebaseApp, FirebaseLoginView } from "@firecms/firebase";
 import appConfig from "./index";
 import { firebaseConfig } from "./firebase_config";
+import { ProdSyncPlaywrightHarness } from "./e2e/ProdSyncPlaywrightHarness";
 
 const ALLOWED_EMAILS = (import.meta.env.VITE_ALLOWED_EMAILS as string ?? "")
     .split(",")
@@ -17,9 +18,16 @@ const environmentName =
 const appTitle = `My CMS (${environmentName})`;
 
 function App() {
+    const search = new URLSearchParams(window.location.search);
+    const isPlaywrightProdSyncHarness = search.get("playwright") === "prod-sync";
+
     React.useEffect(() => {
         document.title = appTitle;
     }, []);
+
+    if (isPlaywrightProdSyncHarness) {
+        return <ProdSyncPlaywrightHarness />;
+    }
 
     return (
         <FireCMSFirebaseApp

@@ -24,6 +24,7 @@ import {
     splitPartItems,
     moveItemsToPart,
     copyItemsToPart,
+    type PendingWrite,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
 import { appendChangeLog } from "../services/changeLogService";
@@ -208,10 +209,14 @@ export function usePartEdit(context: PartEditContext) {
     const [pendingProdItems, setPendingProdItems] = useState<
         Map<string, { path: string; entityId: string; values: Record<string, any> }>
     >(new Map());
+    const [pendingProdCalendar, setPendingProdCalendar] = useState<
+        Map<string, { collectionPath: string; docId: string; data: Record<string, any> }>
+    >(new Map());
     /** האם מודל הסיסמה לפרוד פתוח */
     const [prodAuthModalOpen, setProdAuthModalOpen] = useState(false);
     /** הפעולה שתבוצע מיד לאחר אימות מוצלח לפרוד */
     const pendingProdActionRef = useRef<(() => void) | null>(null);
+    const prodAuthResolverRef = useRef<((ok: boolean) => void) | null>(null);
     // ────────────────────────────────────────────────────────────────────────
 
     const [loading, setLoading] = useState(false);
@@ -573,6 +578,37 @@ export function usePartEdit(context: PartEditContext) {
         setEnhancementTranslationIds((prev) => ({ ...prev, [entityId]: translationId }));
     };
 
+    const addToPendingProdItems = (writes: PendingWrite[]) => {
+        if (!isProdConfigured() || writes.length === 0) return;
+        setPendingProdItems((prev) => {
+            const next = new Map(prev);
+            writes.forEach((write) => {
+                if (!write.collectionPath || !write.docId) return;
+                const key = `${write.collectionPath}/${write.docId}`;
+                next.set(key, {
+                    path: write.collectionPath,
+                    entityId: write.docId,
+                    values: write.data,
+                });
+            });
+            return next;
+        });
+    };
+
+    const addToPendingProdCalendar = (entry: {
+        collectionPath: string;
+        docId: string;
+        data: Record<string, any>;
+    }) => {
+        if (!isProdConfigured()) return;
+        const key = `${entry.collectionPath}/${entry.docId}`;
+        setPendingProdCalendar((prev) => {
+            const next = new Map(prev);
+            next.set(key, entry);
+            return next;
+        });
+    };
+
     /** שומר את כל הפריטים שסומנו כ־changed, שינויי התרגומים המקושרים, ומבצע מחיקות שסומנו; אם יש פריטים חדשים או מחיקות – טוען מחדש */
     const handleSaveGroup = async () => {
         if (
@@ -635,16 +671,18 @@ export function usePartEdit(context: PartEditContext) {
                 setEnhancementLocalValues({});
                 setEnhancementTranslationIds({});
             }
+            const deletedWritesForProd: PendingWrite[] = [];
             for (const { entity, itemId } of pendingDeletesList) {
                 const isBase = isBaseTranslation(currentTranslationData.translationId);
                 if (isBase) {
-                    await deletePartItemAndRelatedTranslations(dataSource, {
+                    const deleteWrites = await deletePartItemAndRelatedTranslations(dataSource, {
                         itemEntity: entity,
                         itemId,
                         currentTranslationId: currentTranslationData.translationId,
                         selectedPrayerId: selectedPrayerId!,
                         translations: currentTocData.translations,
                     });
+                    deletedWritesForProd.push(...deleteWrites);
                     appendChangeLog({
                         timestamp: Date.now(),
                         action: "delete_part_item",
@@ -673,11 +711,22 @@ export function usePartEdit(context: PartEditContext) {
                         savedToFirestore: true,
                     });
                 } else {
+                    const deleteTimestamp = Date.now();
+                    const deleteValues = {
+                        ...entity.values,
+                        deleted: true,
+                        timestamp: deleteTimestamp,
+                    };
                     await dataSource.saveEntity({
                         path: entity.path,
                         entityId: entity.id,
-                        values: { ...entity.values, deleted: true, timestamp: Date.now() },
+                        values: deleteValues,
                         status: "existing",
+                    });
+                    deletedWritesForProd.push({
+                        collectionPath: entity.path,
+                        docId: entity.id,
+                        data: deleteValues,
                     });
                     appendChangeLog({
                         timestamp: Date.now(),
@@ -710,16 +759,23 @@ export function usePartEdit(context: PartEditContext) {
                 const path =
                     entity.path ??
                     `translations/${translationId}/prayers/${selectedPrayerId}/items`;
+                const deleteTimestamp = Date.now();
+                const deleteValues = {
+                    ...entity.values,
+                    ...enhancementLocalValues[entity.id],
+                    deleted: true,
+                    timestamp: deleteTimestamp,
+                };
                 await dataSource.saveEntity({
                     path,
                     entityId: entity.id,
-                    values: {
-                        ...entity.values,
-                        ...enhancementLocalValues[entity.id],
-                        deleted: true,
-                        timestamp: Date.now(),
-                    },
+                    values: deleteValues,
                     status: "existing",
+                });
+                deletedWritesForProd.push({
+                    collectionPath: path,
+                    docId: entity.id,
+                    data: deleteValues,
                 });
             }
             setPendingDeletes([]);
@@ -883,7 +939,7 @@ export function usePartEdit(context: PartEditContext) {
                         const isNew = id.startsWith("new_");
                         const vals = { ...localValues[id], timestamp: savedNow };
                         const entityId = isNew ? String(localValues[id]?.itemId ?? id) : id;
-                        next.set(entityId, { path, entityId, values: vals });
+                        next.set(`${path}/${entityId}`, { path, entityId, values: vals });
                     });
                     // enhancements (תרגומים מקושרים)
                     if (hadEnhancementChanges) {
@@ -896,9 +952,21 @@ export function usePartEdit(context: PartEditContext) {
                             const ent = ents.find((e: any) => e.id === eid);
                             const base = ent?.values ?? {};
                             const vals = { ...base, ...enhancementLocalValues[eid], timestamp: savedNow };
-                            next.set(eid, { path: enhPath, entityId: eid, values: vals });
+                            next.set(`${enhPath}/${eid}`, {
+                                path: enhPath,
+                                entityId: eid,
+                                values: vals,
+                            });
                         });
                     }
+                    deletedWritesForProd.forEach((write) => {
+                        const key = `${write.collectionPath}/${write.docId}`;
+                        next.set(key, {
+                            path: write.collectionPath,
+                            entityId: write.docId,
+                            values: write.data,
+                        });
+                    });
                     return next;
                 });
             }
@@ -973,12 +1041,17 @@ export function usePartEdit(context: PartEditContext) {
 
     /** ביצוע בפועל של שמירת pendingProdItems ל-Firestore של פרוד */
     const doSavePartToProd = async () => {
-        if (pendingProdItems.size === 0) return;
+        if (pendingProdItems.size === 0 && pendingProdCalendar.size === 0) return;
         setSaving(true);
         try {
             const db = getProdFirestore();
-            const entries = Array.from(pendingProdItems.values());
-            // חלוקה ל-chunks של 490 (מגבלת Firestore batch = 500)
+            const itemEntries = Array.from(pendingProdItems.values());
+            const calendarEntries = Array.from(pendingProdCalendar.values()).map((entry) => ({
+                path: entry.collectionPath,
+                entityId: entry.docId,
+                values: entry.data,
+            }));
+            const entries = [...itemEntries, ...calendarEntries];
             const chunkSize = 490;
             for (let i = 0; i < entries.length; i += chunkSize) {
                 const chunk = entries.slice(i, i + chunkSize);
@@ -990,10 +1063,13 @@ export function usePartEdit(context: PartEditContext) {
                 await batch.commit();
             }
             setPendingProdItems(new Map());
+            setPendingProdCalendar(new Map());
             snackbar.open({ type: "success", message: "נשמר לפרוד בהצלחה ✓" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Save to Prod failed`, err);
-            snackbar.open({ type: "error", message: "שגיאה בשמירה לפרוד" });
+            const message =
+                err instanceof Error ? err.message : "שגיאה בשמירה לפרוד";
+            snackbar.open({ type: "error", message });
         } finally {
             setSaving(false);
         }
@@ -1001,7 +1077,11 @@ export function usePartEdit(context: PartEditContext) {
 
     /** שמירת הפריטים הממתינים לפרוד. אם המשתמש לא מחובר לפרוד — פותח מודל סיסמה */
     const handleSavePartToProd = async () => {
-        if (!isProdConfigured() || pendingProdItems.size === 0) return;
+        if (
+            !isProdConfigured() ||
+            (pendingProdItems.size === 0 && pendingProdCalendar.size === 0)
+        )
+            return;
         if (!isProdAuthenticated()) {
             pendingProdActionRef.current = doSavePartToProd;
             setProdAuthModalOpen(true);
@@ -1049,9 +1129,27 @@ export function usePartEdit(context: PartEditContext) {
     /** נקרא לאחר אימות מוצלח במודל הסיסמה – מריץ את הפעולה הממתינה */
     const onProdAuthSuccess = () => {
         setProdAuthModalOpen(false);
+        prodAuthResolverRef.current?.(true);
+        prodAuthResolverRef.current = null;
         const action = pendingProdActionRef.current;
         pendingProdActionRef.current = null;
         action?.();
+    };
+
+    const closeProdAuthModal = () => {
+        setProdAuthModalOpen(false);
+        prodAuthResolverRef.current?.(false);
+        prodAuthResolverRef.current = null;
+        pendingProdActionRef.current = null;
+    };
+
+    const requestProdAuth = async (): Promise<boolean> => {
+        if (!isProdConfigured()) return false;
+        if (isProdAuthenticated()) return true;
+        return new Promise<boolean>((resolve) => {
+            prodAuthResolverRef.current = resolve;
+            setProdAuthModalOpen(true);
+        });
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1665,7 +1763,17 @@ export function usePartEdit(context: PartEditContext) {
         setDateSetIdInitialForEdit(undefined);
     };
 
-    const onDateSetIdSelected = (dateSetId: string) => {
+    const onDateSetIdSelected = (
+        dateSetId: string,
+        createdEntry?: {
+            collectionPath: string;
+            docId: string;
+            data: Record<string, any>;
+        }
+    ) => {
+        if (createdEntry) {
+            addToPendingProdCalendar(createdEntry);
+        }
         if (pendingAddKind === "addItemDateSetId") {
             setAddItemForm((prev) => ({ ...prev, dateSetId }));
             setPendingAddKind(addItemDateSetIdSource);
@@ -1931,7 +2039,7 @@ export function usePartEdit(context: PartEditContext) {
             });
             if (!newPartId) return;
 
-            await splitPartItems(dataSource, {
+            const splitWrites = await splitPartItems(dataSource, {
                 currentTranslationId: currentTranslationData.translationId,
                 selectedPrayerId,
                 tocId,
@@ -1943,6 +2051,7 @@ export function usePartEdit(context: PartEditContext) {
                 newPartNameEn,
                 translations: currentTocData?.translations ?? [],
             });
+            addToPendingProdItems(splitWrites);
 
             appendChangeLog({
                 timestamp: Date.now(),
@@ -2029,7 +2138,7 @@ export function usePartEdit(context: PartEditContext) {
 
         setSaving(true);
         try {
-            await moveItemsToPart(dataSource, {
+            const moveWrites = await moveItemsToPart(dataSource, {
                 currentTranslationId: currentTranslationData.translationId,
                 selectedPrayerId,
                 movedItemIds,
@@ -2039,6 +2148,7 @@ export function usePartEdit(context: PartEditContext) {
                 paragraphByBaseItemId: {},
                 translations: currentTocData?.translations ?? [],
             });
+            addToPendingProdItems(moveWrites);
 
             appendChangeLog({
                 timestamp: Date.now(),
@@ -2160,6 +2270,7 @@ export function usePartEdit(context: PartEditContext) {
                         "בין שני פריטים צמודים אין מקום למספר שלם. האם ליצור מזהה עם .5?"
                     ),
             });
+            addToPendingProdItems(result.writes);
 
             appendChangeLog({
                 timestamp: Date.now(),
@@ -2416,6 +2527,7 @@ export function usePartEdit(context: PartEditContext) {
                         "בין שני פריטים צמודים אין מקום למספר שלם. האם ליצור מזהה עם .5?"
                     ),
             });
+            addToPendingProdItems(result.writes);
             appendChangeLog({
                 timestamp: Date.now(),
                 action: "copy_items_to_part",
@@ -2519,6 +2631,13 @@ export function usePartEdit(context: PartEditContext) {
         }
         setSaving(true);
         try {
+            let basePendingWrite:
+                | {
+                      path: string;
+                      entityId: string;
+                      values: Record<string, any>;
+                  }
+                | null = null;
             const baseContent = String(
                 (addTranslationBaseItem
                     ? (localValues[addTranslationBaseItem.id]?.content ?? addTranslationBaseItem.values?.content)
@@ -2566,6 +2685,17 @@ export function usePartEdit(context: PartEditContext) {
                     changedIds: [addTranslationBaseItem.id],
                     localValues,
                 });
+                const baseEntityId = String(
+                    localValues[addTranslationBaseItem.id]?.itemId ?? addTranslationBaseItem.id
+                );
+                basePendingWrite = {
+                    path: basePath,
+                    entityId: baseEntityId,
+                    values: {
+                        ...localValues[addTranslationBaseItem.id],
+                        timestamp: Date.now(),
+                    },
+                };
             }
 
             let newItemId: string;
@@ -2644,6 +2774,61 @@ export function usePartEdit(context: PartEditContext) {
                 });
                 newItemId = result.newItemId;
                 newMitId = result.newMitId;
+                if (isProdConfigured()) {
+                    setPendingProdItems((prev) => {
+                        const next = new Map(prev);
+                        const newItemPath = `translations/${addTranslationTargetId}/prayers/${selectedPrayerId}/items`;
+                        next.set(`${newItemPath}/${newItemId}`, {
+                            path: newItemPath,
+                            entityId: newItemId,
+                            values: {
+                                content: translationContent,
+                                type: form.type ?? "body",
+                                titleType: form.titleType,
+                                title: form.title,
+                                fontTanach: form.fontTanach,
+                                bold: form.bold,
+                                centerAlign: form.centerAlign,
+                                lineLine: form.lineLine,
+                                red: form.red,
+                                justifyBlock: form.justifyBlock,
+                                noSpace: form.noSpace,
+                                block: form.block,
+                                firstInPage: form.firstInPage,
+                                specialDate: form.specialDate,
+                                cohanim: form.cohanim,
+                                hazan: form.hazan,
+                                minyan: form.minyan,
+                                role: form.role,
+                                reference: form.reference,
+                                specialSign: form.specialSign,
+                                dateSetId: form.dateSetId?.trim() || "100",
+                                partId: selectedGroupId,
+                                partName:
+                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
+                                        ?.nameHe ??
+                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
+                                        ?.name ??
+                                    "",
+                                partIdAndName: `${selectedGroupId} ${
+                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
+                                        ?.nameHe ??
+                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
+                                        ?.name ??
+                                    ""
+                                }`,
+                                itemId: newItemId,
+                                mit_id: newMitId,
+                                linkedItem: [baseItemId],
+                                timestamp: Date.now(),
+                            },
+                        });
+                        if (basePendingWrite) {
+                            next.set(`${basePendingWrite.path}/${basePendingWrite.entityId}`, basePendingWrite);
+                        }
+                        return next;
+                    });
+                }
             } catch (err) {
                 if (err instanceof Error && err.message === NO_SPACE_BETWEEN_ITEMS) {
                     snackbar.open({
@@ -2699,6 +2884,12 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
+    const pendingProdItemIds = useMemo(
+        () => new Set(Array.from(pendingProdItems.values()).map((entry) => entry.entityId)),
+        [pendingProdItems]
+    );
+    const pendingProdCount = pendingProdItems.size + pendingProdCalendar.size;
+
     return {
         selectedGroupId,
         allItems,
@@ -2715,12 +2906,15 @@ export function usePartEdit(context: PartEditContext) {
         handleSaveGroup,
         handleFinalPublish,
         // Prod dual-write
-        pendingProdCount: pendingProdItems.size,
-        pendingProdItemIds: new Set(pendingProdItems.keys()),
+        pendingProdCount,
+        pendingProdItemIds,
         handleSavePartToProd,
         handlePublishToProd,
+        requestProdAuth,
+        addToPendingProdItems,
+        addToCalendarPending: addToPendingProdCalendar,
         prodAuthModalOpen,
-        closeProdAuthModal: () => setProdAuthModalOpen(false),
+        closeProdAuthModal,
         onProdAuthSuccess,
         isProdFeatureEnabled: isProdConfigured(),
         addNewItemAt,

@@ -79,7 +79,7 @@ export function getNextDateSetId(calendarEntities: Entity<any>[]): string {
     return String(max + 1);
 }
 
-function buildCalendarEntryValues(
+export function buildCalendarEntryValues(
     dateSetId: string,
     payload: CalendarEntryPayload
 ): Record<string, any> {

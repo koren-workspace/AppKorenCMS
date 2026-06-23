@@ -13,7 +13,7 @@
  *   - הקומפוננטות מקבלות את כל הנתונים ב-props (controlled).
  */
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useAuthController } from "@firecms/core";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
@@ -41,11 +41,17 @@ import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
 import { useDateFilter } from "./toc-translations/hooks/useDateFilter";
 import { isBaseTranslation, isTranslationEditable } from "./toc-translations/services/navigationService";
 import { getNusachDisplayLabel } from "./toc-translations/utils/nusachDisplay";
+import type { PendingWrite } from "./toc-translations/services/partEditService";
 
 export function TocTranslationsView() {
     const auth = useAuthController();
     const currentUserEmail = (auth.user as any)?.email ?? "";
-    const nav = useTocNavigation();
+    const pendingItemWritesRef = useRef<(writes: PendingWrite[]) => void>(() => {});
+    const ensureProdAuthRef = useRef<() => Promise<boolean>>(async () => false);
+    const nav = useTocNavigation({
+        onItemsMetadataUpdated: (writes) => pendingItemWritesRef.current(writes),
+        ensureProdAuth: () => ensureProdAuthRef.current(),
+    });
     const isBase = isBaseTranslation(nav.currentTranslationData?.translationId);
     const canEditNames = isTranslationEditable(nav.currentTranslationData?.translationId);
 
@@ -77,6 +83,8 @@ export function TocTranslationsView() {
         tocItems: nav.tocItems,
         addPart: nav.addPart,
     });
+    pendingItemWritesRef.current = partEdit.addToPendingProdItems;
+    ensureProdAuthRef.current = partEdit.requestProdAuth;
 
     const dateFilter = useDateFilter(partEdit.dataSource);
 
@@ -298,6 +306,10 @@ export function TocTranslationsView() {
                 selectedTranslationIndex={nav.selectedTranslationIndex}
                 onSelectTranslation={withUnsavedCheck(nav.onSelectTranslation)}
                 isSaving={nav.isSaving}
+                pendingProdNavCount={nav.pendingProdNavCount}
+                onSaveTocToProd={
+                    partEdit.isProdFeatureEnabled ? nav.handleSaveTocToProd : undefined
+                }
             />
             {/* עמודה 3–5: קטגוריה → תפילה → מקטע; בחירת מקטע טוענת את הפריטים */}
             <PrayerNavigationColumns

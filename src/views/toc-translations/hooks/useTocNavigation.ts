@@ -1599,16 +1599,18 @@ export function useTocNavigation(options?: TocNavigationOptions) {
             .flatMap((cat: any) => cat.prayers ?? [])
             .flatMap((p: any) => p.parts ?? []);
         const allPartIdsGlobal = allGlobalParts.map((pt) => String(pt.id)).filter(Boolean);
+        // Keep a stable local alias to avoid runtime reference issues in bundled builds.
+        const partIds = allPartIdsGlobal;
         const digitPart = resolveDigitMillions(baseTrans, selectedTocId!);
         const candidatePart = allocateNewPartId(allParts, afterPartId, digitPart, allGlobalParts);
-        const newPartId = allocateIdWithCollision(candidatePart, new Set(allPartIdsGlobal));
+        const newPartId = allocateIdWithCollision(candidatePart, new Set(partIds));
         console.log(
             "[CMS-ID] addPart | digitM=",
             digitPart,
             "selectedPrayerId=",
             selectedPrayerId,
             "existingPartIds=",
-            allPartIdsGlobal,
+            partIds,
             "afterPartId=",
             afterPartId ?? "(none)",
             "=> newPartId=",

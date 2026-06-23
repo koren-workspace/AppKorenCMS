@@ -32,12 +32,12 @@ test.describe("Prod sync UI flows", () => {
 
     test("שמור מבנה · פרוד appears and clears pending nav writes", async ({ page }) => {
         await expect(
-            page.getByRole("button", { name: "שמור מבנה · פרוד" })
+            page.getByRole("button", { name: /שמור מבנה · פרוד/ })
         ).toHaveCount(0);
 
         await page.getByRole("button", { name: "צור pending מבנה" }).click();
 
-        const saveNavButton = page.getByRole("button", { name: "שמור מבנה · פרוד" });
+        const saveNavButton = page.getByRole("button", { name: /שמור מבנה · פרוד/ });
         await expect(saveNavButton).toBeVisible();
         await expect(page.getByTestId("pending-nav")).toContainText("pendingNav: 2");
 
@@ -48,7 +48,7 @@ test.describe("Prod sync UI flows", () => {
 
         await expect(page.getByTestId("pending-nav")).toContainText("pendingNav: 0");
         await expect(
-            page.getByRole("button", { name: "שמור מבנה · פרוד" })
+            page.getByRole("button", { name: /שמור מבנה · פרוד/ })
         ).toHaveCount(0);
         await expect(page.getByTestId("event-log")).toContainText(
             "queue-nav-pending,open-auth-save-prod-nav,auth-success,save-prod-nav"
@@ -123,7 +123,7 @@ test.describe("Prod sync UI flows", () => {
 
         // queue nav pending and save again: should not open auth modal this time
         await page.getByRole("button", { name: "צור pending מבנה" }).click();
-        await page.getByRole("button", { name: "שמור מבנה · פרוד" }).click();
+        await page.getByRole("button", { name: /שמור מבנה · פרוד/ }).click();
 
         await expect(page.getByText("כניסה לסביבת Production")).toHaveCount(0);
         await expect(page.getByTestId("pending-nav")).toContainText("pendingNav: 0");

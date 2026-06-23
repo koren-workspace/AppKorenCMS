@@ -28,6 +28,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { DeleteTrashIcon } from "./DeleteTrashIcon";
+import { PendingProdNavBadge } from "./PendingProdNavBadge";
+import { isNavEntityPending } from "../utils/pendingProdNavEntities";
 
 /** גובה אחיד לשורות ניווט + הגבלת גובה טקסט (שמות תפילה ארוכים לעומת קטגוריה) */
 const NAV_ROW_MIN = "min-h-[3.5rem]";
@@ -76,6 +78,8 @@ type PrayerNavigationColumnsProps = {
      * כשערך = string[]: מוצגים רק מקטעים שלפחות אחד מ-dateSetIds שלהם נמצא ברשימה.
      */
     relevantDateSetIds?: string[] | null;
+    /** מזהי ישויות מבנה (part:/category:/prayer:) שממתינות לשמירת מבנה לפרוד */
+    pendingProdNavEntityKeys?: Set<string>;
 };
 
 /** מקטע יחיד ברשימה הניתן לגרירה */
@@ -89,6 +93,7 @@ function SortablePartItem({
     isDragDisabled,
     partColor,
     partDarkText,
+    isPendingProd,
 }: {
     part: any;
     selectedGroupId: string | null;
@@ -99,6 +104,7 @@ function SortablePartItem({
     isDragDisabled: boolean;
     partColor: string;
     partDarkText: boolean;
+    isPendingProd?: boolean;
 }) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const {
@@ -135,8 +141,8 @@ function SortablePartItem({
                 </button>
             )}
             <div
-                className={`flex min-w-0 flex-1 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText : "border-gray-200 bg-gray-50"}`}
-                style={sel ? { backgroundColor: partColor, borderColor: partColor } : undefined}
+                className={`flex min-w-0 flex-1 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText : "border-gray-200 bg-gray-50"} ${isPendingProd && !sel ? "border-blue-300 bg-blue-50/60" : ""}`}
+                style={sel ? { backgroundColor: partColor, borderColor: partColor } : isPendingProd ? { borderColor: "#90caf9", borderWidth: 1.5 } : undefined}
             >
                 <button
                     type="button"
@@ -145,7 +151,10 @@ function SortablePartItem({
                     title={typeof part.name === "string" ? part.name : undefined}
                     className={`${NAV_LABEL_BTN} ${sel ? `${selText} ${selHover}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                 >
-                    <span className={NAV_LABEL_TEXT}>{part.name}</span>
+                    <span className={`${NAV_LABEL_TEXT} flex items-center gap-1`}>
+                        <span className="min-w-0 flex-1">{part.name}</span>
+                        {isPendingProd && <PendingProdNavBadge compact />}
+                    </span>
                 </button>
                 {(onEditPart || onDeletePart) && (
                     <div
@@ -206,6 +215,7 @@ export function PrayerNavigationColumns({
     isSaving = false,
     selectedTocId,
     relevantDateSetIds = null,
+    pendingProdNavEntityKeys,
 }: PrayerNavigationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const palette = getNusachPalette(selectedTocId);
@@ -284,13 +294,18 @@ export function PrayerNavigationColumns({
                 )}
                 {currentCategories.map((category: any) => {
                     const sel = selectedCategoryId === category.id;
+                    const isPendingProd = isNavEntityPending(
+                        pendingProdNavEntityKeys,
+                        "category",
+                        String(category.id)
+                    );
                     const selText2 = dark2 ? "text-gray-900" : "text-white";
                     const selHover2 = dark2 ? "hover:bg-black/5" : "hover:bg-white/10";
                     return (
                         <div
                             key={category.id ?? category.name}
-                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText2 : "border-gray-200 bg-gray-50"}`}
-                            style={sel ? { backgroundColor: c2, borderColor: c2 } : undefined}
+                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText2 : "border-gray-200 bg-gray-50"} ${isPendingProd && !sel ? "border-blue-300 bg-blue-50/60" : ""}`}
+                            style={sel ? { backgroundColor: c2, borderColor: c2 } : isPendingProd ? { borderColor: "#90caf9", borderWidth: 1.5 } : undefined}
                         >
                             <button
                                 type="button"
@@ -299,7 +314,10 @@ export function PrayerNavigationColumns({
                                 title={typeof category.name === "string" ? category.name : undefined}
                                 className={`${NAV_LABEL_BTN} ${sel ? `${selText2} ${selHover2}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                             >
-                                <span className={NAV_LABEL_TEXT}>{category.name}</span>
+                                <span className={`${NAV_LABEL_TEXT} flex items-center gap-1`}>
+                                    <span className="min-w-0 flex-1">{category.name}</span>
+                                    {isPendingProd && <PendingProdNavBadge compact />}
+                                </span>
                             </button>
                             {(onEditCategory || onDeleteCategory) && (
                                 <div
@@ -348,13 +366,18 @@ export function PrayerNavigationColumns({
                 )}
                 {currentPrayers.map((prayer: any) => {
                     const sel = selectedPrayerId === prayer.id;
+                    const isPendingProd = isNavEntityPending(
+                        pendingProdNavEntityKeys,
+                        "prayer",
+                        String(prayer.id)
+                    );
                     const selText3 = dark3 ? "text-gray-900" : "text-white";
                     const selHover3 = dark3 ? "hover:bg-black/5" : "hover:bg-white/10";
                     return (
                         <div
                             key={prayer.id}
-                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText3 : "border-gray-200 bg-gray-50"}`}
-                            style={sel ? { backgroundColor: c3, borderColor: c3 } : undefined}
+                            className={`flex min-w-0 items-stretch overflow-hidden rounded border ${NAV_ROW_MIN} ${sel ? selText3 : "border-gray-200 bg-gray-50"} ${isPendingProd && !sel ? "border-blue-300 bg-blue-50/60" : ""}`}
+                            style={sel ? { backgroundColor: c3, borderColor: c3 } : isPendingProd ? { borderColor: "#90caf9", borderWidth: 1.5 } : undefined}
                         >
                             <button
                                 type="button"
@@ -363,7 +386,10 @@ export function PrayerNavigationColumns({
                                 title={typeof prayer.name === "string" ? prayer.name : undefined}
                                 className={`${NAV_LABEL_BTN} ${sel ? `${selText3} ${selHover3}` : "text-gray-900 hover:bg-gray-100"} ${isSaving ? savingClass : ""}`}
                             >
-                                <span className={NAV_LABEL_TEXT}>{prayer.name}</span>
+                                <span className={`${NAV_LABEL_TEXT} flex items-center gap-1`}>
+                                    <span className="min-w-0 flex-1">{prayer.name}</span>
+                                    {isPendingProd && <PendingProdNavBadge compact />}
+                                </span>
                             </button>
                             {(onEditPrayer || onDeletePrayer) && (
                                 <div
@@ -451,6 +477,11 @@ export function PrayerNavigationColumns({
                                 isDragDisabled={!isDragEnabled}
                                 partColor={c4}
                                 partDarkText={dark4}
+                                isPendingProd={isNavEntityPending(
+                                    pendingProdNavEntityKeys,
+                                    "part",
+                                    String(part.id)
+                                )}
                             />
                         ))}
                     </SortableContext>

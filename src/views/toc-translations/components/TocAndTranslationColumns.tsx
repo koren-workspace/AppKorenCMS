@@ -29,8 +29,6 @@ type TocAndTranslationColumnsProps = {
     onDeleteTranslation?: (translationId: string) => void;
     /** במהלך שמירה – כפתורי הפעולה מושבתים ומציגים מצב טעינה */
     isSaving?: boolean;
-    pendingProdNavCount?: number;
-    onSaveTocToProd?: () => void;
 };
 
 export function TocAndTranslationColumns({
@@ -47,8 +45,6 @@ export function TocAndTranslationColumns({
     getSuggestedTranslationId,
     onDeleteTranslation,
     isSaving = false,
-    pendingProdNavCount = 0,
-    onSaveTocToProd,
 }: TocAndTranslationColumnsProps) {
     const savingClass = "opacity-60 cursor-not-allowed pointer-events-none";
     const handleDeleteToc = (e: React.MouseEvent, tocId: string) => {
@@ -89,14 +85,7 @@ export function TocAndTranslationColumns({
     return (
         <>
             <div className="w-36 shrink-0 flex flex-col gap-1.5 bg-white p-1.5 border-l overflow-auto">
-                <h4 className="font-bold text-gray-500 text-lg mb-2">
-                    1. נוסח{" "}
-                    {pendingProdNavCount > 0 && (
-                        <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                            ממתין לפרוד: {pendingProdNavCount}
-                        </span>
-                    )}
-                </h4>
+                <h4 className="font-bold text-gray-500 text-lg mb-2">1. נוסח</h4>
                 {tocItems.map((toc: any) => {
                     const sel = selectedTocId === toc.id;
                     const tocLabel = getNusachDisplayLabel(toc.id, toc.values?.nusach);
@@ -160,20 +149,6 @@ export function TocAndTranslationColumns({
                         style={!isSaving ? { borderColor: getNusachPalette(selectedTocId).colors[0], color: getNusachPalette(selectedTocId).colors[0] } : undefined}
                     >
                         {isSaving ? "שומר…" : "+ הוסף נוסח"}
-                    </button>
-                )}
-                {onSaveTocToProd && pendingProdNavCount > 0 && (
-                    <button
-                        type="button"
-                        onClick={onSaveTocToProd}
-                        disabled={isSaving}
-                        className={`mt-1 py-1 px-1 rounded border font-medium text-sm leading-tight ${
-                            isSaving
-                                ? "border-gray-300 text-gray-400 " + savingClass
-                                : "border-blue-400 text-blue-700 hover:bg-blue-50"
-                        }`}
-                    >
-                        {isSaving ? "שומר…" : "שמור מבנה · פרוד"}
                     </button>
                 )}
             </div>

@@ -281,9 +281,13 @@ export function TocTranslationsView() {
                     nav.selectedTocId ?? "",
                     nav.currentTocData?.nusach
                 )}
-                saving={partEdit.saving}
+                saving={partEdit.saving || nav.isSaving}
                 onFinalPublish={partEdit.handleFinalPublish}
                 onPublishToProd={partEdit.isProdFeatureEnabled ? partEdit.handlePublishToProd : undefined}
+                pendingProdNavCount={nav.pendingProdNavCount}
+                onSaveTocToProd={
+                    partEdit.isProdFeatureEnabled ? nav.handleSaveTocToProd : undefined
+                }
             />
             <div className="flex flex-1 min-h-0 gap-1">
             {/* עמודה 1–2: בחירת נוסח (TOC) ותרגום */}
@@ -306,10 +310,6 @@ export function TocTranslationsView() {
                 selectedTranslationIndex={nav.selectedTranslationIndex}
                 onSelectTranslation={withUnsavedCheck(nav.onSelectTranslation)}
                 isSaving={nav.isSaving}
-                pendingProdNavCount={nav.pendingProdNavCount}
-                onSaveTocToProd={
-                    partEdit.isProdFeatureEnabled ? nav.handleSaveTocToProd : undefined
-                }
             />
             {/* עמודה 3–5: קטגוריה → תפילה → מקטע; בחירת מקטע טוענת את הפריטים */}
             <PrayerNavigationColumns
@@ -348,6 +348,7 @@ export function TocTranslationsView() {
                 isSaving={nav.isSaving}
                 selectedTocId={nav.selectedTocId}
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
+                pendingProdNavEntityKeys={nav.pendingProdNavEntityKeys}
             />
             {/* אזור העריכה */}
             <PartEditPanel

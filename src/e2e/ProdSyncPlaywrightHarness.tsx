@@ -178,6 +178,8 @@ export function ProdSyncPlaywrightHarness() {
                 saving={false}
                 onFinalPublish={onPublishStage}
                 onPublishToProd={onPublishProd}
+                pendingProdNavCount={pendingProdNavCount}
+                onSaveTocToProd={() => requestProtectedAction("save-prod-nav")}
             />
 
             <PartEditToolbar
@@ -198,8 +200,6 @@ export function ProdSyncPlaywrightHarness() {
                 selectedTranslationIndex={0}
                 onSelectTranslation={() => {}}
                 isSaving={false}
-                pendingProdNavCount={pendingProdNavCount}
-                onSaveTocToProd={() => requestProtectedAction("save-prod-nav")}
             />
 
             <ProdAuthModal

@@ -31,6 +31,9 @@ export type DateFilterBarProps = {
     onFinalPublish?: () => void;
     /** Prod dual-write */
     onPublishToProd?: () => void;
+    /** שמירת מבנה TOC לפרוד */
+    pendingProdNavCount?: number;
+    onSaveTocToProd?: () => void;
 };
 
 /** משווה האם שני תאריכים מתייחסים לאותו יום קלנדרי (לפי שעון מקומי) */
@@ -54,10 +57,13 @@ export function DateFilterBar({
     saving = false,
     onFinalPublish,
     onPublishToProd,
+    pendingProdNavCount = 0,
+    onSaveTocToProd,
 }: DateFilterBarProps) {
     const isToday = isSameDay(filterDate, new Date());
     const activeCount = relevantDateSetIds?.length ?? 0;
     const canPublish = !!selectedTocId && !!onFinalPublish;
+    const canSaveNavToProd = !!selectedTocId && !!onSaveTocToProd && pendingProdNavCount > 0;
 
     const p = getNusachPalette(selectedTocId);
     const publishBtnStyle = {
@@ -185,6 +191,20 @@ export function DateFilterBar({
                         title={canPublish ? prodPublishTitle : "בחר נוסח כדי לפרסם בפרוד"}
                     >
                         🚀 {prodPublishButtonLabel}
+                    </button>
+                </>
+            )}
+            {onSaveTocToProd && pendingProdNavCount > 0 && (
+                <>
+                    <span className="hidden sm:inline w-px h-5 bg-gray-200 shrink-0" aria-hidden="true" />
+                    <button
+                        type="button"
+                        onClick={onSaveTocToProd}
+                        disabled={saving || !canSaveNavToProd}
+                        className="shrink-0 px-3 py-1 rounded font-bold border-2 text-sm border-blue-600 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-30"
+                        title="שומר שינויי מבנה (קטגוריה/תפילה/חלק) שנשמרו לסטייג' בלבד — לפרוד"
+                    >
+                        {saving ? "שומר…" : `שמור מבנה · פרוד (${pendingProdNavCount})`}
                     </button>
                 </>
             )}

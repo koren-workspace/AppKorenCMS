@@ -39,8 +39,14 @@ import {
 } from "../utils/nusachIdPolicy";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
 import { isInsertAtStart } from "../utils/insertPosition";
+import {
+    navEntityKey,
+    type NavEntityType,
+} from "../utils/pendingProdNavEntities";
 
 const LOG_PREFIX = "[TocTranslations]";
+
+type NavEntityRef = { type: NavEntityType; id: string };
 const isSoftDeletedToc = (values: any): boolean =>
     values?.deleted === true || values?.deleted === "true" || values?.deleted === 1;
 
@@ -70,9 +76,23 @@ export function useTocNavigation(options?: TocNavigationOptions) {
     const [pendingProdNavWrites, setPendingProdNavWrites] = useState<
         Map<string, PendingNavWrite>
     >(new Map());
+    const [pendingProdNavEntityKeys, setPendingProdNavEntityKeys] = useState<
+        Set<string>
+    >(new Set());
 
     const snackbarRef = useRef(snackbar);
     snackbarRef.current = snackbar;
+
+    const markNavEntitiesPending = (entities: NavEntityRef[]) => {
+        if (!isProdConfigured() || entities.length === 0) return;
+        setPendingProdNavEntityKeys((prev) => {
+            const next = new Set(prev);
+            entities.forEach(({ type, id }) => {
+                if (id) next.add(navEntityKey(type, id));
+            });
+            return next;
+        });
+    };
 
     const queueNavWrites = (writes: PendingNavWrite[]) => {
         if (!isProdConfigured() || writes.length === 0) return;
@@ -467,6 +487,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { newCategoryId, categoryName: name, categoryNameEn: options?.nameEn, afterCategoryId: afterCategoryId },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "category", id: newCategoryId }]);
             snackbar.open({ type: "success", message: "קטגוריה נוספה" });
             setSelectedCategoryId(null);
             setSelectedPrayerId(null);
@@ -593,6 +614,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { categoryId, nameHe, nameEn },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "category", id: categoryId }]);
             snackbar.open({ type: "success", message: "הקטגוריה עודכנה" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Update category failed`, err);
@@ -721,6 +743,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { deletedId: categoryId, deletedName: categoryToDelete?.name },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "category", id: categoryId }]);
             if (cascadeFailures > 0) {
                 snackbar.open({ type: "warning", message: `קטגוריה נמחקה מה-TOC, אך ${cascadeFailures} מקטעים/תפילות לא נוקו במלואם` });
             } else {
@@ -912,6 +935,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { newPrayerId, prayerName: name, afterPrayerId: afterPrayerId },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "prayer", id: newPrayerId }]);
             snackbar.open({ type: "success", message: "תפילה נוספה" });
             setSelectedPrayerId(null);
         } catch (err) {
@@ -1066,6 +1090,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { prayerId, nameHe, nameEn },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "prayer", id: prayerId }]);
             snackbar.open({ type: "success", message: "התפילה עודכנה" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Update prayer failed`, err);
@@ -1218,6 +1243,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { deletedId: prayerId, deletedName: prayerName },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "prayer", id: prayerId }]);
             if (cascadeFailures > 0) {
                 snackbar.open({ type: "warning", message: `תפילה נמחקה מה-TOC, אך ${cascadeFailures} תרגומים לא נוקו במלואם` });
             } else {
@@ -1688,6 +1714,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { newPartId, partName: name, afterPartId: afterPartId },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "part", id: newPartId }]);
             snackbar.open({ type: "success", message: "מקטע נוסף" });
             return newPartId;
         } catch (err) {
@@ -1834,6 +1861,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { partId, nameHe, nameEn },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "part", id: partId }]);
             snackbar.open({ type: "success", message: "המקטע עודכן" });
             return true;
         } catch (err) {
@@ -1917,6 +1945,9 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { orderedPartIds },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending(
+                orderedPartIds.map((id) => ({ type: "part" as const, id }))
+            );
             snackbar.open({ type: "success", message: "סדר המקטעים עודכן" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Reorder parts failed`, err);
@@ -2010,6 +2041,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 details: { deletedId: partId, deletedName: partName },
                 savedToFirestore: true,
             });
+            markNavEntitiesPending([{ type: "part", id: partId }]);
             snackbar.open({ type: "success", message: "מקטע נמחק מכל התרגומים" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Delete part failed`, err);
@@ -2045,6 +2077,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 await batch.commit();
             }
             setPendingProdNavWrites(new Map());
+            setPendingProdNavEntityKeys(new Set());
             snackbar.open({ type: "success", message: "מבנה נשמר לפרוד בהצלחה ✓" });
         } catch (err) {
             console.error(`${LOG_PREFIX} Save TOC to Prod failed`, err);
@@ -2108,6 +2141,9 @@ export function useTocNavigation(options?: TocNavigationOptions) {
         savingMessage,
         pendingProdNavWrites,
         pendingProdNavCount: pendingProdNavWrites.size,
+        pendingProdNavEntityKeys,
+        isPendingProdNavEntity: (type: NavEntityType, id: string) =>
+            pendingProdNavEntityKeys.has(navEntityKey(type, id)),
         handleSaveTocToProd,
         currentTocData,
         currentTranslationData,

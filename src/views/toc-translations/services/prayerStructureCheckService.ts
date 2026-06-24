@@ -24,6 +24,13 @@ export function prayerFirestorePath(translationId: string, prayerId: string): st
     return `translations/${translationId}/prayers/${prayerId}`;
 }
 
+/** מסמך עם deleted:true נחשב חסר — כמו במסנן TOC ובאפליקציה */
+export function isSoftDeletedPrayer(values: Record<string, unknown> | undefined): boolean {
+    if (!values) return false;
+    const deleted = values.deleted;
+    return deleted === true || deleted === "true" || deleted === 1;
+}
+
 export async function checkPrayerDocumentExists(
     db: Firestore,
     translationId: string,
@@ -32,7 +39,8 @@ export async function checkPrayerDocumentExists(
     if (!translationId || !prayerId) return false;
     const ref = doc(db, "translations", translationId, "prayers", prayerId);
     const snap = await getDoc(ref);
-    return snap.exists();
+    if (!snap.exists()) return false;
+    return !isSoftDeletedPrayer(snap.data() as Record<string, unknown>);
 }
 
 export async function checkPrayerStructureStatus(

@@ -1164,6 +1164,11 @@ export function useTocNavigation(options?: TocNavigationOptions) {
             const expectedVersion = (currentTocData as any)?._tocVersion ?? 0;
             const newVersion = await saveTocWithVersionCheck(selectedTocId, { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() }, expectedVersion);
             if (newVersion === false) return;
+            queueTocWrite(
+                selectedTocId,
+                { ...currentTocData, translations: updatedTranslations, timestamp: Date.now() },
+                newVersion
+            );
             setTocItems((prev) =>
                 prev.map((t) =>
                     t.id === selectedTocId

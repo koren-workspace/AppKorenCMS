@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildPrayerStructureWarning } from "./prayerStructureCheckService";
+import {
+    buildPrayerStructureWarning,
+    isSoftDeletedPrayer,
+} from "./prayerStructureCheckService";
+
+describe("prayerStructureCheckService – isSoftDeletedPrayer", () => {
+    it("treats deleted true / string / 1 as soft-deleted", () => {
+        expect(isSoftDeletedPrayer({ deleted: true })).toBe(true);
+        expect(isSoftDeletedPrayer({ deleted: "true" })).toBe(true);
+        expect(isSoftDeletedPrayer({ deleted: 1 })).toBe(true);
+    });
+
+    it("treats missing or inactive deleted field as active", () => {
+        expect(isSoftDeletedPrayer({})).toBe(false);
+        expect(isSoftDeletedPrayer({ deleted: false })).toBe(false);
+        expect(isSoftDeletedPrayer(undefined)).toBe(false);
+    });
+});
 
 describe("prayerStructureCheckService – buildPrayerStructureWarning", () => {
     it("warns when prayer missing in stage", () => {

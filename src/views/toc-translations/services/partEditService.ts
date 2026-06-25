@@ -15,6 +15,8 @@ import { getFirebaseApp } from "../../../firebase_config";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import {
     chunkArray,
+    computeInsertSlotBounds,
+    allocateLinearItemIds,
     computeItemIdForInsert,
     computeNextUpperCapForBaseRow,
     entityLinksToBaseItemId,
@@ -1091,14 +1093,49 @@ export async function moveItemsToPart(
         .map((e: any) => String(e.values?.itemId ?? ""))
         .filter((id) => id !== "");
 
+    const moveExtraTakenIds = [...baseDeletedItemIds, ...otherTranslationsItemIds, ...movedBaseOldItemIds];
+
+    // ─── ניסיון הקצאה לינארית של כל מזהי הבסיס בבת אחת (כמו copyItemsToPart) ──
+    const _moveSlotBounds = computeInsertSlotBounds(baseOrderedIds, baseInsertIdx, {
+        neighborBounds,
+        extraTakenIds: moveExtraTakenIds,
+        ...(isEmptyTargetPartForMove ? { minIdBefore: minIdBeforeForMove } : {}),
+    });
+    const _moveTakenForLinear = new Set<string>([
+        ...baseOrderedIds.filter(Boolean),
+        ...moveExtraTakenIds,
+    ]);
+    const preAllocatedMoveBaseIds: string[] | null =
+        movedEntities.length > 1
+            ? allocateLinearItemIds(
+                  _moveSlotBounds.idBefore,
+                  _moveSlotBounds.idAfter,
+                  movedEntities.length,
+                  _moveTakenForLinear
+              )
+            : null;
+    cmsIdDbg(
+        "[CMS-ID]   moveItemsToPart preAllocatedBaseIds:",
+        preAllocatedMoveBaseIds
+            ? `לינארי (${preAllocatedMoveBaseIds.length} IDs): [${preAllocatedMoveBaseIds.join(",")}]`
+            : `null → fallback לביסקציה (slotBounds=${JSON.stringify(_moveSlotBounds)} count=${movedEntities.length})`
+    );
+
+    let _movePreAllocIdx = 0;
     for (const item of movedEntities) {
         const oldBaseItemId = item.values?.itemId as string;
-        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
-            neighborBounds,
-            // Reserve old moved IDs too, so new entity IDs never collide before soft-delete.
-            extraTakenIds: [...baseDeletedItemIds, ...otherTranslationsItemIds, ...movedBaseOldItemIds],
-            ...(isEmptyTargetPartForMove ? { minIdBefore: minIdBeforeForMove } : {}),
-        });
+
+        let newBaseItemId: string;
+        if (preAllocatedMoveBaseIds != null) {
+            newBaseItemId = preAllocatedMoveBaseIds[_movePreAllocIdx++];
+        } else {
+            newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
+                neighborBounds,
+                // Reserve old moved IDs too, so new entity IDs never collide before soft-delete.
+                extraTakenIds: moveExtraTakenIds,
+                ...(isEmptyTargetPartForMove ? { minIdBefore: minIdBeforeForMove } : {}),
+            });
+        }
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
         oldToNewBaseItemId[oldBaseItemId] = newBaseItemId;
@@ -1609,17 +1646,54 @@ async function copyPreparedItemsToPart(
         insertAfterIdx >= 0 ? (targetActiveItems[insertAfterIdx].values?.mit_id ?? null) : null;
     const sourceItemIdToMitId: Record<string, string> = {};
 
+    // ─── ניסיון הקצאה לינארית של כל מזהי הבסיס בבת אחת ──────────────────────
+    // ביסקציה חוזרת (computeItemIdForInsert פר-פריט) מתכנסת ל-idAfter תוך
+    // log₂(gap) ניסיונות ומגבילה את מספר הפריטים הניתן להעתיק מהמרווח הנתון.
+    // חלוקה לינארית מפזרת את ה-N מזהים בצעד שווה ומאפשרת העתקת אצוות גדולות.
+    // fallback לביסקציה: כשמעתיקים פריט בודד, כשחסר idAfter, או כשאין מרווח מספיק.
+    const _slotBounds = computeInsertSlotBounds(baseOrderedIds, baseInsertIdx, {
+        neighborBounds,
+        extraTakenIds: [...targetDeletedItemIds, ...otherTranslationsItemIds],
+        ...(isEmptyTargetPart ? { minIdBefore: minIdBeforeForCopy } : {}),
+    });
+    const _allTakenForLinear = new Set<string>([
+        ...baseOrderedIds.filter(Boolean),
+        ...targetDeletedItemIds,
+        ...otherTranslationsItemIds,
+    ]);
+    const preAllocatedBaseIds: string[] | null =
+        sourceEntities.length > 1
+            ? allocateLinearItemIds(
+                  _slotBounds.idBefore,
+                  _slotBounds.idAfter,
+                  sourceEntities.length,
+                  _allTakenForLinear
+              )
+            : null;
+    cmsIdDbg(
+        "[CMS-ID]   preAllocatedBaseIds:",
+        preAllocatedBaseIds
+            ? `לינארי (${preAllocatedBaseIds.length} IDs): [${preAllocatedBaseIds.join(",")}]`
+            : `null → fallback לביסקציה (slotBounds=${JSON.stringify(_slotBounds)} count=${sourceEntities.length})`
+    );
+
+    let _preAllocIdx = 0;
     for (const item of sourceEntities) {
         const oldBaseItemId = idNorm(item.values?.itemId);
         const oldMitId = idNorm(item.values?.mit_id);
         sourceItemIdToMitId[oldBaseItemId] = oldMitId;
 
-        const newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
-            neighborBounds,
-            extraTakenIds: [...targetDeletedItemIds, ...otherTranslationsItemIds],
-            confirmUserWantsDecimalId,
-            ...(isEmptyTargetPart ? { minIdBefore: minIdBeforeForCopy } : {}),
-        });
+        let newBaseItemId: string;
+        if (preAllocatedBaseIds != null) {
+            newBaseItemId = preAllocatedBaseIds[_preAllocIdx++];
+        } else {
+            newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
+                neighborBounds,
+                extraTakenIds: [...targetDeletedItemIds, ...otherTranslationsItemIds],
+                confirmUserWantsDecimalId,
+                ...(isEmptyTargetPart ? { minIdBefore: minIdBeforeForCopy } : {}),
+            });
+        }
         baseOrderedIds.splice(baseInsertIdx, 0, newBaseItemId);
         baseInsertIdx++;
         baseIdMap[oldBaseItemId] = newBaseItemId;

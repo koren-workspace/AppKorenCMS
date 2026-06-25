@@ -564,6 +564,61 @@ export function computeItemIdForInsert(
 }
 
 /**
+ * מחשב את גבולות חריץ ההכנסה בלבד (שלבים 1–5 של computeItemIdForInsert) מבלי לבחור ID.
+ * נועד לשימוש חיצוני לצורך הקצאת אצוות לינארית.
+ */
+export function computeInsertSlotBounds(
+    orderedItemIds: string[],
+    insertIndex: number,
+    options?: Pick<ComputeItemIdForInsertOptions, "neighborBounds" | "extraTakenIds" | "linkedIdsPerPosition" | "minIdBefore" | "nextBaseLinkedMinItemId">
+): { idBefore: string | null; idAfter: string | null } {
+    const { neighborBounds, extraTakenIds, linkedIdsPerPosition, minIdBefore, nextBaseLinkedMinItemId } = options ?? {};
+    const b = computeBoundsFromOrderedList(orderedItemIds, insertIndex, linkedIdsPerPosition);
+    applyNeighborBoundsFallback(b, neighborBounds);
+    applyMinIdBeforeConstraint(b, minIdBefore);
+    applyNextBaseLinkedCap(b, nextBaseLinkedMinItemId);
+    bumpIdBeforeFromExtraInGap(b, extraTakenIds);
+    return { idBefore: b.idBefore, idAfter: b.idAfter };
+}
+
+/**
+ * מקצה `count` מזהים בין idBefore ל-idAfter בצעד לינארי שווה.
+ *
+ * נועד להכנסת אצוות פריטים — נמנע מהתכנסות מהירה של ביסקציה חוזרת.
+ * ביסקציה חוזרת מגבילה את מספר הפריטים הניתן להכנסה ל-log₂(gap),
+ * ואילו חלוקה לינארית מאפשרת עד gap/(count+1) פריטים מכל ה-gap.
+ *
+ * - takenIds מתעדכן in-place עם כל ID שמוקצה.
+ * - מחזיר null אם אין מרווח מספיק: gap/(count+1) < 1, או אם חסרים idBefore/idAfter.
+ */
+export function allocateLinearItemIds(
+    idBefore: string | null | undefined,
+    idAfter: string | null | undefined,
+    count: number,
+    takenIds: Set<string>
+): string[] | null {
+    if (count <= 0) return [];
+    const before = idBefore != null && idBefore !== "" ? Number(idBefore) : NaN;
+    const after = idAfter != null && idAfter !== "" ? Number(idAfter) : NaN;
+    if (Number.isNaN(before) || Number.isNaN(after) || before >= after) return null;
+    const gap = after - before;
+    const step = Math.floor(gap / (count + 1));
+    if (step < 1) return null;
+    const result: string[] = [];
+    for (let i = 1; i <= count; i++) {
+        let candidate = String(before + i * step);
+        while (takenIds.has(candidate)) {
+            const next = Number(candidate) + 1;
+            if (next >= after) return null;
+            candidate = String(next);
+        }
+        takenIds.add(candidate);
+        result.push(candidate);
+    }
+    return result;
+}
+
+/**
  * פיצול מערך לחלקים (chunks) בגודל קבוע.
  * משמש לטעינת פריטים מקושרים במנות (למשל 30 בכל פעם).
  */

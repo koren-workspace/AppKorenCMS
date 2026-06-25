@@ -18,7 +18,8 @@
     "migrate-item-ids": "python scripts/migrate_translation_item_ids.py",
     "validate-item-base-interval": "python scripts/validate_base_interval_invariant.py",
     "fix-interval-violations": "python scripts/fix_interval_violations.py",
-    "replay-interval-fix": "python scripts/replay_interval_fix.py"
+    "replay-interval-fix": "python scripts/replay_interval_fix.py",
+    "calc-meditative-pace": "python scripts/calc_meditative_x4_pace.py"
   },
     "dependencies": {
         "@bageldb/bagel-db": "^0.4.39",

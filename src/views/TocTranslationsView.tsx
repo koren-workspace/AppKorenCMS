@@ -38,6 +38,7 @@ import { DateFilterBar } from "./toc-translations/components/DateFilterBar";
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { useTocNavigation } from "./toc-translations/hooks/useTocNavigation";
 import { usePartEdit } from "./toc-translations/hooks/usePartEdit";
+import type { PendingWrite } from "./toc-translations/services/partEditService";
 import { useDateFilter } from "./toc-translations/hooks/useDateFilter";
 import { isBaseTranslation, isTranslationEditable } from "./toc-translations/services/navigationService";
 import { getNusachDisplayLabel } from "./toc-translations/utils/nusachDisplay";
@@ -420,7 +421,6 @@ export function TocTranslationsView() {
                 onSplitPart={partEdit.openSplitPartModal}
                 onMoveItemsToPart={partEdit.openMoveToPartModal}
                 onCopyItemsToPart={partEdit.openCopyToPartModal}
-                onReorderItems={partEdit.reorderItemsWithinPart}
                 dataSource={partEdit.dataSource}
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
                 warehouseEnabled={partEdit.warehouseEnabled}

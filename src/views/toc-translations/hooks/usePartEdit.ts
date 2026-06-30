@@ -1474,150 +1474,15 @@ export function usePartEdit(context: PartEditContext) {
         });
     };
 
-    const reorderItemsWithinPart = (activeId: string, overId: string) => {
-        if (activeId === overId) return;
-        const oldIndex = allItems.findIndex((i) => i.id === activeId);
-        const newIndex = allItems.findIndex((i) => i.id === overId);
-        if (oldIndex < 0 || newIndex < 0) return;
-
-        const reordered = [...allItems];
-        const [moved] = reordered.splice(oldIndex, 1);
-        reordered.splice(newIndex, 0, moved);
-        const movedOldItemId = getEffectiveItemId(moved);
-        if (!movedOldItemId) return;
-
-        const prev = newIndex > 0 ? reordered[newIndex - 1] : null;
-
-        const orderedIdsWithoutMoved = reordered
-            .filter((i) => i.id !== moved.id)
-            .map((i) => getItemIdInCurrentContext(i));
-
-        const extraTakenIds = [
-            ...deletedIdsFromServer.itemIds,
-            ...pendingDeletes.map((p) => p.itemId).filter(Boolean),
-        ];
-
-        let newBaseItemId: string;
-        try {
-            newBaseItemId = computeItemIdForInsert(
-                orderedIdsWithoutMoved,
-                newIndex,
-                {
-                    neighborBounds,
-                    extraTakenIds,
-                }
-            );
-        } catch (e) {
-            if (e instanceof Error && e.message === NO_SPACE_BETWEEN_ITEMS) {
-                snackbar.open({
-                    type: "error",
-                    message: "אין מקום פנוי בין הפריטים להעברה",
-                });
-                return;
-            }
-            throw e;
-        }
-
-        const prevMitId = prev ? getEffectiveMitId(prev) : null;
-        const movedMitBefore = getEffectiveMitId(moved);
-        /** המשך פסקה: אותו mit_id כמו השורה שמעל במיקום החדש (בלי window.confirm). אם לא — mit_id חדש = itemId. */
-        const isPartOfParagraph =
-            prev != null &&
-            prevMitId != null &&
-            String(prevMitId).trim() !== "" &&
-            String(movedMitBefore) === String(prevMitId);
-        const newBaseMitId =
-            isPartOfParagraph && prevMitId != null && String(prevMitId).trim() !== ""
-                ? String(prevMitId)
-                : newBaseItemId;
-
-        setAllItems(reordered);
-        setLocalValues((prevLocal) => ({
-            ...prevLocal,
-            [moved.id]: {
-                ...(prevLocal[moved.id] ?? moved.values ?? {}),
-                itemId: newBaseItemId,
-                mit_id: newBaseMitId,
-                timestamp: Date.now(),
-            },
-        }));
-        setChangedIds((prevChanged) => new Set(prevChanged).add(moved.id));
-
-        // עדכון כל התרגומים המקושרים: linkedItem + itemId (מחושב בנפרד) + mit_id לפי כלל הפסקה
-        const enhancementLocalPatch: Record<string, any> = {};
-        const enhancementChangedPatch = new Set<string>();
-        const enhancementTidPatch: Record<string, string> = {};
-
-        Object.entries(enhancements).forEach(([tid, entities]) => {
-            const related = entities.filter((e: any) => {
-                const link = enhancementLocalValues[e.id]?.linkedItem ?? e.values?.linkedItem;
-                return Array.isArray(link)
-                    ? link.includes(movedOldItemId)
-                    : link === movedOldItemId;
-            });
-            if (related.length === 0) return;
-
-            const remaining = entities.filter((e: any) => !related.some((r: any) => r.id === e.id));
-            const enhOrderedIds = remaining
-                .map((e: any) => {
-                    const local = enhancementLocalValues[e.id]?.itemId;
-                    if (local != null && String(local).trim() !== "") return String(local);
-                    const from = e.values?.itemId ?? e.id;
-                    return from != null && String(from).trim() !== "" ? String(from) : "";
-                })
-                .filter((id: string) => id !== "")
-                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-            // הכנסת newBaseItemId כנקודת ייחוס — תרגומים ייכנסו מיד אחריו
-            let enhBaseRefPos = enhOrderedIds.findIndex((id) => Number(id) > Number(newBaseItemId));
-            if (enhBaseRefPos < 0) enhBaseRefPos = enhOrderedIds.length;
-            enhOrderedIds.splice(enhBaseRefPos, 0, newBaseItemId);
-            let enhInsertPos = enhBaseRefPos + 1;
-
-            related
-                .sort((a: any, b: any) =>
-                    (a.values?.itemId ?? "").localeCompare(b.values?.itemId ?? "", undefined, {
-                        numeric: true,
-                    })
-                )
-                .forEach((enh: any) => {
-                    let newEnhItemId = newBaseItemId;
-                    try {
-                        newEnhItemId = computeItemIdForInsert(enhOrderedIds, enhInsertPos, {});
-                    } catch {
-                        newEnhItemId = enhOrderedIds[enhInsertPos - 1] ?? newBaseItemId;
-                    }
-                    enhOrderedIds.splice(enhInsertPos, 0, newEnhItemId);
-                    enhInsertPos++;
-
-                    const oldLink = enhancementLocalValues[enh.id]?.linkedItem ?? enh.values?.linkedItem;
-                    const newLinkedItem = Array.isArray(oldLink)
-                        ? oldLink.map((v: string) => (v === movedOldItemId ? newBaseItemId : v))
-                        : oldLink === movedOldItemId
-                            ? [newBaseItemId]
-                            : oldLink;
-                    enhancementLocalPatch[enh.id] = {
-                        ...(enhancementLocalValues[enh.id] ?? enh.values ?? {}),
-                        linkedItem: newLinkedItem,
-                        itemId: newEnhItemId,
-                        mit_id: newBaseMitId !== newBaseItemId ? newBaseMitId : newEnhItemId,
-                        timestamp: Date.now(),
-                    };
-                    enhancementChangedPatch.add(enh.id);
-                    enhancementTidPatch[enh.id] = tid;
-                });
-        });
-
-        if (Object.keys(enhancementLocalPatch).length > 0) {
-            setEnhancementLocalValues((prevLocal) => ({ ...prevLocal, ...enhancementLocalPatch }));
-            setEnhancementChangedIds((prevChanged) => {
-                const nextChanged = new Set(prevChanged);
-                enhancementChangedPatch.forEach((id) => nextChanged.add(id));
-                return nextChanged;
-            });
-            setEnhancementTranslationIds((prevTid) => ({ ...prevTid, ...enhancementTidPatch }));
-        }
-    };
+    // ───────────────────────────────────────────────────────────────────────
+    // גרירה לשינוי סדר פריטים בתוך מקטע — הוסרה בכוונה.
+    //
+    // המימוש הקודם עדכן את הפריט המוזז in-place (אותו doc-id, שדה itemId חדש),
+    // ולכן שבר את האינvariant doc-id == itemId שעליו מסתמך הסנכרון.
+    // ה-UI שלו היה מושבת ממילא. אם יידרש reorder בעתיד, יש לממש אותו דרך
+    // דפוס ה-create-new-doc + soft-delete של moveItemsToPart (source===target),
+    // שמשמר doc-id == itemId ומאפשר לאפליקציות לזהות את השינוי בסנכרון מבוסס-timestamp.
+    // ───────────────────────────────────────────────────────────────────────
 
     /** מחשב mit_id לפריט חדש: זהה ל-itemId של הפריט החדש. */
     const resolveMitIdForNew = (_index: number, computedItemId: string): string => {
@@ -2919,7 +2784,6 @@ export function usePartEdit(context: PartEditContext) {
         isProdFeatureEnabled: isProdConfigured(),
         addNewItemAt,
         addNewInstructionAt,
-        reorderItemsWithinPart,
         lastAddedItemId,
         handleDeleteItem,
         handleRestoreItem,

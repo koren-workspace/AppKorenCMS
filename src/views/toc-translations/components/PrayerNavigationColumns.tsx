@@ -138,7 +138,7 @@ function SortablePartItem({
                     {...attributes}
                     {...listeners}
                     className="shrink-0 self-center px-0.5 py-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
-                    title="גרירה משנה רק את סדר החלקים בתפריט — לא את סדר הפריטים בתוך החלק"
+                    title="גרירה משנה רק את סדר החלקים בתוכן הענינים. סדר הטקסט בסידור נקבע לפי מספור הפריטים (itemId) — אם המספור לא תואם את הסדר החדש, הטקסט ייגלל בסדר שונה מהתפריט."
                     tabIndex={-1}
                 >
                     ⠿
@@ -476,7 +476,7 @@ export function PrayerNavigationColumns({
                         role="status"
                         aria-live="polite"
                     >
-                        רק סדר החלקים בתפריט משתנה כאן — לא סדר הפריטים בתוך חלק.
+                        משנה רק את סדר החלקים בתוכן הענינים. סדר הטקסט בסידור נקבע לפי מספור הפריטים (itemId) — ודאו שהמספור תואם, אחרת הטקסט ייגלל בסדר שונה מהתפריט.
                     </p>
                 )}
                 {onAddPartClick && showAddPart && (

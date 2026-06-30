@@ -8,6 +8,8 @@
  * בנוסף נשמר ב-localStorage. בקונסולה: __CMS_CHANGELOG_EXPORT__('json') או __CMS_CHANGELOG_EXPORT__('text')
  */
 
+import type { WarehouseFieldSelection } from "../types/itemWarehouse";
+
 const STORAGE_KEY = "cms_changelog_entries";
 /** מקסימום רשומות לשמירה (מגביל גודל localStorage) */
 const MAX_ENTRIES = 2500;
@@ -138,6 +140,12 @@ export type ChangeLogEntry = {
         copiedItemsCount?: number;
         copyLinkedTranslations?: boolean;
         baseIdMap?: Record<string, string>;
+        /** copy_items_to_part מתוך מחסן הפריטים */
+        fromWarehouse?: boolean;
+        warehouseEntryId?: string;
+        warehouseLabel?: string;
+        sourceTocId?: string;
+        selectedFields?: WarehouseFieldSelection;
         /** delete_* */
         deletedId?: string;
         deletedName?: string;

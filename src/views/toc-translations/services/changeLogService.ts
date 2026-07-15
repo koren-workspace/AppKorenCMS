@@ -37,7 +37,9 @@ export type ChangeLogAction =
     | "delete_part"         // מחיקת פריט
     | "move_items_to_part"  // העברת פריטים בין פריטים
     | "copy_items_to_part"  // העתקת פריטים לחלק תפילה אחר (יכול להיות תפילה/נוסח שונים)
-    | "split_part";         // פיצול פריט לשני פריטים
+    | "split_part"          // פיצול פריט לשני פריטים
+    | "save_app_copy"       // שמירת טקסטים של האפליקציה (app-copy) ל-Stage
+    | "publish_app_copy";   // פרסום טקסטים של האפליקציה לפרוד
 
 /** הקשר – איפה בוצעה הפעולה */
 export type ChangeLogContext = {
@@ -149,6 +151,10 @@ export type ChangeLogEntry = {
         /** delete_* */
         deletedId?: string;
         deletedName?: string;
+        /** save_app_copy: שינויי טקסטים לפי מפתח */
+        copyChanges?: Array<{ key: string; changes: FieldChange[] }>;
+        /** publish_app_copy: המפתחות שפורסמו לפרוד */
+        publishedCopyKeys?: string[];
     };
     /** האם נשמר ל-Firestore */
     savedToFirestore?: boolean;

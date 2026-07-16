@@ -1,6 +1,7 @@
 import { buildProperty } from "@firecms/core";
 import { SampleEntityView } from "./entity_views/SampleEntityView";
 import { TocTranslationsView } from "./views/TocTranslationsView";
+import { AppCopyView } from "./views/AppCopyView";
 
 const appConfig = {
     version: "1",
@@ -10,6 +11,11 @@ const appConfig = {
             path: "toc-translations",
             name: "CMS אפלקציה סידור לתפילה",
             view: <TocTranslationsView />,
+        },
+        {
+            path: "app-copy",
+            name: "עריכת טקסטים באפליקציה",
+            view: <AppCopyView />,
         },
     ],
     propertyConfigs: {

@@ -587,6 +587,7 @@ export function TocTranslationsView() {
                         ? (nav.currentParts.find((p: any) => p.id === partEdit.selectedGroupId) ?? null)
                         : null
                 }
+                relevantDateSetIds={dateFilter.relevantDateSetIds}
                 onSubmit={partEdit.handleSplitPart}
                 saving={partEdit.saving}
             />
@@ -600,6 +601,7 @@ export function TocTranslationsView() {
                 currentPartId={partEdit.selectedGroupId}
                 targetPartItems={partEdit.moveTargetPartItems}
                 onLoadTargetPartItems={partEdit.loadMoveTargetPartItems}
+                relevantDateSetIds={dateFilter.relevantDateSetIds}
                 onSubmit={partEdit.handleMoveItemsToPart}
                 saving={partEdit.saving}
             />
@@ -612,6 +614,7 @@ export function TocTranslationsView() {
                 currentTocId={nav.selectedTocId ?? ""}
                 currentPrayerId={nav.selectedPrayerId ?? ""}
                 currentPartId={partEdit.selectedGroupId ?? ""}
+                relevantDateSetIds={dateFilter.relevantDateSetIds}
                 tocItems={nav.tocItems}
                 targetPartItems={partEdit.copyTargetPartItems}
                 onLoadTargetPartItems={partEdit.loadCopyTargetPartItems}

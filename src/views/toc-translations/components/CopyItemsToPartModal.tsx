@@ -15,6 +15,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Entity } from "@firecms/core";
 import { getNusachDisplayLabel } from "../utils/nusachDisplay";
+import {
+    ItemDateSetBadges,
+    ItemDateSetListNote,
+    isItemActiveForDateFilter,
+} from "./ItemDateSetBadges";
 
 function getBaseTranslationTree(tocItem: Entity<any> | undefined): any | null {
     if (!tocItem?.values?.translations) return null;
@@ -50,6 +55,8 @@ export type CopyItemsToPartModalProps = {
         targetPrayerId: string;
         targetPartId: string;
     }) => Promise<void>;
+    /** dateSetIds פעילים לתאריך שבסרגל — סימון בלבד, הרשימה תמיד מלאה */
+    relevantDateSetIds?: string[] | null;
     onSubmit: (params: {
         sourceItemIds: string[];
         targetTocId: string;
@@ -72,6 +79,7 @@ export function CopyItemsToPartModal({
     tocItems,
     targetPartItems,
     onLoadTargetPartItems,
+    relevantDateSetIds = null,
     onSubmit,
     saving,
 }: CopyItemsToPartModalProps) {
@@ -382,6 +390,7 @@ export function CopyItemsToPartModal({
                                 </button>
                             )}
                         </div>
+                        <ItemDateSetListNote relevantDateSetIds={relevantDateSetIds} />
                         {items.length === 0 ? (
                             <div className="text-gray-400 text-sm">אין פריטים בחלק תפילה</div>
                         ) : (
@@ -391,6 +400,8 @@ export function CopyItemsToPartModal({
                                     const itemId: string = vals.itemId ?? item.id;
                                     const content: string = vals.content ?? "";
                                     const type: string = vals.type ?? "";
+                                    const dateSetId = vals.dateSetId ?? item.values?.dateSetId;
+                                    const activeForDate = isItemActiveForDateFilter(dateSetId, relevantDateSetIds);
                                     const checked = selectedItemIds.has(itemId);
 
                                     return (
@@ -399,7 +410,9 @@ export function CopyItemsToPartModal({
                                             className={`flex items-start gap-2 px-2 py-1.5 cursor-pointer transition-colors ${
                                                 checked
                                                     ? "bg-blue-50 hover:bg-blue-100"
-                                                    : "bg-white hover:bg-gray-50"
+                                                    : !activeForDate
+                                                      ? "bg-gray-100/80 hover:bg-gray-200 opacity-75"
+                                                      : "bg-white hover:bg-gray-50"
                                             }`}
                                         >
                                             <input
@@ -409,7 +422,7 @@ export function CopyItemsToPartModal({
                                                 className="mt-0.5 shrink-0"
                                             />
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-1.5">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
                                                     <span className="text-sm text-gray-400 font-mono shrink-0">
                                                         {itemId}
                                                     </span>
@@ -424,6 +437,10 @@ export function CopyItemsToPartModal({
                                                     >
                                                         {type}
                                                     </span>
+                                                    <ItemDateSetBadges
+                                                        dateSetId={dateSetId}
+                                                        relevantDateSetIds={relevantDateSetIds}
+                                                    />
                                                     {checked && targetPartId && (
                                                         <span className="text-sm bg-blue-200 text-blue-800 px-1 rounded shrink-0">
                                                             📋 → {targetPartId}
@@ -431,7 +448,9 @@ export function CopyItemsToPartModal({
                                                     )}
                                                 </div>
                                                 <div
-                                                    className="text-sm text-gray-800 mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words"
+                                                    className={`text-sm mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words ${
+                                                        activeForDate ? "text-gray-800" : "text-gray-500"
+                                                    }`}
                                                     dir="rtl"
                                                 >
                                                     {content || (

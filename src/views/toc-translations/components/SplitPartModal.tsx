@@ -12,6 +12,11 @@
 
 import React, { useEffect, useState } from "react";
 import { Entity } from "@firecms/core";
+import {
+    ItemDateSetBadges,
+    ItemDateSetListNote,
+    isItemActiveForDateFilter,
+} from "./ItemDateSetBadges";
 
 export type SplitPartModalProps = {
     open: boolean;
@@ -22,6 +27,11 @@ export type SplitPartModalProps = {
     localValues: Record<string, any>;
     /** המקטע הנוכחי – לאתחול dateSetIds / hazan / minyan */
     currentPart: { id: string; name: string; dateSetIds?: string[]; hazan?: boolean | null; minyan?: boolean | null } | null;
+    /**
+     * dateSetIds פעילים לתאריך שבסרגל הסינון (null = הצג הכל / סינון מבוטל).
+     * משמש לסימון בלבד — הרשימה תמיד מלאה.
+     */
+    relevantDateSetIds?: string[] | null;
     onSubmit: (params: {
         splitAtItemId: string;
         newPartNameHe: string;
@@ -40,6 +50,7 @@ export function SplitPartModal({
     items,
     localValues,
     currentPart,
+    relevantDateSetIds = null,
     onSubmit,
     saving,
 }: SplitPartModalProps) {
@@ -210,6 +221,7 @@ export function SplitPartModal({
                                 ? "בחר פריט חתך — מהתחלה עד פריט זה (כולל) יעברו למקטע החדש:"
                                 : "בחר פריט חתך — מפריט זה עד הסוף יעברו למקטע החדש:"}
                         </div>
+                        <ItemDateSetListNote relevantDateSetIds={relevantDateSetIds} />
                         {items.length === 0 && (
                             <div className="text-gray-400 text-sm">אין פריטים במקטע</div>
                         )}
@@ -219,6 +231,8 @@ export function SplitPartModal({
                                 const itemId: string = vals.itemId ?? item.id;
                                 const content: string = vals.content ?? "";
                                 const type: string = vals.type ?? "";
+                                const dateSetId = vals.dateSetId ?? item.values?.dateSetId;
+                                const activeForDate = isItemActiveForDateFilter(dateSetId, relevantDateSetIds);
                                 const moving = isMoving(i);
                                 const isSelected = splitAtItemId === itemId;
 
@@ -228,7 +242,9 @@ export function SplitPartModal({
                                         className={`flex items-start gap-2 px-2 py-1.5 cursor-pointer transition-colors ${
                                             moving
                                                 ? "bg-blue-50 hover:bg-blue-100"
-                                                : "bg-white hover:bg-gray-50"
+                                                : !activeForDate
+                                                  ? "bg-gray-100/80 hover:bg-gray-200 opacity-75"
+                                                  : "bg-white hover:bg-gray-50"
                                         }`}
                                     >
                                         <input
@@ -239,13 +255,17 @@ export function SplitPartModal({
                                             className="mt-0.5 shrink-0"
                                         />
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
                                                 <span className="text-sm text-gray-400 font-mono shrink-0">{itemId}</span>
                                                 <span className={`text-sm px-1 rounded shrink-0 ${
                                                     type === "title" ? "bg-purple-100 text-purple-700" :
                                                     type === "instructions" ? "bg-yellow-100 text-yellow-700" :
                                                     "bg-gray-100 text-gray-500"
                                                 }`}>{type}</span>
+                                                <ItemDateSetBadges
+                                                    dateSetId={dateSetId}
+                                                    relevantDateSetIds={relevantDateSetIds}
+                                                />
                                                 {moving && (
                                                     <span className="text-sm bg-blue-200 text-blue-700 px-1 rounded shrink-0">
                                                         → מקטע חדש
@@ -253,7 +273,9 @@ export function SplitPartModal({
                                                 )}
                                             </div>
                                             <div
-                                                className="text-base text-gray-800 mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words"
+                                                className={`text-base mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words ${
+                                                    activeForDate ? "text-gray-800" : "text-gray-500"
+                                                }`}
                                                 dir="rtl"
                                             >
                                                 {content || <span className="text-gray-300 italic">(ריק)</span>}

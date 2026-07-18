@@ -12,6 +12,11 @@
 
 import React, { useEffect, useState } from "react";
 import { Entity } from "@firecms/core";
+import {
+    ItemDateSetBadges,
+    ItemDateSetListNote,
+    isItemActiveForDateFilter,
+} from "./ItemDateSetBadges";
 
 export type MoveToPartModalProps = {
     open: boolean;
@@ -27,6 +32,8 @@ export type MoveToPartModalProps = {
     /** פריטי חלק תפילה היעד (נטענים בבחירת יעד) */
     targetPartItems: Entity<any>[];
     onLoadTargetPartItems: (partId: string) => Promise<void>;
+    /** dateSetIds פעילים לתאריך שבסרגל — סימון בלבד, הרשימה תמיד מלאה */
+    relevantDateSetIds?: string[] | null;
     onSubmit: (params: {
         movedItemIds: string[];
         targetPartId: string;
@@ -44,6 +51,7 @@ export function MoveToPartModal({
     currentPartId,
     targetPartItems,
     onLoadTargetPartItems,
+    relevantDateSetIds = null,
     onSubmit,
     saving,
 }: MoveToPartModalProps) {
@@ -187,6 +195,7 @@ export function MoveToPartModal({
                                 </button>
                             )}
                         </div>
+                        <ItemDateSetListNote relevantDateSetIds={relevantDateSetIds} />
                         {items.length === 0 ? (
                             <div className="text-gray-400 text-sm">אין פריטים בחלק תפילה</div>
                         ) : (
@@ -196,6 +205,8 @@ export function MoveToPartModal({
                                     const itemId: string = vals.itemId ?? item.id;
                                     const content: string = vals.content ?? "";
                                     const type: string = vals.type ?? "";
+                                    const dateSetId = vals.dateSetId ?? item.values?.dateSetId;
+                                    const activeForDate = isItemActiveForDateFilter(dateSetId, relevantDateSetIds);
                                     const checked = selectedItemIds.has(itemId);
 
                                     return (
@@ -204,7 +215,9 @@ export function MoveToPartModal({
                                             className={`flex items-start gap-2 px-2 py-1.5 cursor-pointer transition-colors ${
                                                 checked
                                                     ? "bg-orange-50 hover:bg-orange-100"
-                                                    : "bg-white hover:bg-gray-50"
+                                                    : !activeForDate
+                                                      ? "bg-gray-100/80 hover:bg-gray-200 opacity-75"
+                                                      : "bg-white hover:bg-gray-50"
                                             }`}
                                         >
                                             <input
@@ -214,13 +227,17 @@ export function MoveToPartModal({
                                                 className="mt-0.5 shrink-0"
                                             />
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-1.5">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
                                                     <span className="text-sm text-gray-400 font-mono shrink-0">{itemId}</span>
                                                     <span className={`text-sm px-1 rounded shrink-0 ${
                                                         type === "title" ? "bg-purple-100 text-purple-700" :
                                                         type === "instructions" ? "bg-yellow-100 text-yellow-700" :
                                                         "bg-gray-100 text-gray-500"
                                                     }`}>{type}</span>
+                                                    <ItemDateSetBadges
+                                                        dateSetId={dateSetId}
+                                                        relevantDateSetIds={relevantDateSetIds}
+                                                    />
                                                     {checked && (
                                                     <span className="text-sm bg-orange-200 text-orange-700 px-1 rounded shrink-0">
                                                         → {targetPartId ?? "יעד"}
@@ -228,7 +245,9 @@ export function MoveToPartModal({
                                                     )}
                                                 </div>
                                                 <div
-                                                    className="text-sm text-gray-800 mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words"
+                                                    className={`text-sm mt-0.5 max-h-16 overflow-y-auto whitespace-pre-wrap break-words ${
+                                                        activeForDate ? "text-gray-800" : "text-gray-500"
+                                                    }`}
                                                     dir="rtl"
                                                 >
                                                     {content || <span className="text-gray-300 italic">(ריק)</span>}

@@ -210,14 +210,6 @@ export function AddItemModal({
                                     />
                                     <span className="text-gray-600">שורה שורה</span>
                                 </label>
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.red}>
-                                    <input
-                                        type="checkbox"
-                                        checked={form.red}
-                                        onChange={(e) => setField("red", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">טקסט אדום</span>
-                                </label>
                                 <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.justifyBlock}>
                                     <input
                                         type="checkbox"

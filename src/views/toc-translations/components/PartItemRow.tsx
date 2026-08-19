@@ -21,6 +21,7 @@ import {
     INSTRUCTION_TYPE_OPTIONS,
     TITLE_TYPE_OPTIONS,
     ITEM_FIELD_HELP,
+    isBodyLikeType,
     showDiburHamatkhilField,
     supportsAttachedMeta,
     supportsFirstInPage,
@@ -174,7 +175,7 @@ export function PartItemRow({
                 title: `עריכת טקסט פריט ${curId ?? item.id}`,
                 value: localVal.content ?? "",
                 isRtl: mainContentRtl,
-                className: `${getItemStyle(localVal.type)} ${mainContentRtl ? "" : "text-left"}`,
+                className: `${getItemStyle(localVal.type, undefined, undefined, !!localVal.specialDate)} ${mainContentRtl ? "" : "text-left"}`,
                 onChange: (value: string) => onContentChange(item.id, value),
                 readOnly: false,
             };
@@ -184,11 +185,12 @@ export function PartItemRow({
         if (!enh) return null;
         const displayVal = { ...enh.values, ...enhancementLocalValues[enh.id] };
         const isRtl = contentUsesRtlAlignment(displayVal?.content);
+        const enhSpecial = !!displayVal?.specialDate && isBodyLikeType(displayVal?.type);
         return {
             title: `עריכת טקסט תרגום ${largeTextEditor.tId}`,
             value: displayVal?.content ?? "",
             isRtl,
-            className: `w-full p-2 border border-gray-200 rounded text-base min-h-[72px] whitespace-pre-wrap ${isRtl ? "" : "text-left"}`,
+            className: `w-full p-2 border border-gray-200 rounded text-base min-h-[72px] whitespace-pre-wrap ${isRtl ? "" : "text-left"} ${enhSpecial ? "text-[#77081B]" : ""}`,
             onChange: (value: string) => onEnhancementFieldChange?.(enh.id, enh.tId, "content", value),
             readOnly: !onEnhancementFieldChange,
         };
@@ -579,7 +581,7 @@ export function PartItemRow({
                 )}
                 <textarea
                     ref={contentTextareaRef}
-                    className={`${getItemStyle(localVal.type)} ${mainContentRtl ? "" : "text-left"}`}
+                    className={`${getItemStyle(localVal.type, undefined, undefined, !!localVal.specialDate)} ${mainContentRtl ? "" : "text-left"}`}
                     value={localVal.content ?? ""}
                     onChange={(e) => onContentChange(item.id, e.target.value)}
                     dir={mainContentRtl ? "rtl" : "ltr"}
@@ -609,6 +611,7 @@ export function PartItemRow({
                         const enhShowFirstInPage = supportsFirstInPage(enhType);
                         const enhShowAttachedMeta = supportsAttachedMeta(enhType);
                         const enhContentRtl = contentUsesRtlAlignment(displayVal?.content);
+                        const enhIsSpecialDate = !!displayVal.specialDate && isBodyLikeType(enhType);
                         const enhIsDateRestricted = !!displayVal.dateSetId && displayVal.dateSetId !== "100";
                         const enhEntry = enhIsDateRestricted ? (dateSetLabels[displayVal.dateSetId] ?? null) : null;
                         const enhShort = enhEntry?.short ?? (enhIsDateRestricted ? `ID ${displayVal.dateSetId}` : null);
@@ -928,13 +931,13 @@ export function PartItemRow({
                                     <textarea
                                         value={displayVal?.content ?? ""}
                                         onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "content", e.target.value)}
-                                        className={`w-full p-2 border border-gray-200 rounded text-base min-h-[72px] whitespace-pre-wrap ${enhContentRtl ? "" : "text-left"}`}
+                                        className={`w-full p-2 border border-gray-200 rounded text-base min-h-[72px] whitespace-pre-wrap ${enhContentRtl ? "" : "text-left"} ${enhIsSpecialDate ? "text-[#77081B]" : ""}`}
                                         dir={enhContentRtl ? "rtl" : "ltr"}
                                         style={{ textAlign: enhContentRtl ? "right" : "left" }}
                                     />
                                 ) : (
                                     <div
-                                        className={`whitespace-pre-wrap break-words ${enhContentRtl ? "" : "text-left"}`}
+                                        className={`whitespace-pre-wrap break-words ${enhContentRtl ? "" : "text-left"} ${enhIsSpecialDate ? "text-[#77081B]" : ""}`}
                                         dir={enhContentRtl ? "rtl" : "ltr"}
                                         style={{ textAlign: enhContentRtl ? "right" : "left" }}
                                     >

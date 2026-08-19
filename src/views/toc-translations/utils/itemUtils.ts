@@ -9,6 +9,7 @@
  */
 
 import { cmsDebugItemIdsEnabled } from "./debugFlags";
+import { isBodyLikeType } from "../constants/itemFields";
 
 const MIT_ID_GAP = 1000;
 
@@ -649,11 +650,13 @@ export function contentUsesRtlAlignment(text: string | undefined | null): boolea
 /**
  * מחזיר מחרוזת classNames ל־textarea של פריט (תוכן / כותרת / הוראות).
  * type: "title" | "instructions" | אחר = body
+ * specialDate: כשמסומן (ורלוונטי לסוגי "גוף" בלבד) – צובע את הטקסט בבורדו, בדיוק כמו באפליקציה.
  */
 export function getItemStyle(
     type: string,
     titleType?: string,
-    fontTanach?: boolean
+    fontTanach?: boolean,
+    specialDate?: boolean
 ): string {
     let baseStyle =
         "w-full p-4 border rounded-b-md shadow-sm outline-none transition-all whitespace-pre-wrap ";
@@ -665,5 +668,9 @@ export function getItemStyle(
         return baseStyle + "font-bold bg-gray-50 border-r-4 border-gray-400";
     if (type === "instructions")
         return baseStyle + "text-lg italic text-blue-700 bg-blue-50/50";
-    return baseStyle + "leading-relaxed bg-white border-gray-200 min-h-[120px]";
+
+    baseStyle += "leading-relaxed bg-white border-gray-200 min-h-[120px]";
+    // בורדו זהה לצבע tefillaSpecial/brand באפליקציה (colors.ts: #77081B)
+    if (specialDate && isBodyLikeType(type)) baseStyle += " text-[#77081B]";
+    return baseStyle;
 }

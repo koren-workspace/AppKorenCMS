@@ -437,14 +437,6 @@ export function PartItemRow({
                                     />
                                     <span className="text-gray-600">שורה שורה</span>
                                 </label>
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.red}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!localVal.red}
-                                        onChange={(e) => onFieldChange(entityId, "red", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">טקסט אדום</span>
-                                </label>
                                 <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.justifyBlock}>
                                     <input
                                         type="checkbox"
@@ -810,11 +802,6 @@ export function PartItemRow({
                                                     <input type="checkbox" checked={!!displayVal.lineLine}
                                                         onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "lineLine", e.target.checked)} />
                                                     <span className="text-gray-600">שורה שורה</span>
-                                                </label>
-                                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.red}>
-                                                    <input type="checkbox" checked={!!displayVal.red}
-                                                        onChange={(e) => onEnhancementFieldChange(enh.id, enh.tId, "red", e.target.checked)} />
-                                                    <span className="text-gray-600">טקסט אדום</span>
                                                 </label>
                                                 <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.justifyBlock}>
                                                     <input type="checkbox" checked={!!displayVal.justifyBlock}

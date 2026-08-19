@@ -9,6 +9,7 @@ import {
     INSTRUCTION_TYPE_OPTIONS,
     TITLE_TYPE_OPTIONS,
     ITEM_FIELD_HELP,
+    isBodyLikeType,
     showDiburHamatkhilField,
     supportsAttachedMeta,
     supportsFirstInPage,
@@ -108,6 +109,7 @@ export function AddItemModal({
     const showAttachedMeta = supportsAttachedMeta(currentType);
     const paragraphSentences = splitParagraphSentences(form.content);
     const contentRtl = contentUsesRtlAlignment(form.content);
+    const isSpecialDate = form.specialDate && isBodyLikeType(currentType);
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" dir="rtl">
@@ -337,7 +339,7 @@ export function AddItemModal({
                         <textarea
                             value={form.content}
                             onChange={(e) => setField("content", e.target.value)}
-                            className={`w-full border border-gray-300 rounded px-2 py-1 min-h-[80px] whitespace-pre-wrap ${contentRtl ? "" : "text-left"}`}
+                            className={`w-full border border-gray-300 rounded px-2 py-1 min-h-[80px] whitespace-pre-wrap ${contentRtl ? "" : "text-left"} ${isSpecialDate ? "text-[#77081B]" : ""}`}
                             dir={contentRtl ? "rtl" : "ltr"}
                             style={{ textAlign: contentRtl ? "right" : "left" }}
                             placeholder="ניתן להשאיר ריק ולהוסיף אחרי הוספת הפריט"

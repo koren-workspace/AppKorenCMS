@@ -31,6 +31,7 @@ import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
 import { isProdConfigured } from "../../../firebase_config";
 import { isProdAuthenticated, getProdFirestore } from "../services/prodAuthService";
+import { reconcileNusachToProd } from "../services/prodReconcileService";
 import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS, splitParagraphSentences } from "../utils/itemUtils";
 import { itemMinIdBefore, resolveDigitMillions } from "../utils/nusachIdPolicy";
 import { getNusachDisplayLabel } from "../utils/nusachDisplay";
@@ -1090,21 +1091,55 @@ export function usePartEdit(context: PartEditContext) {
         await doSavePartToProd();
     };
 
-    /** ביצוע בפועל של פרסום לפרוד (db-update-time + Bagel) */
+    /**
+     * ביצוע בפועל של פרסום לפרוד: סנכרון מבוסס־השוואה (סטייג' → פרוד) ואז
+     * db-update-time + Bagel. הסנכרון מעתיק כל מסמך שסטייג' חדש בו יותר —
+     * כולל כתיבות מסשנים קודמים שאבדו מרשימת "ממתינים לפרוד" שבזיכרון.
+     */
     const doPublishToProd = async () => {
         if (!selectedTocId) return;
         setSaving(true);
         try {
+            const reconcile = await reconcileNusachToProd({
+                tocData: currentTocData,
+                tocId: selectedTocId,
+                onProgress: (message) =>
+                    console.log(`${LOG_PREFIX} reconcile: ${message}`),
+            });
+
             const publishTimestamp = Date.now();
             const db = getProdFirestore();
             const tsRef = doc(db, "db-update-time", selectedTocId);
-            await setDoc(tsRef, { maxTimestamp: publishTimestamp }, { merge: true });
+            // lastReconcileTimestamp מתעדכן רק כאן — אחרי שההעתקה הושלמה בפועל,
+            // כדי שכשל באמצע ישאיר את העוגן מאחור והפרסום הבא ישלים את הפער.
+            await setDoc(
+                tsRef,
+                {
+                    maxTimestamp: publishTimestamp,
+                    lastReconcileTimestamp: publishTimestamp,
+                },
+                { merge: true }
+            );
             await updateBagelTimestamp(selectedTocId, publishTimestamp, "prod");
+
+            // הרשימות בזיכרון מיותרות עכשיו — הסנכרון העתיק את מצב הסטייג' העדכני
+            clearPendingProdForCurrentToc();
+
+            const copiedTotal =
+                reconcile.copiedItems +
+                reconcile.copiedCalendar +
+                (reconcile.copiedToc ? 1 : 0);
             const nusachLabel = getNusachDisplayLabel(selectedTocId ?? "", currentTocData?.nusach).trim();
-            const scope = nusachLabel.length > 0
+            const scopeBase = nusachLabel.length > 0
                 ? `הנוסח «${nusachLabel}» פורסם לפרוד — האפליקציה תסנכרן.`
                 : "הנוסח הנבחר פורסם לפרוד.";
-            snackbar.open({ type: "success", message: scope });
+            const syncNote = copiedTotal > 0
+                ? ` הועתקו ${copiedTotal} מסמכים שחסרו/עודכנו בפרוד.`
+                : "";
+            const prodNewerNote = reconcile.skippedProdNewer.length > 0
+                ? ` ${reconcile.skippedProdNewer.length} מסמכים חדשים יותר בפרוד לא נדרסו (ראו קונסול).`
+                : "";
+            snackbar.open({ type: "success", message: `${scopeBase}${syncNote}${prodNewerNote}` });
         } catch (err) {
             console.error(`${LOG_PREFIX} Publish to Prod failed`, err);
             const message =
@@ -1113,6 +1148,28 @@ export function usePartEdit(context: PartEditContext) {
         } finally {
             setSaving(false);
         }
+    };
+
+    /**
+     * מנקה מרשימות "ממתינים לפרוד" את הרשומות שהסנכרון כיסה: פריטים של
+     * תרגומי הנוסח הנוכחי + כל רשומות לוח השנה (הלוח מסונכרן גלובלית).
+     * רשומות של נוסח אחר (אם המשתמש החליף נוסח באותו סשן) נשארות.
+     */
+    const clearPendingProdForCurrentToc = () => {
+        const translationIds = new Set<string>(
+            (currentTocData?.translations ?? [])
+                .map((t: any) => t?.translationId)
+                .filter(Boolean)
+        );
+        setPendingProdItems((prev) => {
+            const next = new Map(prev);
+            for (const [key, entry] of prev) {
+                const match = /^translations\/([^/]+)\//.exec(entry.path);
+                if (match && translationIds.has(match[1])) next.delete(key);
+            }
+            return next;
+        });
+        setPendingProdCalendar(new Map());
     };
 
     /** פרסום לפרוד. אם המשתמש לא מחובר לפרוד — פותח מודל סיסמה */

@@ -42,16 +42,30 @@ export const CHANGE_LOG_COLLECTION = "cms_change_log";
  */
 const MAX_FIELD_LENGTH = 2000;
 
-/** מעל גודל זה (תווים ב-JSON) נשמור את הרשומה בלי details כדי שלא תיפסל כולה */
-const MAX_DETAILS_LENGTH = 700_000;
+/**
+ * מעל גודל זה (בבייטים של UTF-8) נשמור את הרשומה בלי details כדי שלא תיפסל כולה.
+ * מגבלת Firestore (1MiB) נמדדת בבייטים — טקסט עברי הוא ~2 בייט לתו, ולכן
+ * מדידה ב-length (תווים) הייתה מעבירה רשומות של עד ~1.4MB והכתיבה הייתה נכשלת
+ * בשקט בדיוק על השמירות הגדולות ביותר.
+ */
+const MAX_DETAILS_BYTES = 700_000;
 
-/** סביבת העבודה – מאפשר להבחין בין רישום ב-Stage לרישום ב-Prod */
-const ENVIRONMENT: "STAGE" | "PROD" = [
-    (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID ?? "",
-    (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN ?? "",
-].some((value: string) => String(value).toLowerCase().includes("stage"))
-    ? "STAGE"
-    : "PROD";
+/**
+ * סביבת העבודה – מאפשר להבחין בין רישום ב-Stage לרישום ב-Prod.
+ * זיהוי דטרמיניסטי: אם מוגדר פרויקט פרוד, משווים אליו את הפרויקט הראשי;
+ * fallback (כשאין הגדרת פרוד): חיפוש "stage" בשם הפרויקט.
+ */
+const ENVIRONMENT: "STAGE" | "PROD" = (() => {
+    const mainProjectId = String((import.meta as any).env?.VITE_FIREBASE_PROJECT_ID ?? "");
+    const prodProjectId = String((import.meta as any).env?.VITE_PROD_FIREBASE_PROJECT_ID ?? "").trim();
+    if (prodProjectId !== "") {
+        return mainProjectId === prodProjectId ? "PROD" : "STAGE";
+    }
+    const authDomain = String((import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN ?? "");
+    return [mainProjectId, authDomain].some((value) => value.toLowerCase().includes("stage"))
+        ? "STAGE"
+        : "PROD";
+})();
 
 export type ChangeLogAction =
     | "save_part_items"      // שמירת פריטי מקטע (עדכון שדות)
@@ -357,8 +371,9 @@ function writeEntryToFirestore(entry: ChangeLogEntry): void {
         const sanitized = sanitizeForFirestore(entry) as Record<string, unknown>;
 
         const detailsJson = JSON.stringify(sanitized.details ?? {});
-        if (detailsJson.length > MAX_DETAILS_LENGTH) {
-            sanitized.details = { omitted: true, reason: `details גדול מדי (${detailsJson.length} תווים)` };
+        const detailsBytes = new TextEncoder().encode(detailsJson).length;
+        if (detailsBytes > MAX_DETAILS_BYTES) {
+            sanitized.details = { omitted: true, reason: `details גדול מדי (${detailsBytes} בייטים)` };
         }
 
         const db = getFirestore(getFirebaseApp());

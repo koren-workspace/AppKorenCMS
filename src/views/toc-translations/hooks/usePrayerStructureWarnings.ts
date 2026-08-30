@@ -132,6 +132,8 @@ export function usePrayerStructureWarnings({
         prayersMissingInStage,
         prayersMissingInProd,
         prayersNeedProdAuth,
-        isProdAuthenticated: isProdAuthenticated(),
+        // בלי הגדרות פרוד אתחול אפליקציית הפרוד נכשל ב-getAuth, ולכן חייבים
+        // לבדוק תחילה שפרוד מוגדר – כמו בכל שאר הקריאות לפרוד בקוד
+        isProdAuthenticated: isProdConfigured() ? isProdAuthenticated() : false,
     };
 }

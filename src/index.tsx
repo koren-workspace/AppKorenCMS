@@ -2,6 +2,7 @@ import { buildProperty } from "@firecms/core";
 import { SampleEntityView } from "./entity_views/SampleEntityView";
 import { TocTranslationsView } from "./views/TocTranslationsView";
 import { AppCopyView } from "./views/AppCopyView";
+import { ChangeLogView } from "./views/ChangeLogView";
 
 const appConfig = {
     version: "1",
@@ -16,6 +17,11 @@ const appConfig = {
             path: "app-copy",
             name: "עריכת טקסטים באפליקציה",
             view: <AppCopyView />,
+        },
+        {
+            path: "change-log",
+            name: "יומן שינויים",
+            view: <ChangeLogView />,
         },
     ],
     propertyConfigs: {

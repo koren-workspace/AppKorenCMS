@@ -27,7 +27,7 @@ import {
 import { validateCopyEdit, type CopyValidationError } from "./app-copy/validation";
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { isProdAuthenticated } from "./toc-translations/services/prodAuthService";
-import { appendChangeLog, type FieldChange } from "./toc-translations/services/changeLogService";
+import { appendChangeLog, setChangeLogUser, type FieldChange } from "./toc-translations/services/changeLogService";
 
 type Edits = Record<string, { he: string; en: string }>;
 type RowErrors = Record<string, CopyValidationError[]>;
@@ -36,6 +36,12 @@ type Banner = { kind: "info" | "success" | "error"; text: string } | null;
 export function AppCopyView() {
     const auth = useAuthController();
     const currentUserEmail = (auth.user as any)?.email ?? "";
+    const currentUserUid = (auth.user as any)?.uid ?? "";
+
+    // חותם את המשתמש המחובר על כל רשומות יומן השינויים שייווצרו מהמסך
+    useEffect(() => {
+        setChangeLogUser({ email: currentUserEmail, uid: currentUserUid });
+    }, [currentUserEmail, currentUserUid]);
 
     const [docs, setDocs] = useState<AppCopyDoc[] | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);

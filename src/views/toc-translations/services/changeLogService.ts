@@ -1,18 +1,71 @@
 /**
- * changeLogService – תיעוד שינויים לפיתוח (לא קשור לממשק)
+ * changeLogService – תיעוד שינויים
  *
  * מתעד אוטומטית את כל השינויים במערכת (שמירת פריט, מחיקה, הוספת תרגום, פרסום ל-Bagel,
- * הוספת/מחיקת TOC/תרגום/קטגוריה/תפילה/פריט) בפורמט מובנה.
+ * הוספת/מחיקת TOC/תרגום/קטגוריה/תפילה/פריט) בפורמט מובנה, כולל מי ביצע את הפעולה.
  *
- * במצב פיתוח (npm run dev): הלוג נשמר גם בקובץ docs/cms-changelog.json – ניתן לפתוח אותו ישירות.
- * בנוסף נשמר ב-localStorage. בקונסולה: __CMS_CHANGELOG_EXPORT__('json') או __CMS_CHANGELOG_EXPORT__('text')
+ * יעדי שמירה:
+ *  - Firestore (קולקציית cms_change_log) – היומן המשותף לכל העורכים, נצפה במסך "יומן שינויים".
+ *  - localStorage – עותק מקומי בדפדפן של העורך.
+ *  - במצב פיתוח (npm run dev) גם docs/cms-changelog.json ו-docs/cms-changes.xlsx.
+ *
+ * זהות המשתמש נקבעת פעם אחת בעליית המסך דרך setChangeLogUser, ומוטבעת אוטומטית
+ * על כל רשומה – נקודות הקריאה ל-appendChangeLog אינן צריכות להעביר אותה.
+ *
+ * בקונסולה: __CMS_CHANGELOG_EXPORT__('json') או __CMS_CHANGELOG_EXPORT__('text')
  */
 
+import {
+    collection,
+    doc as firestoreDoc,
+    getDocs,
+    getFirestore,
+    limit as firestoreLimit,
+    orderBy,
+    query,
+    setDoc,
+} from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { getFirebaseApp } from "../../../firebase_config";
 import type { WarehouseFieldSelection } from "../types/itemWarehouse";
 
 const STORAGE_KEY = "cms_changelog_entries";
 /** מקסימום רשומות לשמירה (מגביל גודל localStorage) */
 const MAX_ENTRIES = 2500;
+
+/** קולקציית היומן המשותף ב-Firestore */
+export const CHANGE_LOG_COLLECTION = "cms_change_log";
+
+/**
+ * אורך מקסימלי למחרוזת בודדת שנכתבת ל-Firestore. טקסטי תפילה בשדות "לפני/אחרי"
+ * עלולים להיות ארוכים מאוד, ומסמך Firestore מוגבל ל-1MB.
+ */
+const MAX_FIELD_LENGTH = 2000;
+
+/**
+ * מעל גודל זה (בבייטים של UTF-8) נשמור את הרשומה בלי details כדי שלא תיפסל כולה.
+ * מגבלת Firestore (1MiB) נמדדת בבייטים — טקסט עברי הוא ~2 בייט לתו, ולכן
+ * מדידה ב-length (תווים) הייתה מעבירה רשומות של עד ~1.4MB והכתיבה הייתה נכשלת
+ * בשקט בדיוק על השמירות הגדולות ביותר.
+ */
+const MAX_DETAILS_BYTES = 700_000;
+
+/**
+ * סביבת העבודה – מאפשר להבחין בין רישום ב-Stage לרישום ב-Prod.
+ * זיהוי דטרמיניסטי: אם מוגדר פרויקט פרוד, משווים אליו את הפרויקט הראשי;
+ * fallback (כשאין הגדרת פרוד): חיפוש "stage" בשם הפרויקט.
+ */
+const ENVIRONMENT: "STAGE" | "PROD" = (() => {
+    const mainProjectId = String((import.meta as any).env?.VITE_FIREBASE_PROJECT_ID ?? "");
+    const prodProjectId = String((import.meta as any).env?.VITE_PROD_FIREBASE_PROJECT_ID ?? "").trim();
+    if (prodProjectId !== "") {
+        return mainProjectId === prodProjectId ? "PROD" : "STAGE";
+    }
+    const authDomain = String((import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN ?? "");
+    return [mainProjectId, authDomain].some((value) => value.toLowerCase().includes("stage"))
+        ? "STAGE"
+        : "PROD";
+})();
 
 export type ChangeLogAction =
     | "save_part_items"      // שמירת פריטי מקטע (עדכון שדות)
@@ -63,12 +116,22 @@ export type FieldChange = {
     newValue: unknown;
 };
 
+/** מי ביצע את הפעולה */
+export type ChangeLogUser = {
+    email: string;
+    uid: string;
+};
+
 /** רשומת לוג אחת – פורמט אחיד */
 export type ChangeLogEntry = {
     id: string;
     timestamp: number;
     timestampIso: string;
     action: ChangeLogAction;
+    /** מי ביצע – מוטבע אוטומטית מ-setChangeLogUser */
+    user: ChangeLogUser;
+    /** הסביבה שבה בוצעה הפעולה – מוטבע אוטומטית */
+    env: "STAGE" | "PROD";
     context: ChangeLogContext;
     /** פרטים לפי סוג פעולה */
     details: {
@@ -162,8 +225,41 @@ export type ChangeLogEntry = {
     publishedToBagel?: boolean;
 };
 
+/** קלט ל-appendChangeLog – id/timestampIso/user/env מוצבים אוטומטית */
+export type ChangeLogInput = Omit<ChangeLogEntry, "id" | "timestampIso" | "user" | "env">;
+
 const entries: ChangeLogEntry[] = [];
 let loadedFromStorage = false;
+
+const UNKNOWN_USER: ChangeLogUser = { email: "", uid: "" };
+let currentUser: ChangeLogUser = UNKNOWN_USER;
+
+/**
+ * קובע את המשתמש שייחתם על כל הרשומות הבאות.
+ * נקרא פעם אחת בעליית כל מסך ראשי, עם המשתמש המחובר ל-CMS.
+ */
+export function setChangeLogUser(user: { email?: string | null; uid?: string | null } | null): void {
+    currentUser = {
+        email: user?.email ?? "",
+        uid: user?.uid ?? "",
+    };
+}
+
+/**
+ * המשתמש שייחתם על הרשומה: מה שנקבע ב-setChangeLogUser, ואם לא נקבע (מסך
+ * ששכח לקרוא לו) – המשתמש המחובר ב-Firebase Auth, כדי שרשומות לא יירשמו
+ * עם משתמש ריק בשקט.
+ */
+function resolveChangeLogUser(): ChangeLogUser {
+    if (currentUser.email || currentUser.uid) return currentUser;
+    try {
+        const authUser = getAuth(getFirebaseApp()).currentUser;
+        return { email: authUser?.email ?? "", uid: authUser?.uid ?? "" };
+    } catch {
+        // Firebase לא אותחל (למשל בטסטים) – נשארים עם משתמש ריק
+        return currentUser;
+    }
+}
 
 function makeId(): string {
     const id = `chg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -230,18 +326,81 @@ function sendEntryToExcel(entry: ChangeLogEntry): void {
 }
 
 /**
- * מוסיף רשומת לוג אחת ושומר ב-localStorage + Excel (במצב dev)
+ * מכין ערך לכתיבה ל-Firestore:
+ *  - גוזם מחרוזות ארוכות (מסמך מוגבל ל-1MB)
+ *  - משמיט undefined (Firestore דוחה אותו)
+ *  - ממיר מערך בתוך מערך למחרוזת (Firestore אינו תומך בקינון כזה)
+ * (מיוצא לצורך בדיקות יחידה בלבד)
  */
-export function appendChangeLog(entry: Omit<ChangeLogEntry, "id" | "timestampIso">): ChangeLogEntry {
+export function sanitizeForFirestore(value: unknown, depth = 0): unknown {
+    if (depth > 12) return null;
+
+    if (typeof value === "string") {
+        return value.length > MAX_FIELD_LENGTH
+            ? `${value.slice(0, MAX_FIELD_LENGTH)}…[נגזם, ${value.length} תווים במקור]`
+            : value;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map(item =>
+            Array.isArray(item)
+                ? JSON.stringify(item).slice(0, MAX_FIELD_LENGTH)
+                : sanitizeForFirestore(item, depth + 1) ?? null
+        );
+    }
+
+    if (value && typeof value === "object") {
+        const result: Record<string, unknown> = {};
+        for (const [key, item] of Object.entries(value)) {
+            if (item === undefined) continue;
+            result[key] = sanitizeForFirestore(item, depth + 1);
+        }
+        return result;
+    }
+
+    return value === undefined ? null : value;
+}
+
+/**
+ * כותב רשומה ל-Firestore. "שגר ושכח" בכוונה: כשל ברישום היומן לעולם לא
+ * אמור להיכשל או לעכב שמירה של עורך, ולכן אין await ואין זריקת שגיאה.
+ */
+function writeEntryToFirestore(entry: ChangeLogEntry): void {
+    if (typeof window === "undefined") return;
+    try {
+        const sanitized = sanitizeForFirestore(entry) as Record<string, unknown>;
+
+        const detailsJson = JSON.stringify(sanitized.details ?? {});
+        const detailsBytes = new TextEncoder().encode(detailsJson).length;
+        if (detailsBytes > MAX_DETAILS_BYTES) {
+            sanitized.details = { omitted: true, reason: `details גדול מדי (${detailsBytes} בייטים)` };
+        }
+
+        const db = getFirestore(getFirebaseApp());
+        void setDoc(firestoreDoc(db, CHANGE_LOG_COLLECTION, entry.id), sanitized).catch(err => {
+            console.warn("[changeLog] כתיבת רשומה ל-Firestore נכשלה:", err);
+        });
+    } catch (err) {
+        console.warn("[changeLog] כתיבת רשומה ל-Firestore נכשלה:", err);
+    }
+}
+
+/**
+ * מוסיף רשומת לוג אחת ושומר ב-Firestore + localStorage + Excel (במצב dev)
+ */
+export function appendChangeLog(entry: ChangeLogInput): ChangeLogEntry {
     loadFromStorage();
     const full: ChangeLogEntry = {
         ...entry,
         id: makeId(),
         timestampIso: toIso(entry.timestamp),
+        user: resolveChangeLogUser(),
+        env: ENVIRONMENT,
     };
     entries.push(full);
     trimIfNeeded();
     saveToStorage();
+    writeEntryToFirestore(full);
     sendEntryToExcel(full);
     return full;
 }
@@ -249,10 +408,26 @@ export function appendChangeLog(entry: Omit<ChangeLogEntry, "id" | "timestampIso
 /**
  * מוסיף מספר רשומות (למשל כל שינויי השדות משמירה אחת)
  */
-export function appendChangeLogBatch(entryList: Omit<ChangeLogEntry, "id" | "timestampIso">[]): void {
+export function appendChangeLogBatch(entryList: ChangeLogInput[]): void {
     for (const e of entryList) {
         appendChangeLog(e);
     }
+}
+
+/**
+ * טוען את הרשומות האחרונות מהיומן המשותף ב-Firestore (החדשות ביותר קודם).
+ * מיון לפי שדה יחיד – אינו דורש אינדקס מורכב.
+ */
+export async function fetchChangeLogEntries(max = 200): Promise<ChangeLogEntry[]> {
+    const db = getFirestore(getFirebaseApp());
+    const snapshot = await getDocs(
+        query(
+            collection(db, CHANGE_LOG_COLLECTION),
+            orderBy("timestamp", "desc"),
+            firestoreLimit(max)
+        )
+    );
+    return snapshot.docs.map(entryDoc => entryDoc.data() as ChangeLogEntry);
 }
 
 /**

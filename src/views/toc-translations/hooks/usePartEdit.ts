@@ -148,6 +148,23 @@ function diffValues(
     return diffs;
 }
 
+/**
+ * האם שני אובייקטי ערכים זהים – מתעלם מ־timestamp שמתעדכן בכל הקלדה.
+ * משמש כדי לבטל סימון "שונה" כשמשתמש מחזיר ערך למצבו המקורי.
+ */
+function valuesEqualIgnoringTimestamp(
+    a: Record<string, any>,
+    b: Record<string, any>
+): boolean {
+    const normalize = (v: unknown) => (v === undefined ? null : v);
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    keys.delete("timestamp");
+    for (const key of keys) {
+        if (normalize(a[key]) !== normalize(b[key])) return false;
+    }
+    return true;
+}
+
 /** יצירת מזהה ייחודי לרשומת יומן */
 function makeLogId() {
     return `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -204,6 +221,9 @@ export function usePartEdit(context: PartEditContext) {
     >({});
     const [localValues, setLocalValues] = useState<Record<string, any>>({});
     const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
+    /** מראה מסונכרנת של localValues – כדי שכמה עדכונים באותו tick יראו את הערך העדכני */
+    const localValuesRef = useRef<Record<string, any>>({});
+    localValuesRef.current = localValues;
 
     // ── Prod dual-write state ────────────────────────────────────────────────
     /** פריטים שנשמרו לסטייג' ועדיין לא נשמרו לפרוד */
@@ -267,6 +287,9 @@ export function usePartEdit(context: PartEditContext) {
     // עריכת תרגומים מקושרים (enhancements) – ערכים מקומיים + איזה תרגום כל entity שייך אליו
     const [enhancementLocalValues, setEnhancementLocalValues] = useState<Record<string, any>>({});
     const [enhancementChangedIds, setEnhancementChangedIds] = useState<Set<string>>(new Set());
+    /** מראה מסונכרנת של enhancementLocalValues – ראה localValuesRef */
+    const enhancementLocalValuesRef = useRef<Record<string, any>>({});
+    enhancementLocalValuesRef.current = enhancementLocalValues;
     const [enhancementTranslationIds, setEnhancementTranslationIds] = useState<Record<string, string>>({});
 
     // מודל פיצול מקטע
@@ -552,30 +575,53 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
-    /** מעדכן ערך של פריט בזיכרון ומסמן אותו כ־changed (לשמירה) */
+    /**
+     * מעדכן ערך של פריט בזיכרון ומסמן אותו כ־changed (לשמירה).
+     * אם כל הערכים חזרו למצבם המקורי – הסימון מוסר, כדי לא לשמור פריט ללא שינוי אמיתי.
+     * פריט חדש (new_) תמיד נשאר מסומן – אין לו מצב מקורי בשרת.
+     */
     const updateLocalItem = (id: string, field: string, value: any) => {
-        setLocalValues((prev) => ({
-            ...prev,
-            [id]: {
-                ...prev[id],
-                [field]: value,
-                timestamp: Date.now(),
-            },
-        }));
-        setChangedIds((prev) => new Set(prev).add(id));
+        const nextItem = {
+            ...localValuesRef.current[id],
+            [field]: value,
+            timestamp: Date.now(),
+        };
+        const next = { ...localValuesRef.current, [id]: nextItem };
+        localValuesRef.current = next;
+        setLocalValues(next);
+
+        const orig = originalValues[id];
+        const backToOriginal =
+            !id.startsWith("new_") && orig != null && valuesEqualIgnoringTimestamp(orig, nextItem);
+        setChangedIds((prev) => {
+            const updated = new Set(prev);
+            if (backToOriginal) updated.delete(id);
+            else updated.add(id);
+            return updated;
+        });
     };
 
     /** מעדכן ערך של פריט תרגום מקושר (enhancement) – נשמר ל־path של אותו תרגום */
     const updateEnhancementLocalItem = (entityId: string, translationId: string, field: string, value: any) => {
-        setEnhancementLocalValues((prev) => ({
-            ...prev,
-            [entityId]: {
-                ...prev[entityId],
-                [field]: value,
-                timestamp: Date.now(),
-            },
-        }));
-        setEnhancementChangedIds((prev) => new Set(prev).add(entityId));
+        const nextItem = {
+            ...enhancementLocalValuesRef.current[entityId],
+            [field]: value,
+            timestamp: Date.now(),
+        };
+        const next = { ...enhancementLocalValuesRef.current, [entityId]: nextItem };
+        enhancementLocalValuesRef.current = next;
+        setEnhancementLocalValues(next);
+
+        // enhancementLocalValues מחזיק רק שינויים – ההשוואה חייבת להיות מול המיזוג עם המקור
+        const orig = originalEnhancementValues[entityId];
+        const backToOriginal =
+            orig != null && valuesEqualIgnoringTimestamp(orig, { ...orig, ...nextItem });
+        setEnhancementChangedIds((prev) => {
+            const updated = new Set(prev);
+            if (backToOriginal) updated.delete(entityId);
+            else updated.add(entityId);
+            return updated;
+        });
         setEnhancementTranslationIds((prev) => ({ ...prev, [entityId]: translationId }));
     };
 

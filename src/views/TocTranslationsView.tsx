@@ -13,8 +13,9 @@
  *   - הקומפוננטות מקבלות את כל הנתונים ב-props (controlled).
  */
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthController } from "@firecms/core";
+import { setChangeLogUser } from "./toc-translations/services/changeLogService";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
 import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
 import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
@@ -48,6 +49,13 @@ import { usePrayerStructureWarnings } from "./toc-translations/hooks/usePrayerSt
 export function TocTranslationsView() {
     const auth = useAuthController();
     const currentUserEmail = (auth.user as any)?.email ?? "";
+    const currentUserUid = (auth.user as any)?.uid ?? "";
+
+    // חותם את המשתמש המחובר על כל רשומות יומן השינויים שייווצרו מהמסך
+    useEffect(() => {
+        setChangeLogUser({ email: currentUserEmail, uid: currentUserUid });
+    }, [currentUserEmail, currentUserUid]);
+
     const pendingItemWritesRef = useRef<(writes: PendingWrite[]) => void>(() => {});
     const ensureProdAuthRef = useRef<() => Promise<boolean>>(async () => false);
     const nav = useTocNavigation({

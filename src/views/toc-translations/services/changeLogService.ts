@@ -25,6 +25,7 @@ import {
     query,
     setDoc,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 import { getFirebaseApp } from "../../../firebase_config";
 import type { WarehouseFieldSelection } from "../types/itemWarehouse";
 
@@ -230,6 +231,22 @@ export function setChangeLogUser(user: { email?: string | null; uid?: string | n
     };
 }
 
+/**
+ * המשתמש שייחתם על הרשומה: מה שנקבע ב-setChangeLogUser, ואם לא נקבע (מסך
+ * ששכח לקרוא לו) – המשתמש המחובר ב-Firebase Auth, כדי שרשומות לא יירשמו
+ * עם משתמש ריק בשקט.
+ */
+function resolveChangeLogUser(): ChangeLogUser {
+    if (currentUser.email || currentUser.uid) return currentUser;
+    try {
+        const authUser = getAuth(getFirebaseApp()).currentUser;
+        return { email: authUser?.email ?? "", uid: authUser?.uid ?? "" };
+    } catch {
+        // Firebase לא אותחל (למשל בטסטים) – נשארים עם משתמש ריק
+        return currentUser;
+    }
+}
+
 function makeId(): string {
     const id = `chg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     console.log("[CMS-ID] makeId (changeLog) => id=", id);
@@ -299,8 +316,9 @@ function sendEntryToExcel(entry: ChangeLogEntry): void {
  *  - גוזם מחרוזות ארוכות (מסמך מוגבל ל-1MB)
  *  - משמיט undefined (Firestore דוחה אותו)
  *  - ממיר מערך בתוך מערך למחרוזת (Firestore אינו תומך בקינון כזה)
+ * (מיוצא לצורך בדיקות יחידה בלבד)
  */
-function sanitizeForFirestore(value: unknown, depth = 0): unknown {
+export function sanitizeForFirestore(value: unknown, depth = 0): unknown {
     if (depth > 12) return null;
 
     if (typeof value === "string") {
@@ -361,7 +379,7 @@ export function appendChangeLog(entry: ChangeLogInput): ChangeLogEntry {
         ...entry,
         id: makeId(),
         timestampIso: toIso(entry.timestamp),
-        user: currentUser,
+        user: resolveChangeLogUser(),
         env: ENVIRONMENT,
     };
     entries.push(full);

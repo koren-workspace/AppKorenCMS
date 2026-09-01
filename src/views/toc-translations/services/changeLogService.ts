@@ -71,7 +71,8 @@ export type ChangeLogAction =
     | "save_part_items"      // שמירת פריטי מקטע (עדכון שדות)
     | "delete_part_item"    // מחיקת פריט פריט (soft delete)
     | "create_translation_item"  // הוספת פריט תרגום חדש
-    | "publish_to_bagel"    // פרסום ל-Bagel
+    | "publish_to_bagel"    // פרסום ל-Bagel (סטייג')
+    | "publish_to_prod"     // פרסום לפרוד (כולל סנכרון מבוסס-השוואה)
     | "add_toc"             // הוספת נוסח (TOC)
     | "update_toc"          // עריכת נוסח (שם)
     | "add_translation"     // הוספת תרגום לנוסח
@@ -156,8 +157,14 @@ export type ChangeLogEntry = {
         newItemContent?: string;
         baseItemId?: string;
         targetTranslationId?: string;
-        /** publish_to_bagel */
+        /** publish_to_bagel / publish_to_prod */
         selectedTocId?: string;
+        /** publish_to_prod: תוצאות הסנכרון מבוסס-ההשוואה (סטייג' → פרוד) */
+        prodCopiedItems?: number;
+        prodCopiedCalendar?: number;
+        prodCopiedToc?: boolean;
+        prodSkippedProdNewerCount?: number;
+        prodFirstReconcileRun?: boolean;
         /** add_toc */
         newTocId?: string;
         nusachName?: string;

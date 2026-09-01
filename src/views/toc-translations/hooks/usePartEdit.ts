@@ -1186,6 +1186,21 @@ export function usePartEdit(context: PartEditContext) {
                 ? ` ${reconcile.skippedProdNewer.length} מסמכים חדשים יותר בפרוד לא נדרסו (ראו קונסול).`
                 : "";
             snackbar.open({ type: "success", message: `${scopeBase}${syncNote}${prodNewerNote}` });
+            appendChangeLog({
+                timestamp: publishTimestamp,
+                action: "publish_to_prod",
+                context: { tocId: selectedTocId, tocName: currentTocData?.nusach },
+                details: {
+                    selectedTocId,
+                    prodCopiedItems: reconcile.copiedItems,
+                    prodCopiedCalendar: reconcile.copiedCalendar,
+                    prodCopiedToc: reconcile.copiedToc,
+                    prodSkippedProdNewerCount: reconcile.skippedProdNewer.length,
+                    prodFirstReconcileRun: reconcile.firstRun,
+                },
+                savedToFirestore: true,
+                publishedToBagel: true,
+            });
         } catch (err) {
             console.error(`${LOG_PREFIX} Publish to Prod failed`, err);
             const message =

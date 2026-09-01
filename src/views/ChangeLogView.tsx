@@ -24,7 +24,8 @@ const ACTION_LABELS: Record<ChangeLogAction, string> = {
     save_part_items: "שמירת פריטי מקטע",
     delete_part_item: "מחיקת פריט",
     create_translation_item: "הוספת פריט תרגום",
-    publish_to_bagel: "פרסום ל-Bagel",
+    publish_to_bagel: "פרסום לסטייג' (Bagel)",
+    publish_to_prod: "פרסום לפרוד",
     add_toc: "הוספת נוסח",
     update_toc: "עריכת נוסח",
     add_translation: "הוספת תרגום",
@@ -77,6 +78,23 @@ function formatLocation(entry: ChangeLogEntry): string {
 function formatSummary(entry: ChangeLogEntry): string {
     const d = entry.details ?? {};
 
+    // פרסום שנכשל – מציגים את השגיאה במקום סיכום רגיל
+    if (d.errorMessage) {
+        return `שגיאה: ${String(d.errorMessage).slice(0, 120)}`;
+    }
+    if (entry.action === "publish_to_prod") {
+        const copied =
+            (d.prodCopiedItems ?? 0) +
+            (d.prodCopiedCalendar ?? 0) +
+            (d.prodCopiedToc ? 1 : 0);
+        const skipped = d.prodSkippedProdNewerCount ?? 0;
+        const parts = [
+            copied > 0 ? `סונכרנו ${copied} מסמכים` : "לא נדרש סנכרון",
+            skipped > 0 ? `${skipped} דולגו (פרוד חדש יותר)` : "",
+            d.prodFirstReconcileRun ? "השוואה מלאה ראשונה" : "",
+        ].filter(Boolean);
+        return parts.join(" · ");
+    }
     if (d.fieldChanges?.length) {
         const fields = d.fieldChanges.reduce((sum, fc) => sum + (fc.changes?.length ?? 0), 0);
         return `${fields} שינויי שדה ב-${d.fieldChanges.length} פריטים`;
@@ -104,7 +122,10 @@ function formatValue(value: unknown): string {
 
 /** האם הפעולה הצליחה, לפי הדגלים שנרשמו */
 function formatStatus(entry: ChangeLogEntry): string {
-    if (entry.action === "publish_to_bagel" && entry.publishedToBagel != null) {
+    if (
+        (entry.action === "publish_to_bagel" || entry.action === "publish_to_prod") &&
+        entry.publishedToBagel != null
+    ) {
         return entry.publishedToBagel ? "פורסם" : "נכשל";
     }
     if (entry.savedToFirestore != null) return entry.savedToFirestore ? "נשמר" : "נכשל";

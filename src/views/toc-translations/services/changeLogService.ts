@@ -159,6 +159,8 @@ export type ChangeLogEntry = {
         targetTranslationId?: string;
         /** publish_to_bagel / publish_to_prod */
         selectedTocId?: string;
+        /** publish_to_bagel / publish_to_prod: הודעת השגיאה כשהפרסום נכשל */
+        errorMessage?: string;
         /** publish_to_prod: תוצאות הסנכרון מבוסס-ההשוואה (סטייג' → פרוד) */
         prodCopiedItems?: number;
         prodCopiedCalendar?: number;

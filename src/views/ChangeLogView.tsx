@@ -78,6 +78,10 @@ function formatLocation(entry: ChangeLogEntry): string {
 function formatSummary(entry: ChangeLogEntry): string {
     const d = entry.details ?? {};
 
+    // פרסום שנכשל – מציגים את השגיאה במקום סיכום רגיל
+    if (d.errorMessage) {
+        return `שגיאה: ${String(d.errorMessage).slice(0, 120)}`;
+    }
     if (entry.action === "publish_to_prod") {
         const copied =
             (d.prodCopiedItems ?? 0) +

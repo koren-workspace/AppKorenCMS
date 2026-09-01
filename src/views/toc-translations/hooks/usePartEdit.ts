@@ -1079,6 +1079,15 @@ export function usePartEdit(context: PartEditContext) {
                 type: "error",
                 message,
             });
+            // תיעוד הכישלון ביומן (פרסום מוצלח נרשם בהמשך הזרימה הרגילה)
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "publish_to_bagel",
+                context: { tocId: selectedTocId, tocName: currentTocData?.nusach },
+                details: { selectedTocId: selectedTocId ?? undefined, errorMessage: message },
+                savedToFirestore: false,
+                publishedToBagel: false,
+            });
         } finally {
             setSaving(false);
         }
@@ -1206,6 +1215,16 @@ export function usePartEdit(context: PartEditContext) {
             const message =
                 err instanceof Error ? err.message : "שגיאה בפרסום לפרוד";
             snackbar.open({ type: "error", message });
+            // תיעוד הכישלון ביומן. ייתכן שחלק מהמסמכים כבר הועתקו לפרוד לפני
+            // הכשל — זה בטוח: העוגן לא התקדם והפרסום הבא ישלים את החסר.
+            appendChangeLog({
+                timestamp: Date.now(),
+                action: "publish_to_prod",
+                context: { tocId: selectedTocId, tocName: currentTocData?.nusach },
+                details: { selectedTocId, errorMessage: message },
+                savedToFirestore: false,
+                publishedToBagel: false,
+            });
         } finally {
             setSaving(false);
         }

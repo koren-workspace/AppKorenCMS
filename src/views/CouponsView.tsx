@@ -26,6 +26,7 @@ import {
     resetCouponUsed,
     setCouponActive,
 } from "./coupons/services/couponService";
+import { isProdConfigured } from "../firebase_config";
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { isProdAuthenticated } from "./toc-translations/services/prodAuthService";
 
@@ -52,6 +53,11 @@ export function CouponsView() {
     const auth = useAuthController();
     const currentUserEmail = (auth.user as any)?.email ?? "";
 
+    // Without the VITE_PROD_FIREBASE_* variables (set on Vercel, usually absent
+    // locally) the prod Firebase app cannot even be initialised, and every
+    // prod call would throw inside a click handler — silently, from the
+    // user's point of view.
+    const prodConfigured = isProdConfigured();
     const [env, setEnv] = useState<CouponEnv>("stage");
     const [coupons, setCoupons] = useState<CouponDoc[] | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -89,6 +95,13 @@ export function CouponsView() {
 
     function switchEnv(target: CouponEnv) {
         if (target === env) return;
+        if (target === "prod" && !prodConfigured) {
+            setBanner({
+                kind: "error",
+                text: "פרוד לא מוגדר בסביבה הזו (חסרים משתני VITE_PROD_FIREBASE_* – קיימים ב-Vercel, לא ב-.env.local המקומי).",
+            });
+            return;
+        }
         if (target === "prod" && !isProdAuthenticated()) {
             setProdAuthOpen(true);
             return;
@@ -276,8 +289,9 @@ export function CouponsView() {
                             ...(env === "prod" ? { ...styles.envBtnActive, background: "#c62828" } : {}),
                         }}
                         onClick={() => switchEnv("prod")}
+                        title={prodConfigured ? undefined : "פרוד לא מוגדר בסביבה הזו"}
                     >
-                        פרוד
+                        פרוד{prodConfigured ? "" : " (לא מוגדר)"}
                     </button>
                 </div>
             </div>

@@ -3,6 +3,7 @@ import { SampleEntityView } from "./entity_views/SampleEntityView";
 import { TocTranslationsView } from "./views/TocTranslationsView";
 import { AppCopyView } from "./views/AppCopyView";
 import { ChangeLogView } from "./views/ChangeLogView";
+import { CouponsView } from "./views/CouponsView";
 
 const appConfig = {
     version: "1",
@@ -22,6 +23,11 @@ const appConfig = {
             path: "change-log",
             name: "יומן שינויים",
             view: <ChangeLogView />,
+        },
+        {
+            path: "coupons",
+            name: "קופונים",
+            view: <CouponsView />,
         },
     ],
     propertyConfigs: {

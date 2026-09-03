@@ -43,7 +43,13 @@
 
 1. **חוקי אבטחה (Firebase console → Firestore → Rules, בשני הפרויקטים).**
    האפליקציה קוראת עם Anonymous Auth ומעדכנת שדה אחד; משתמשי ה-CMS
-   (email/password) עורכים הכול:
+   (email/password) עורכים הכול. **חשוב:** החוק הכללי הקיים
+   (`match /{document=**} { allow read, write: if request.auth != null; }`)
+   מתיר לכל משתמש מחובר, כולל האנונימי, לכתוב גם ב-`coupons`, וב-Firestore
+   מספיק חוק אחד שמתיר. לכן צריך להחריג ממנו את `coupons` – אבל **לא** עם
+   תנאי על `{document=**}`: תנאי על תו כללי רב-קטעי אינו ניתן להערכה
+   בשאילתות רשימה, וכל שאילתה נדחית (נשבר בסטייג' 2026-09-03). מפצלים
+   לשתי רמות עם משתנה חד-קטעי:
 
    ```
    match /coupons/{codeHash} {
@@ -59,6 +65,14 @@
        && resource.data.get('usedAt', null) == null
        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedAt'])
        && request.resource.data.usedAt is timestamp;
+   }
+
+   // Everything else: any signed-in user, except the coupons collection.
+   match /{collection}/{docId} {
+     allow read, write: if request.auth != null && collection != 'coupons';
+   }
+   match /{collection}/{docId}/{rest=**} {
+     allow read, write: if request.auth != null && collection != 'coupons';
    }
    ```
 

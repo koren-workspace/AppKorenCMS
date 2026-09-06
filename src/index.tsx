@@ -5,10 +5,12 @@ import { AppCopyView } from "./views/AppCopyView";
 import { ChangeLogView } from "./views/ChangeLogView";
 import { CouponsView } from "./views/CouponsView";
 import { AppFlagsView } from "./views/AppFlagsView";
+import { catalogCollection } from "./collections/catalog";
 
 const appConfig = {
     version: "1",
-    collections: [],
+    // The Mods catalog is edited through the plain Firecms collection screen (docs/catalog.md).
+    collections: [catalogCollection],
     views: [
         {
             path: "toc-translations",

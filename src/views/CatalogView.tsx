@@ -503,14 +503,14 @@ export function CatalogView() {
                                             <button style={styles.linkBtn} disabled={busy} onClick={() => startEdit(row)}>
                                                 עריכה
                                             </button>
-                                            {!isProd && (
-                                                <button style={styles.linkBtn} disabled={busy} onClick={() => void onCopyToProd(row)} title="מעתיק את המסמך כפי שהוא לפרוד">
-                                                    העתקה לפרוד
-                                                </button>
-                                            )}
                                             <button style={{ ...styles.linkBtn, color: "#c62828" }} disabled={busy} onClick={() => void onDelete(row)}>
                                                 מחיקה
                                             </button>
+                                            {!isProd && (
+                                                <button style={styles.copyBtn} disabled={busy} onClick={() => void onCopyToProd(row)} title="מעתיק את המסמך כפי שהוא לפרוד">
+                                                    העתקה לפרוד
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -555,6 +555,7 @@ const styles: Record<string, React.CSSProperties> = {
     primaryBtn: { padding: "8px 18px", borderRadius: 6, border: "none", background: "#2e7d32", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14 },
     secondaryBtn: { border: "1px solid #ccc", background: "#fff", borderRadius: 5, padding: "6px 12px", fontSize: 13, cursor: "pointer", color: "#555" },
     linkBtn: { border: "none", background: "none", color: "#1565c0", cursor: "pointer", fontSize: 13, padding: "2px 6px", fontWeight: 400 },
+    copyBtn: { border: "1px solid #6a1b9a", background: "#f3e5f5", color: "#6a1b9a", borderRadius: 5, cursor: "pointer", fontSize: 12, padding: "2px 8px", fontWeight: 600, marginInlineStart: 6 },
     table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
     th: { textAlign: "right", padding: "8px 10px", borderBottom: "2px solid #e0e0e0", fontWeight: 700 },
     td: { padding: "8px 10px", borderBottom: "1px solid #eee", verticalAlign: "top" },

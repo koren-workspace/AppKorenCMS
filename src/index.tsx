@@ -5,12 +5,11 @@ import { AppCopyView } from "./views/AppCopyView";
 import { ChangeLogView } from "./views/ChangeLogView";
 import { CouponsView } from "./views/CouponsView";
 import { AppFlagsView } from "./views/AppFlagsView";
-import { catalogCollection } from "./collections/catalog";
+import { CatalogView } from "./views/CatalogView";
 
 const appConfig = {
     version: "1",
-    // The add-ons catalog is edited through the plain Firecms collection screen (docs/catalog.md).
-    collections: [catalogCollection],
+    collections: [],
     views: [
         {
             path: "toc-translations",
@@ -36,6 +35,11 @@ const appConfig = {
             path: "app-flags",
             name: "הגדרות אפליקציה",
             view: <AppFlagsView />,
+        },
+        {
+            path: "catalog",
+            name: "קטלוג תוספות",
+            view: <CatalogView />,
         },
     ],
     propertyConfigs: {

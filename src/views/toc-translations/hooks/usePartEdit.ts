@@ -87,6 +87,9 @@ export type PartEditContext = {
 
 const LOG_PREFIX = "[TocTranslations]";
 
+/** מקסימום מסמכים שדולגו שנרשמים ביומן (המספר המלא נשמר בנפרד) */
+const MAX_LOGGED_SKIPPED_PROD_NEWER = 50;
+
 /**
  * itemId לשורת בסיס לסידור מקטע / אינדקס שורה: ערך itemId מהתא או מהמסמך;
  * אם התא ריק ומזהה המסמך מספרי בלבד – משתמשים ב-id (כמו בפריטי בסיס ב-Firestore).
@@ -1205,6 +1208,7 @@ export function usePartEdit(context: PartEditContext) {
                     prodCopiedCalendar: reconcile.copiedCalendar,
                     prodCopiedToc: reconcile.copiedToc,
                     prodSkippedProdNewerCount: reconcile.skippedProdNewer.length,
+                    prodSkippedProdNewer: reconcile.skippedProdNewer.slice(0, MAX_LOGGED_SKIPPED_PROD_NEWER),
                     prodFirstReconcileRun: reconcile.firstRun,
                 },
                 savedToFirestore: true,

@@ -63,6 +63,8 @@ export function AppFlagsView() {
     const [banner, setBanner] = useState<Banner>(null);
     const [busy, setBusy] = useState(false);
     const [prodAuthOpen, setProdAuthOpen] = useState(false);
+    /** true אחרי שמירה שנכתבה ל-Firestore אבל השיקוף ל-Bagel נכשל */
+    const [mirrorFailed, setMirrorFailed] = useState(false);
 
     async function reload(target: FlagsEnv) {
         setFlags(undefined);
@@ -92,6 +94,7 @@ export function AppFlagsView() {
         }
         setEnv(target);
         setBanner(null);
+        setMirrorFailed(false);
         void reload(target);
     }
 
@@ -158,17 +161,19 @@ export function AppFlagsView() {
             const results = await saveFlags(env, next, currentUserEmail);
             setFlags(next);
             setForm(formOf(next));
+            setMirrorFailed(false);
             setBanner({ kind: "success", text: `${successText} · Bagel: ${describeMirror(results)}` });
         } catch (err: any) {
             if (err instanceof MirrorError) {
                 // Firestore כבר נשמר – האפליקציה החדשה רואה את הערך; הישנות לא.
                 setFlags(next);
                 setForm(formOf(next));
+                setMirrorFailed(true);
                 setBanner({
                     kind: "error",
-                    text: `נשמר ל-Firestore, אבל השיקוף ל-Bagel נכשל (${err.message}${
+                    text: `נשמר ל-Firestore (האפליקציה החדשה רואה את הערך), אבל השיקוף ל-Bagel נכשל (${err.message}${
                         Object.keys(err.results).length ? " · " + describeMirror(err.results) : ""
-                    }). האפליקציות הישנות לא קיבלו את השינוי – לנסות "שיקוף חוזר".`,
+                    }). האפליקציות הישנות עדיין עם הערך הקודם – ראו "שליחה חוזרת ל-Bagel" למטה.`,
                 });
             } else {
                 setBanner({ kind: "error", text: `שגיאה בשמירה: ${err?.message ?? err}` });
@@ -189,6 +194,7 @@ export function AppFlagsView() {
         setBanner(null);
         try {
             const results = await mirrorFlagsToBagel(env, flags);
+            setMirrorFailed(false);
             setBanner({ kind: "success", text: `Bagel עודכן · ${describeMirror(results)}` });
         } catch (err: any) {
             setBanner({ kind: "error", text: `השיקוף נכשל: ${err?.message ?? err}` });
@@ -256,17 +262,36 @@ export function AppFlagsView() {
                 <>
                     <div style={styles.card}>
                         <h3 style={styles.cardTitle}>מודים</h3>
-                        <label style={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={form.freeEnhancements}
-                                onChange={e => setForm(f => ({ ...f, freeEnhancements: e.target.checked }))}
-                            />
-                            <span>
-                                <b>המודים חינם</b> (freeEnhancements) – כשמסומן, כל מוד נפתח בלי תשלום ושדה הקופון מוסתר. כיבוי
-                                = מתחילים לגבות.
-                            </span>
-                        </label>
+                        <div style={styles.radioGroup}>
+                            <label style={{ ...styles.radioOption, ...(form.freeEnhancements ? styles.radioOptionActive : {}) }}>
+                                <input
+                                    type="radio"
+                                    name="freeEnhancements"
+                                    checked={form.freeEnhancements}
+                                    onChange={() => setForm(f => ({ ...f, freeEnhancements: true }))}
+                                    style={styles.radioInput}
+                                />
+                                <span>
+                                    <b>חינם</b>
+                                    <br />
+                                    <span style={styles.radioHint}>כל מוד נפתח בלי תשלום. שדה הקופון מוסתר.</span>
+                                </span>
+                            </label>
+                            <label style={{ ...styles.radioOption, ...(!form.freeEnhancements ? styles.radioOptionActive : {}) }}>
+                                <input
+                                    type="radio"
+                                    name="freeEnhancements"
+                                    checked={!form.freeEnhancements}
+                                    onChange={() => setForm(f => ({ ...f, freeEnhancements: false }))}
+                                    style={styles.radioInput}
+                                />
+                                <span>
+                                    <b>בתשלום</b>
+                                    <br />
+                                    <span style={styles.radioHint}>המודים נקנים בחנות. שדה הקופון מופיע.</span>
+                                </span>
+                            </label>
+                        </div>
                     </div>
 
                     <div style={styles.card}>
@@ -300,13 +325,23 @@ export function AppFlagsView() {
                         <button style={{ ...styles.primaryBtn, opacity: !dirty || busy ? 0.5 : 1 }} disabled={!dirty || busy} onClick={() => void onSave()}>
                             {busy ? "שומר..." : `שמירה ל-${isProd ? "פרוד" : "Stage"}`}
                         </button>
-                        <button style={styles.secondaryBtn} disabled={busy} onClick={() => void onRemirror()}>
-                            שיקוף חוזר ל-Bagel
-                        </button>
                         <button style={styles.secondaryBtn} disabled={busy} onClick={() => void reload(env)}>
                             רענון
                         </button>
                     </div>
+
+                    {mirrorFailed && (
+                        <div style={{ ...styles.card, borderColor: "#f9a825", background: "#fffde7" }}>
+                            <h3 style={styles.cardTitle}>שליחה חוזרת ל-Bagel</h3>
+                            <p style={styles.hint}>
+                                השמירה האחרונה נכתבה ל-Firestore אבל לא הגיעה ל-Bagel, ולכן האפליקציות הישנות עדיין עם הערך הקודם.
+                                הכפתור שולח שוב את הערכים השמורים, בלי לשנות כלום. אם זה נכשל שוב, הבעיה ב-Bagel או בטוקן שבשרת.
+                            </p>
+                            <button style={{ ...styles.primaryBtn, background: "#f9a825", color: "#000", alignSelf: "flex-start" }} disabled={busy} onClick={() => void onRemirror()}>
+                                שליחה חוזרת ל-Bagel
+                            </button>
+                        </div>
+                    )}
 
                     <div style={{ ...styles.card, borderColor: "#c62828" }}>
                         <h3 style={{ ...styles.cardTitle, color: "#c62828" }}>מחיקת תוכן מקומי (clearTime)</h3>
@@ -341,7 +376,11 @@ const styles: Record<string, React.CSSProperties> = {
     banner: { borderRadius: 6, padding: "10px 14px", fontSize: 14, marginBottom: 12 },
     card: { border: "1px solid #e0e0e0", borderRadius: 8, padding: "12px 16px", background: "#fff", display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
     cardTitle: { margin: 0, fontSize: 16, fontWeight: 700 },
-    checkRow: { display: "flex", alignItems: "flex-start", gap: 8, fontSize: 14, lineHeight: 1.5 },
+    radioGroup: { display: "flex", gap: 12, flexWrap: "wrap" },
+    radioOption: { flex: "1 1 240px", display: "flex", alignItems: "flex-start", gap: 10, border: "2px solid #e0e0e0", borderRadius: 8, padding: "10px 14px", cursor: "pointer", fontSize: 14, lineHeight: 1.5 },
+    radioOptionActive: { borderColor: "#1565c0", background: "#e3f2fd" },
+    radioInput: { width: 18, height: 18, marginTop: 4, cursor: "pointer" },
+    radioHint: { fontSize: 12, color: "#555" },
     field: { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, fontWeight: 600, color: "#444", minWidth: 200 },
     input: { border: "1px solid #ccc", borderRadius: 6, padding: "8px 12px", fontSize: 14, fontWeight: 400 },
     code: { fontSize: 11, background: "#f0f0f0", borderRadius: 4, padding: "1px 6px", direction: "ltr" },

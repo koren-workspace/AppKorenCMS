@@ -28,9 +28,11 @@ import {
 } from "firebase/firestore";
 import { getFirebaseApp } from "../../../firebase_config";
 import { getProdFirestore } from "../../toc-translations/services/prodAuthService";
-import type { CouponDoc, CouponEnv, NewCoupon } from "../types";
+import type { CouponDoc, CouponEnv, CouponProduct, NewCoupon } from "../types";
 
 export const COUPONS_COLLECTION = "coupons";
+/** קטלוג המודים (catalog/{storeId}) – מקור רשימת המוצרים לבחירה */
+const CATALOG_COLLECTION = "catalog";
 
 /** ה-Firestore של הסביבה המבוקשת (פרוד מחייב אימות פרוד לפני כן) */
 export function couponsDb(env: CouponEnv): Firestore {
@@ -59,6 +61,39 @@ function coerce(id: string, data: Record<string, unknown>): CouponDoc {
         usedAt: asDate(data.usedAt),
         createdAt: asDate(data.createdAt),
     };
+}
+
+function heText(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (typeof value === "object" && value !== null) {
+        const v = value as Record<string, unknown>;
+        if (typeof v.he === "string" && v.he) return v.he;
+        if (typeof v.default === "string") return v.default;
+    }
+    return "";
+}
+
+/**
+ * המוצרים של הסביבה מקולקציית `catalog`, לפי סדר התצוגה. מערך ריק = הקטלוג
+ * עדיין לא הועבר לסביבה הזו (המסך נופל לרשימת הגיבוי).
+ */
+export async function loadCatalogProducts(env: CouponEnv): Promise<CouponProduct[]> {
+    const snapshot = await getDocs(collection(couponsDb(env), CATALOG_COLLECTION));
+    const products = snapshot.docs.map(d => {
+        const data = d.data() as Record<string, unknown>;
+        const storeId = typeof data.storeId === "string" && data.storeId ? data.storeId : d.id;
+        const nusach =
+            heText(data.nusach) || (typeof data.nusachId === "string" && data.nusachId ? data.nusachId : "כל הנוסחים");
+        return {
+            id: storeId,
+            title: heText(data.title) || storeId,
+            detail: heText(data.author),
+            nusach,
+            order: typeof data.order === "number" ? data.order : Number.MAX_SAFE_INTEGER,
+        };
+    });
+    products.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    return products.map(({ order: _order, ...p }) => p);
 }
 
 /** כל הקופונים, ממוינים: חדשים ראשונים (מסמך בלי createdAt – בסוף) */

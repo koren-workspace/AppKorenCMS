@@ -16,12 +16,13 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuthController } from "@firecms/core";
-import type { CouponDoc, CouponEnv } from "./coupons/types";
+import type { CouponDoc, CouponEnv, CouponProduct } from "./coupons/types";
 import { STORE_PRODUCTS } from "./coupons/types";
 import { couponCodeHash, looksLikeHash, mintCouponCode } from "./coupons/codes";
 import {
     createCoupon,
     deleteCoupon,
+    loadCatalogProducts,
     loadCoupons,
     resetCouponUsed,
     setCouponActive,
@@ -68,6 +69,11 @@ export function CouponsView() {
     // טופס יצירה
     const [name, setName] = useState("");
     const [selected, setSelected] = useState<string[]>([]);
+    /** המוצרים לבחירה: מהקטלוג של הסביבה, או רשימת הגיבוי כשהוא ריק */
+    const [products, setProducts] = useState<{ list: ReadonlyArray<CouponProduct>; fromCatalog: boolean }>({
+        list: STORE_PRODUCTS,
+        fromCatalog: false,
+    });
     const [extraIds, setExtraIds] = useState("");
     const [expiry, setExpiry] = useState(defaultExpiry);
     const [creating, setCreating] = useState(false);
@@ -82,8 +88,13 @@ export function CouponsView() {
     async function reload(target: CouponEnv) {
         setCoupons(null);
         setLoadError(null);
+        setSelected([]);
         try {
-            setCoupons(await loadCoupons(target));
+            const [coupons, catalog] = await Promise.all([loadCoupons(target), loadCatalogProducts(target)]);
+            setCoupons(coupons);
+            setProducts(
+                catalog.length > 0 ? { list: catalog, fromCatalog: true } : { list: STORE_PRODUCTS, fromCatalog: false }
+            );
         } catch (err: any) {
             setLoadError(String(err?.message ?? err));
         }
@@ -347,17 +358,25 @@ export function CouponsView() {
                         />
                     </label>
                     <div style={styles.field}>
-                        מוצרים
+                        מוצרים {products.fromCatalog ? "(מהקטלוג)" : "(רשימה קבועה – הקטלוג עדיין לא ב-Firestore בסביבה זו)"}
                         <div style={styles.products}>
-                            {STORE_PRODUCTS.map(p => (
-                                <label key={p.id} style={styles.product}>
+                            {products.list.map(p => (
+                                <label
+                                    key={p.id}
+                                    style={{ ...styles.product, ...(selected.includes(p.id) ? styles.productActive : {}) }}
+                                >
                                     <input
                                         type="checkbox"
                                         checked={selected.includes(p.id)}
                                         onChange={() => toggleProduct(p.id)}
+                                        style={{ width: 16, height: 16, marginTop: 3 }}
                                     />
-                                    <span>{p.label}</span>
-                                    <code style={styles.code}>{p.id}</code>
+                                    <span>
+                                        <b>{p.title}</b>
+                                        <span style={styles.productNusach}>{p.nusach}</span>
+                                        {p.detail && <span style={styles.productDetail}>{p.detail}</span>}
+                                        <code style={styles.code}>{p.id}</code>
+                                    </span>
                                 </label>
                             ))}
                         </div>
@@ -568,7 +587,10 @@ const styles: Record<string, React.CSSProperties> = {
     field: { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, fontWeight: 600, color: "#444" },
     input: { border: "1px solid #ccc", borderRadius: 6, padding: "8px 12px", fontSize: 14, fontWeight: 400 },
     products: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 4 },
-    product: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 400 },
+    product: { display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, fontWeight: 400, border: "1px solid #e0e0e0", borderRadius: 6, padding: "6px 10px", cursor: "pointer", lineHeight: 1.5 },
+    productActive: { borderColor: "#1565c0", background: "#e3f2fd" },
+    productNusach: { display: "inline-block", marginInlineStart: 8, background: "#fff3e0", color: "#e65100", borderRadius: 10, padding: "0 8px", fontSize: 12, fontWeight: 600 },
+    productDetail: { display: "block", fontSize: 12, color: "#555" },
     code: { fontSize: 11, background: "#f0f0f0", borderRadius: 4, padding: "1px 6px", direction: "ltr" },
     hint: { fontSize: 12, color: "#777", margin: 0 },
     primaryBtn: {

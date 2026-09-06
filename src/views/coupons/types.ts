@@ -39,20 +39,23 @@ export type NewCoupon = {
     active: boolean;
 };
 
+/** מוצר לבחירה במסך: מזהה חנות + תווית קריאה (כותרת, מחבר, נוסח) */
+export type CouponProduct = { id: string; title: string; detail: string; nusach: string };
+
 /**
- * מזהי המוצרים של קטלוג המודים בפרוד (Google Play / App Store), כפי שהם
- * ב-Bagel `enhancments/items` ב-2026-09. הרשימה קבועה כאן עד שהקטלוג יעבור
- * ל-FireCMS – אז מקשרים אליו במקום.
+ * רשימת גיבוי – מזהי המוצרים של הקטלוג בפרוד (Google Play / App Store), כפי
+ * שהיו ב-Bagel ב-2026-09. המסך טוען את המוצרים מקולקציית `catalog` ב-Firestore
+ * של הסביבה; הרשימה הזו משמשת רק כשהקולקציה עדיין ריקה שם.
  */
-export const STORE_PRODUCTS: ReadonlyArray<{ id: string; label: string }> = [
-    { id: "prep10", label: "הכנה לתפילה" },
-    { id: "prep20", label: "הכנה לתפילה" },
-    { id: "prep30", label: "הכנה לתפילה" },
-    { id: "autoview10", label: "תפילה מכוונת" },
-    { id: "translations10", label: "תרגום לאנגלית" },
-    { id: "translations20", label: "תרגום לאנגלית" },
-    { id: "commentary10", label: "פירוש באנגלית" },
-    { id: "commentary20", label: "פירוש בעברית" },
-    { id: "commentary30", label: "פירוש באנגלית" },
-    { id: "commentary40", label: "פירוש בעברית" },
+export const STORE_PRODUCTS: ReadonlyArray<CouponProduct> = [
+    { id: "prep30", title: "הכנה לתפילה", detail: "הרב דוד אהרון (אנגלית)", nusach: "כל הנוסחים" },
+    { id: "prep20", title: "הכנה לתפילה", detail: "הרב דניאל כהן (עברית)", nusach: "כל הנוסחים" },
+    { id: "prep10", title: "הכנה לתפילה", detail: "הרב יוני לביא (עברית)", nusach: "כל הנוסחים" },
+    { id: "autoview10", title: "תפילה מכוונת", detail: "חלוקה למילה/ביטוי", nusach: "כל הנוסחים" },
+    { id: "commentary40", title: "פירוש בעברית", detail: "הרב יונתן זקס", nusach: "ספרד" },
+    { id: "commentary30", title: "פירוש באנגלית", detail: "הרב יונתן זקס", nusach: "ספרד" },
+    { id: "commentary20", title: "פירוש בעברית", detail: "הרב יונתן זקס", nusach: "אשכנז" },
+    { id: "commentary10", title: "פירוש באנגלית", detail: "הרב יונתן זקס", nusach: "אשכנז" },
+    { id: "translations20", title: "תרגום לאנגלית", detail: "אנגלית", nusach: "אשכנז" },
+    { id: "translations10", title: "תרגום לאנגלית", detail: "הרב יונתן זקס", nusach: "ספרד" },
 ];

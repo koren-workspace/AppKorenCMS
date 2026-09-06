@@ -7,6 +7,7 @@ import fs from "fs"
 import { createRequire } from "module"
 import type * as XLSXTypes from "xlsx"
 import { handleBagelUpdateTimeRequest } from "./api/_lib/handleBagelUpdateTime"
+import { handleBagelFlagsRequest } from "./api/_lib/handleBagelFlags"
 
 // xlsx הוא מודול CJS – createRequire מבטיח טעינה תקינה גם בסביבת ESM
 const _require = createRequire(import.meta.url)
@@ -409,31 +410,34 @@ function cmsChangelogPlugin() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BAGEL_UPDATE_TIME_ENDPOINT = "/api/bagel/update-time"
+const BAGEL_FLAGS_ENDPOINT = "/api/bagel/flags"
 
-/** Vite plugin: מדמה את Vercel Function ל-Bagel בזמן dev */
+/** Vite plugin: מדמה את Vercel Functions ל-Bagel בזמן dev (update-time + flags) */
 function bagelApiDevPlugin(env: Record<string, string>) {
     return {
         name: "bagel-api-dev",
         configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
             server.middlewares.use((req: any, res: any, next: () => void) => {
-                if (req.method !== "PUT" || !req.url?.startsWith(BAGEL_UPDATE_TIME_ENDPOINT)) return next()
+                const isUpdateTime = req.url?.startsWith(BAGEL_UPDATE_TIME_ENDPOINT)
+                const isFlags = req.url?.startsWith(BAGEL_FLAGS_ENDPOINT)
+                if (req.method !== "PUT" || (!isUpdateTime && !isFlags)) return next()
                 const chunks: Buffer[] = []
                 req.on("data", (chunk: Buffer) => chunks.push(chunk))
                 req.on("end", async () => {
                     try {
                         const body = JSON.parse(Buffer.concat(chunks).toString("utf8"))
-                        const result = await handleBagelUpdateTimeRequest(
-                            "PUT",
-                            req.headers.authorization as string | undefined,
-                            body,
-                            {
-                                firebaseProjectId: env.FIREBASE_PROJECT_ID || env.VITE_FIREBASE_PROJECT_ID || "",
-                                prodFirebaseProjectId: env.PROD_FIREBASE_PROJECT_ID || env.VITE_PROD_FIREBASE_PROJECT_ID,
-                                bagelToken: env.BAGEL_TOKEN,
-                                prodBagelToken: env.PROD_BAGEL_TOKEN,
-                                allowedEmails: env.ALLOWED_EMAILS || env.VITE_ALLOWED_EMAILS,
-                            }
-                        )
+                        const serverConfig = {
+                            firebaseProjectId: env.FIREBASE_PROJECT_ID || env.VITE_FIREBASE_PROJECT_ID || "",
+                            prodFirebaseProjectId: env.PROD_FIREBASE_PROJECT_ID || env.VITE_PROD_FIREBASE_PROJECT_ID,
+                            // Locally the Bagel token is usually only present as VITE_BAGEL_TOKEN.
+                            bagelToken: env.BAGEL_TOKEN || env.VITE_BAGEL_TOKEN,
+                            prodBagelToken: env.PROD_BAGEL_TOKEN,
+                            allowedEmails: env.ALLOWED_EMAILS || env.VITE_ALLOWED_EMAILS,
+                        }
+                        const authorization = req.headers.authorization as string | undefined
+                        const result = isFlags
+                            ? await handleBagelFlagsRequest("PUT", authorization, body, serverConfig)
+                            : await handleBagelUpdateTimeRequest("PUT", authorization, body, serverConfig)
                         res.statusCode = result.status
                         if (result.body) {
                             res.setHeader("Content-Type", "application/json")

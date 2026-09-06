@@ -166,6 +166,12 @@ export type ChangeLogEntry = {
         prodCopiedCalendar?: number;
         prodCopiedToc?: boolean;
         prodSkippedProdNewerCount?: number;
+        /**
+         * publish_to_prod: אילו מסמכים דולגו כי פרוד חדש יותר. בלי זה יודעים רק
+         * שדילגנו על תוכן, ולא על מה – וזה בדיוק מה שצריך כדי לאתר פרסום שלא עבר.
+         * מקוצץ, ולכן עשוי להיות קצר מ-prodSkippedProdNewerCount.
+         */
+        prodSkippedProdNewer?: Array<{ path: string; docId: string }>;
         prodFirstReconcileRun?: boolean;
         /** add_toc */
         newTocId?: string;

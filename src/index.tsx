@@ -4,6 +4,7 @@ import { TocTranslationsView } from "./views/TocTranslationsView";
 import { AppCopyView } from "./views/AppCopyView";
 import { ChangeLogView } from "./views/ChangeLogView";
 import { CouponsView } from "./views/CouponsView";
+import { AppFlagsView } from "./views/AppFlagsView";
 
 const appConfig = {
     version: "1",
@@ -28,6 +29,11 @@ const appConfig = {
             path: "coupons",
             name: "קופונים",
             view: <CouponsView />,
+        },
+        {
+            path: "app-flags",
+            name: "הגדרות אפליקציה",
+            view: <AppFlagsView />,
         },
     ],
     propertyConfigs: {

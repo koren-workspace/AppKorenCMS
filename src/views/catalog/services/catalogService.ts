@@ -15,6 +15,7 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDoc,
     getDocs,
     getFirestore,
     setDoc,
@@ -172,6 +173,20 @@ export async function listCatalog(env: CatalogEnv): Promise<CatalogRow[]> {
 export async function saveItem(env: CatalogEnv, item: CatalogItem, editorEmail: string, keep: Record<string, unknown> = {}) {
     const data = { ...keep, ...toDocument(item, editorEmail) };
     await setDoc(doc(catalogDb(env), CATALOG_COLLECTION, item.storeId.trim()), data);
+}
+
+/**
+ * העתקת תוספת אחת מסטייג' לפרוד, כפי שהיא (אותם שדות, כולל ההיסטוריים),
+ * בדריסה של המסמך עם אותו storeId. מחזירה האם המסמך היה קיים בפרוד.
+ */
+export async function copyToProd(storeId: string, editorEmail: string): Promise<{ existed: boolean }> {
+    const source = await getDoc(doc(catalogDb("stage"), CATALOG_COLLECTION, storeId));
+    if (!source.exists()) throw new Error(`התוספת ${storeId} לא נמצאה בסטייג'`);
+    const target = doc(catalogDb("prod"), CATALOG_COLLECTION, storeId);
+    const existed = (await getDoc(target)).exists();
+    const data = { ...(source.data() as Record<string, unknown>), copiedFromStageAt: Timestamp.now(), copiedFromStageBy: editorEmail };
+    await setDoc(target, data);
+    return { existed };
 }
 
 export async function deleteItem(env: CatalogEnv, storeId: string) {

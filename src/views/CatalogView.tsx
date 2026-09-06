@@ -9,6 +9,10 @@
  * מזהה המסמך = storeId = מזהה המוצר בחנויות = מפתח הבעלות באפליקציה. לכן
  * storeId נעול בעריכה של תוספת קיימת; מוצר חדש דורש גם מוצר בחנויות.
  *
+ * זרימת העבודה המומלצת: עורכים ובודקים בסטייג', ואז "העתקה לפרוד" על
+ * התוספת הבודדת (מעתיק את המסמך כפי שהוא, דורס לפי storeId). אין העתקה של
+ * כל הקטלוג בבת אחת, בכוונה.
+ *
  * האפליקציות הישנות קוראות את הקטלוג מ-Bagel; שינוי כאן לא מגיע אליהן.
  */
 
@@ -18,6 +22,7 @@ import { isProdConfigured } from "../firebase_config";
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { isProdAuthenticated } from "./toc-translations/services/prodAuthService";
 import {
+    copyToProd,
     deleteItem,
     listCatalog,
     saveItem,
@@ -136,6 +141,8 @@ export function CatalogView() {
     const [banner, setBanner] = useState<Banner>(null);
     const [busy, setBusy] = useState(false);
     const [prodAuthOpen, setProdAuthOpen] = useState(false);
+    /** העתקה לפרוד שממתינה לסיסמת פרוד */
+    const [pendingCopy, setPendingCopy] = useState<CatalogRow | null>(null);
 
     async function reload(target: CatalogEnv) {
         setRows(undefined);
@@ -169,10 +176,42 @@ export function CatalogView() {
 
     function onProdAuthSuccess() {
         setProdAuthOpen(false);
+        if (pendingCopy) {
+            const row = pendingCopy;
+            setPendingCopy(null);
+            void onCopyToProd(row);
+            return;
+        }
         setEnv("prod");
         setEditing(null);
         setBanner(null);
         void reload("prod");
+    }
+
+    /** העתקת תוספת אחת מסטייג' לפרוד, כפי שהיא. נשאר בסטייג' אחרי ההעתקה. */
+    async function onCopyToProd(row: CatalogRow) {
+        if (busy) return;
+        if (!prodConfigured) {
+            setBanner({ kind: "error", text: "פרוד לא מוגדר בסביבה הזו (חסרים משתני VITE_PROD_FIREBASE_* – קיימים ב-Vercel, לא ב-.env.local המקומי)." });
+            return;
+        }
+        if (!isProdAuthenticated()) {
+            setPendingCopy(row);
+            setProdAuthOpen(true);
+            return;
+        }
+        const name = row.item.title.he || row.item.title.default;
+        if (!window.confirm(`להעתיק את "${name}" (${row.item.storeId}) מסטייג' לפרוד? אם יש בפרוד תוספת עם אותו storeId היא תידרס, וכל המשתמשים בגרסה החדשה יראו את השינוי בכניסה הבאה לחנות.`)) return;
+        setBusy(true);
+        setBanner(null);
+        try {
+            const { existed } = await copyToProd(row.item.storeId, currentUserEmail);
+            setBanner({ kind: "success", text: `${row.item.storeId} הועתק לפרוד (${existed ? "דרס את הקיים" : "נוצר"}).` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `ההעתקה נכשלה: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
     }
 
     const isProd = env === "prod";
@@ -464,6 +503,11 @@ export function CatalogView() {
                                             <button style={styles.linkBtn} disabled={busy} onClick={() => startEdit(row)}>
                                                 עריכה
                                             </button>
+                                            {!isProd && (
+                                                <button style={styles.linkBtn} disabled={busy} onClick={() => void onCopyToProd(row)} title="מעתיק את המסמך כפי שהוא לפרוד">
+                                                    העתקה לפרוד
+                                                </button>
+                                            )}
                                             <button style={{ ...styles.linkBtn, color: "#c62828" }} disabled={busy} onClick={() => void onDelete(row)}>
                                                 מחיקה
                                             </button>
@@ -476,7 +520,15 @@ export function CatalogView() {
                 </div>
             )}
 
-            <ProdAuthModal open={prodAuthOpen} email={currentUserEmail} onSuccess={onProdAuthSuccess} onClose={() => setProdAuthOpen(false)} />
+            <ProdAuthModal
+                open={prodAuthOpen}
+                email={currentUserEmail}
+                onSuccess={onProdAuthSuccess}
+                onClose={() => {
+                    setProdAuthOpen(false);
+                    setPendingCopy(null);
+                }}
+            />
         </div>
     );
 }

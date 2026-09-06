@@ -12,13 +12,23 @@
 
 import { buildCollection, buildProperty } from "@firecms/core";
 
+/** How a bilingual text looks in the list: Hebrew on top, English below, no field labels. */
+const LocalizedPreview = ({ value }: { value?: { default?: string; he?: string } }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.3 }}>
+        <span dir="rtl" style={{ fontWeight: 600 }}>{value?.he ?? ""}</span>
+        <span dir="ltr" style={{ opacity: 0.7, fontSize: "0.9em" }}>{value?.default ?? ""}</span>
+    </div>
+);
+
+/** A bilingual text `{ default: English, he: Hebrew }` – the app shows `he` in Hebrew UI, `default` otherwise. */
 const localized = (name: string, required = false) =>
     buildProperty({
         dataType: "map",
         name,
+        Preview: LocalizedPreview,
         properties: {
-            default: { dataType: "string", name: "אנגלית (default)", validation: { required } },
             he: { dataType: "string", name: "עברית" },
+            default: { dataType: "string", name: "אנגלית", validation: { required } },
         },
     });
 

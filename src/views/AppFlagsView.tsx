@@ -45,6 +45,16 @@ function parseBuild(value: string, label: string): number | null {
     return n;
 }
 
+/** מה להזין ידנית בקונסולת Bagel כשהשיקוף האוטומטי נכשל */
+function manualBagelSteps(flags: AppFlags): string[] {
+    const v = flags.minAppVersion;
+    return [
+        `clearTime → timestamp = ${flags.clearTime ?? 0}`,
+        `App Preferences → freeEnhancements = ${flags.freeEnhancements ? "on" : "off"}`,
+        `minAppVersion → android = ${v.android ?? 0}, ios = ${v.ios ?? 0}`,
+    ];
+}
+
 function describeMirror(results: MirrorResult): string {
     return Object.entries(results)
         .map(([collection, status]) => `${collection}: ${status === "ok" ? "עודכן" : "נכשל"}`)
@@ -170,10 +180,10 @@ export function AppFlagsView() {
                 setForm(formOf(next));
                 setMirrorFailed(true);
                 setBanner({
-                    kind: "error",
-                    text: `נשמר ל-Firestore (האפליקציה החדשה רואה את הערך), אבל השיקוף ל-Bagel נכשל (${err.message}${
-                        Object.keys(err.results).length ? " · " + describeMirror(err.results) : ""
-                    }). האפליקציות הישנות עדיין עם הערך הקודם – ראו "שליחה חוזרת ל-Bagel" למטה.`,
+                    kind: "info",
+                    text: `${successText}. האפליקציה החדשה רואה את הערך. השיקוף האוטומטי ל-Bagel לא עבד (${err.message}), ולכן עד סגירת Bagel יש לעדכן ידנית בקונסולת Bagel של ${
+                        isProd ? "פרוד" : "Stage"
+                    }: ${manualBagelSteps(next).join(" · ")}`,
                 });
             } else {
                 setBanner({ kind: "error", text: `שגיאה בשמירה: ${err?.message ?? err}` });
@@ -209,7 +219,8 @@ export function AppFlagsView() {
                 <div>
                     <h2 style={styles.title}>הגדרות אפליקציה</h2>
                     <p style={styles.subtitle}>
-                        שלושת דגלי השרת · נשמרים ב-Firestore ומשוקפים אוטומטית ל-Bagel · Bagel לא נערך ידנית
+                        שלושת דגלי השרת · נשמרים ב-Firestore (האפליקציה החדשה) · Bagel (האפליקציות הישנות) מתעדכן אוטומטית כשאפשר,
+                        אחרת המסך אומר מה לעדכן שם ידנית
                     </p>
                 </div>
                 <div style={styles.envSwitch}>
@@ -332,10 +343,21 @@ export function AppFlagsView() {
 
                     {mirrorFailed && (
                         <div style={{ ...styles.card, borderColor: "#f9a825", background: "#fffde7" }}>
-                            <h3 style={styles.cardTitle}>שליחה חוזרת ל-Bagel</h3>
+                            <h3 style={styles.cardTitle}>Bagel לא עודכן אוטומטית</h3>
                             <p style={styles.hint}>
-                                השמירה האחרונה נכתבה ל-Firestore אבל לא הגיעה ל-Bagel, ולכן האפליקציות הישנות עדיין עם הערך הקודם.
-                                הכפתור שולח שוב את הערכים השמורים, בלי לשנות כלום. אם זה נכשל שוב, הבעיה ב-Bagel או בטוקן שבשרת.
+                                הערכים נשמרו ב-Firestore (האפליקציה החדשה). האפליקציות הישנות קוראות מ-Bagel, ולכן עד סגירת Bagel
+                                מעדכנים שם ידנית, בקונסולת Bagel של {isProd ? "פרוד" : "Stage"}:
+                            </p>
+                            <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 13, direction: "ltr", textAlign: "left" }}>
+                                {manualBagelSteps(flags).map(step => (
+                                    <li key={step}>
+                                        <code style={styles.code}>{step}</code>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p style={styles.hint}>
+                                השיקוף האוטומטי דורש טוקן Bagel בשרת עם הרשאת read+update על שלוש הקולקציות (ראו docs/app-flags.md).
+                                אפשר לנסות שוב:
                             </p>
                             <button style={{ ...styles.primaryBtn, background: "#f9a825", color: "#000", alignSelf: "flex-start" }} disabled={busy} onClick={() => void onRemirror()}>
                                 שליחה חוזרת ל-Bagel

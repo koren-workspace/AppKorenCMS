@@ -9,7 +9,7 @@ import { catalogCollection } from "./collections/catalog";
 
 const appConfig = {
     version: "1",
-    // The Mods catalog is edited through the plain Firecms collection screen (docs/catalog.md).
+    // The add-ons catalog is edited through the plain Firecms collection screen (docs/catalog.md).
     collections: [catalogCollection],
     views: [
         {

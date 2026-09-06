@@ -1,5 +1,5 @@
 /**
- * catalog – קטלוג המודים (שערים לתפילה) של האפליקציה, קולקציית Firestore
+ * catalog – קטלוג התוספות (שערים לתפילה) של האפליקציה, קולקציית Firestore
  * `catalog/{storeId}`. עבר מ-BagelDB (`enhancments/items`) ב-2026-09; ראו
  * docs/catalog.md.
  *
@@ -25,9 +25,9 @@ const localized = (name: string, required = false) =>
 export const catalogCollection = buildCollection({
     id: "catalog",
     path: "catalog",
-    name: "קטלוג מודים",
-    singularName: "מוד",
-    description: "המוצרים הנמכרים באפליקציה (תרגום, פירוש, הכנה לתפילה, תפילה מכוונת). מזהה המסמך = storeId.",
+    name: "קטלוג תוספות",
+    singularName: "תוספת",
+    description: "התוספות הנמכרות באפליקציה (תרגום, פירוש, הכנה לתפילה, תפילה מכוונת). מזהה המסמך = storeId.",
     icon: "Storefront",
     group: "אפליקציה",
     customId: true,
@@ -39,6 +39,7 @@ export const catalogCollection = buildCollection({
             description: "מזהה המוצר בחנויות ומפתח הבעלות באפליקציה. חייב להיות זהה למזהה המסמך. לא לשנות במוצר קיים.",
             validation: { required: true },
             readOnly: true,
+            hideFromCollection: true,
         },
         kind: {
             dataType: "string",
@@ -106,7 +107,7 @@ export const catalogCollection = buildCollection({
                 },
             },
         }),
-        bagelId: { dataType: "string", name: "מזהה Bagel (היסטורי)", readOnly: true },
-        migratedFromBagelAt: { dataType: "date", name: "הועבר מ-Bagel", readOnly: true },
+        bagelId: { dataType: "string", name: "מזהה Bagel (היסטורי)", readOnly: true, hideFromCollection: true },
+        migratedFromBagelAt: { dataType: "date", name: "הועבר מ-Bagel", readOnly: true, hideFromCollection: true },
     },
 });

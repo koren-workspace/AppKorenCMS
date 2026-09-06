@@ -12,6 +12,14 @@
 
 import { buildCollection, buildProperty } from "@firecms/core";
 
+const KIND_LABELS: Record<string, string> = {
+    translation: "תרגום",
+    commentary: "פירוש",
+    preparation: "הכנה לתפילה",
+    improved: "תפילה מכוונת",
+    narration: "הקראה",
+};
+
 /** How a bilingual text looks in the list: Hebrew on top, English below, no field labels. */
 const LocalizedPreview = ({ value }: { value?: { default?: string; he?: string } }) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.3 }}>
@@ -55,13 +63,11 @@ export const catalogCollection = buildCollection({
             dataType: "string",
             name: "סוג",
             validation: { required: true },
-            enumValues: {
-                translation: "תרגום (translation)",
-                commentary: "פירוש (commentary)",
-                preparation: "הכנה לתפילה (preparation)",
-                improved: "תפילה מכוונת (improved)",
-                narration: "הקראה (narration)",
-            },
+            enumValues: KIND_LABELS,
+            // Plain text in the list instead of Firecms's colored chips.
+            Preview: ({ value }: { value?: string }) => (
+                <span>{value !== undefined ? KIND_LABELS[value] ?? value : ""}</span>
+            ),
         },
         order: {
             dataType: "number",

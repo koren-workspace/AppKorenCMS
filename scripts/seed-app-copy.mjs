@@ -1,5 +1,6 @@
 /**
- * seed-app-copy – זריעה חד-פעמית של קולקציית `app-copy` מקבצי ה-i18n של האפליקציה.
+ * seed-app-copy – הוספת מפתחות חדשים לקולקציית `app-copy` מקבצי ה-i18n של
+ * האפליקציה, והשוואה בין מה שיושב ב-CMS לבין מה שכתוב בקוד.
  *
  * קורא את en.ts + he.ts מריפו koren-tefilla, מחלץ לכל מפתח:
  *   - הטקסטים בשתי השפות (טרנספילציה אמיתית עם typescript – לא regex על ערכים)
@@ -7,11 +8,20 @@
  *   - description: שורות ההערה שמעל המפתח (אם יש)
  *   - order: סדר ההופעה בקובץ (לתצוגה יציבה ב-CMS)
  *
- * ואז כותב מסמך לכל מפתח (מזהה המסמך = המפתח) עם timestamp = Date.now().
- * מסמכים קיימים שהתוכן שלהם זהה מדולגים (זריעה חוזרת בטוחה).
+ * ואז כותב מסמך לכל מפתח שעדיין לא קיים בקולקציה, עם timestamp = Date.now().
+ *
+ * מסמכים קיימים לעולם לא נדרסים. זה מכוון ולא אופטימיזציה: ברגע שמפתח נזרע,
+ * ה-CMS הוא הסמכות עליו והערך שבקוד משמש רק כגיבוי עד לסנכרון הראשון. גרסה
+ * קודמת של הסקריפט כתבה מחדש כל מסמך שתוכנו שונה מהקוד — כלומר בדיוק את
+ * המסמכים שנערכו ידנית — והרצה שלה הייתה מוחקת כל עריכה שנעשתה אי פעם ב-CMS.
+ *
+ * --compare מדפיס את הפער בין הקוד ל-CMS בלי לכתוב כלום: מפתחות שחסרים
+ * ב-CMS, מפתחות שהטקסט שלהם שונה (שם שינוי בקוד לא מגיע למשתמשים — ה-CMS
+ * גובר), ומפתחות שכבר לא קיימים בקוד.
  *
  * שימוש:
  *   node scripts/seed-app-copy.mjs --dry-run
+ *   SEED_EMAIL=... SEED_PASSWORD=... node scripts/seed-app-copy.mjs --compare
  *   SEED_EMAIL=... SEED_PASSWORD=... node scripts/seed-app-copy.mjs
  *   SEED_EMAIL=... SEED_PASSWORD=... node scripts/seed-app-copy.mjs --env prod
  *   node scripts/seed-app-copy.mjs --app-repo /path/to/koren-tefilla --dry-run
@@ -39,6 +49,7 @@ const cmsRoot = resolve(__dirname, "..");
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const compare = args.includes("--compare");
 const envIndex = args.indexOf("--env");
 const targetEnv = envIndex >= 0 ? args[envIndex + 1] : "stage";
 const repoIndex = args.indexOf("--app-repo");
@@ -162,7 +173,7 @@ console.log(`נמצאו ${docs.length} מפתחות ב-${enPath}`);
 const categories = [...new Set(docs.map(d => d.category))];
 console.log(`מדורים (${categories.length}): ${categories.join(" | ")}`);
 
-if (dryRun) {
+if (dryRun && !compare) {
     console.log("\n--dry-run: שלושת המסמכים הראשונים לדוגמה:\n");
     console.log(JSON.stringify(docs.slice(0, 3), null, 2));
     process.exit(0);
@@ -198,35 +209,61 @@ console.log(`מתחבר ל-${targetEnv} (${firebaseConfig.projectId}) בתור $
 await signInWithEmailAndPassword(getAuth(app), email, password);
 const db = getFirestore(app);
 
-// דילוג על מסמכים קיימים עם תוכן זהה (זריעה חוזרת בטוחה)
 const existing = new Map();
 const snapshot = await getDocs(collection(db, "app-copy"));
 for (const d of snapshot.docs) existing.set(d.id, d.data());
 
-const identical = d => {
+const missing = docs.filter(d => !existing.has(d.key));
+const drifted = docs.filter(d => {
     const cur = existing.get(d.key);
-    return (
-        cur &&
-        cur.he === d.he &&
-        cur.en === d.en &&
-        cur.category === d.category &&
-        cur.description === d.description &&
-        cur.order === d.order
-    );
-};
-const toWrite = docs.filter(d => !identical(d));
-console.log(`${existing.size} מסמכים קיימים; ${toWrite.length} ייכתבו (${docs.length - toWrite.length} זהים ידולגו)`);
+    return cur && (cur.he !== d.he || cur.en !== d.en);
+});
+
+if (compare) {
+    const codeKeys = new Set(docs.map(d => d.key));
+    const orphans = [...existing.keys()].filter(key => !codeKeys.has(key));
+    const short = value => (value.length > 70 ? `${value.slice(0, 70)}…` : value);
+
+    console.log(`\nב-CMS: ${existing.size} מפתחות | בקוד: ${docs.length}`);
+
+    console.log(`\n— חסרים ב-CMS (${missing.length}) — הרצה רגילה תוסיף אותם:`);
+    for (const d of missing) console.log(`    ${d.key}  [${d.category}]`);
+
+    console.log(`\n— טקסט שונה בין ה-CMS לקוד (${drifted.length}) — ה-CMS גובר, ולכן שינוי בקוד לא מגיע למשתמשים:`);
+    for (const d of drifted) {
+        const cur = existing.get(d.key);
+        console.log(`    ${d.key}`);
+        if (cur.he !== d.he) {
+            console.log(`        he | CMS: ${short(cur.he)}`);
+            console.log(`           | קוד: ${short(d.he)}`);
+        }
+        if (cur.en !== d.en) {
+            console.log(`        en | CMS: ${short(cur.en)}`);
+            console.log(`           | קוד: ${short(d.en)}`);
+        }
+    }
+
+    console.log(`\n— ב-CMS אבל כבר לא קיימים בקוד (${orphans.length}):`);
+    for (const key of orphans) console.log(`    ${key}`);
+
+    process.exit(0);
+}
+
+console.log(`${existing.size} מסמכים קיימים; ${missing.length} מפתחות חדשים ייכתבו`);
+if (drifted.length > 0) {
+    console.log(`${drifted.length} מסמכים קיימים שהטקסט שלהם שונה מהקוד — לא נוגעים בהם (--compare לפירוט)`);
+}
 
 const now = Date.now();
 const BATCH = 450;
-for (let i = 0; i < toWrite.length; i += BATCH) {
+for (let i = 0; i < missing.length; i += BATCH) {
     const batch = writeBatch(db);
-    for (const d of toWrite.slice(i, i + BATCH)) {
+    for (const d of missing.slice(i, i + BATCH)) {
         batch.set(doc(db, "app-copy", d.key), { ...d, timestamp: now });
     }
     await batch.commit();
-    console.log(`נכתבו ${Math.min(i + BATCH, toWrite.length)}/${toWrite.length}`);
+    console.log(`נכתבו ${Math.min(i + BATCH, missing.length)}/${missing.length}`);
 }
 
-console.log(`הזריעה הושלמה (timestamp=${now}).`);
+console.log(`הסתיים: ${missing.length} מפתחות חדשים נוספו (timestamp=${now}).`);
 process.exit(0);

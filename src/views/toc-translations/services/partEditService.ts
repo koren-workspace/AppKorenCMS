@@ -10,7 +10,7 @@
  */
 
 import { Entity } from "@firecms/core";
-import { getFirestore, doc as firestoreDoc, writeBatch } from "firebase/firestore";
+import { deleteField, getFirestore, doc as firestoreDoc, writeBatch } from "firebase/firestore";
 import { getFirebaseApp } from "../../../firebase_config";
 import { itemsCollection, dbUpdateTimeCollection } from "../collections";
 import {
@@ -201,25 +201,55 @@ const BOOLEAN_ITEM_FIELDS = [
 const OPTIONAL_STRING_FIELDS = ["titleType", "title", "role", "reference", "specialSign"] as const;
 
 /**
- * מנקה ערכי ברירת מחדל לפני שמירה ל-Firestore:
- * - שדות nullable (cohanim/hazan/minyan): מוסר אם null/undefined
- * - שדות בוליאניים: מוסר אם false/undefined (היעדר = false באפליקציה)
- * - שדות מחרוזת אופציונליים: מוסר אם ריק
+ * איך לסמן שדה שערכו ברירת מחדל, כשכותבים מסמך קיים.
+ *
+ * כל הכתיבות שלנו הן merge, ולכן השמטת מפתח אומרת ל-Firestore "אל תיגע בשדה
+ * הזה" — והערך הישן שורד. זה מה שגרם לכך שהורדת ✓ מפריט קיים לא נשמרה: הערך
+ * הישן (למשל noSpace: true) נשאר במסמך. כדי למחוק באמת צריך לשלוח סמן, והסמן
+ * שונה בין שני מסלולי הכתיבה:
+ *
+ * - "firecms"   — דרך dataSource.saveEntity. cmsToFirestoreModel ממיר שם
+ *                 undefined ל-deleteField() בעצמו; סמן deleteField() מפורש
+ *                 דווקא היה נהרס, כי ההמרה עוברת רקורסיבית על כל אובייקט
+ *                 ובונה ממנו אובייקט רגיל חדש.
+ * - "firestore" — כתיבה ישירה ב-SDK (העותק לפרוד). שם צריך deleteField() ממש;
+ *                 undefined היה נדחה כערך לא חוקי.
+ * - "omit"      — מסמך חדש. אין ערך קודם למחוק, אז פשוט משמיטים את המפתח.
  */
-export function stripDefaultFields(values: Record<string, any>): Record<string, any> {
+export type DefaultFieldsMode = "firecms" | "firestore" | "omit";
+
+/**
+ * מנקה ערכי ברירת מחדל לפני שמירה ל-Firestore:
+ * - שדות nullable (cohanim/hazan/minyan): מנוקה אם null/undefined
+ * - שדות בוליאניים: מנוקה אם false/undefined (היעדר = false באפליקציה)
+ * - שדות מחרוזת אופציונליים: מנוקה אם ריק
+ *
+ * שדה שאינו קיים בקלט לא מסומן למחיקה — אין מה לנקות, ואין טעם לנפח כל כתיבה
+ * בסמני מחיקה לשדות שממילא לא היו שם.
+ */
+export function stripDefaultFields(
+    values: Record<string, any>,
+    mode: DefaultFieldsMode = "omit"
+): Record<string, any> {
     const cleaned = { ...values };
+    const clear = (field: string) => {
+        if (!(field in cleaned)) return;
+        if (mode === "omit") delete cleaned[field];
+        else if (mode === "firecms") cleaned[field] = undefined;
+        else cleaned[field] = deleteField();
+    };
     for (const field of NULLABLE_FILTER_FIELDS) {
         if (cleaned[field] === null || cleaned[field] === undefined) {
-            delete cleaned[field];
+            clear(field);
         }
     }
     for (const field of BOOLEAN_ITEM_FIELDS) {
-        if (!cleaned[field]) delete cleaned[field];
+        if (!cleaned[field]) clear(field);
     }
     for (const field of OPTIONAL_STRING_FIELDS) {
         const v = cleaned[field];
         if (v == null || (typeof v === "string" && v.trim() === "")) {
-            delete cleaned[field];
+            clear(field);
         }
     }
     return cleaned;
@@ -260,7 +290,10 @@ export async function savePartItems(
             return dataSource.saveEntity({
                 path,
                 entityId,
-                values: stripDefaultFields({ ...values, timestamp: now }),
+                values: stripDefaultFields(
+                    { ...values, timestamp: now },
+                    isNew ? "omit" : "firecms"
+                ),
                 status: isNew ? "new" : "existing",
                 collection: itemsCollection,
             });

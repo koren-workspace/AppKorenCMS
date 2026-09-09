@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const DELETE_SENTINEL = vi.hoisted(() => ({ __sentinel: "deleteField" }));
 const firestoreBatchWrites = vi.hoisted(() => [] as Array<{ ref: any; data: any }>);
 const firestoreBatchCommits = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
@@ -18,6 +19,7 @@ const firestoreBatchCommits = vi.hoisted(() => vi.fn().mockResolvedValue(undefin
 vi.mock("@firecms/cloud", () => ({ Entity: class {}, default: {} }));
 vi.mock("firebase/firestore", () => ({
     getFirestore: vi.fn(() => ({})),
+    deleteField: vi.fn(() => DELETE_SENTINEL),
     doc: vi.fn((_db: any, path: string, id: string) => ({ path, id })),
     writeBatch: vi.fn(() => ({
         set: (ref: any, data: any) => {
@@ -1604,24 +1606,69 @@ describe("partEditService – זהות בין הכתיבה לסטייג' לעו�
         firestoreBatchWrites.length = 0;
     });
 
-    it("stripDefaultFields מסיר בוליאנים false, מחרוזות ריקות ו-null", () => {
-        const cleaned = stripDefaultFields({
+    const withDefaults = () => ({
+        content: "א",
+        bold: false,
+        red: true,
+        title: "",
+        role: "hazan",
+        cohanim: null,
+        minyan: true,
+        timestamp: 5,
+    });
+
+    it('מצב "omit" (מסמך חדש) משמיט את שדות ברירת המחדל', () => {
+        expect(stripDefaultFields(withDefaults(), "omit")).toEqual({
             content: "א",
-            bold: false,
             red: true,
-            title: "",
             role: "hazan",
-            cohanim: null,
             minyan: true,
             timestamp: 5,
         });
-        expect(cleaned).toEqual({
-            content: "א",
-            red: true,
-            role: "hazan",
-            minyan: true,
-            timestamp: 5,
+    });
+
+    it('מצב "firecms" מציב undefined – FireCMS ממיר אותו ל-deleteField', () => {
+        const cleaned = stripDefaultFields(withDefaults(), "firecms");
+        // המפתחות קיימים עם undefined; השמטתם הייתה משאירה את הערך הישן (merge)
+        expect("bold" in cleaned).toBe(true);
+        expect(cleaned.bold).toBeUndefined();
+        expect(cleaned.title).toBeUndefined();
+        expect(cleaned.cohanim).toBeUndefined();
+        expect(cleaned.red).toBe(true);
+        expect(cleaned.minyan).toBe(true);
+        expect(cleaned.content).toBe("א");
+    });
+
+    it('מצב "firestore" (כתיבה ישירה לפרוד) מציב סמן deleteField', () => {
+        const cleaned = stripDefaultFields(withDefaults(), "firestore");
+        expect(cleaned.bold).toBe(DELETE_SENTINEL);
+        expect(cleaned.title).toBe(DELETE_SENTINEL);
+        expect(cleaned.cohanim).toBe(DELETE_SENTINEL);
+        expect(cleaned.red).toBe(true);
+    });
+
+    it("שדה שלא קיים בקלט לא מסומן למחיקה", () => {
+        const cleaned = stripDefaultFields({ content: "א" }, "firecms");
+        expect("bold" in cleaned).toBe(false);
+        expect("title" in cleaned).toBe(false);
+    });
+
+    it("התרחיש של noSpace: הורדת ✓ מפריט קיים נשלחת כמחיקה, לא כהשמטה", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const dataSource = { fetchCollection: vi.fn(), saveEntity, deleteEntity: vi.fn() };
+
+        await savePartItems(dataSource, {
+            path: "translations/0-ashkenaz/prayers/1015010/items",
+            changedIds: ["103250811270"],
+            // הפריט היה noSpace: true בשרת, והמשתמש הוריד את הסימון
+            localValues: { "103250811270": { content: "א", noSpace: false } },
+            timestamp: 111,
         });
+
+        const saved = saveEntity.mock.calls[0][0].values;
+        expect(saveEntity.mock.calls[0][0].status).toBe("existing");
+        expect("noSpace" in saved).toBe(true);
+        expect(saved.noSpace).toBeUndefined();
     });
 
     it("savePartItems משתמש ב-timestamp שהועבר, כדי שפרוד יקבל אותה חותמת", async () => {

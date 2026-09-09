@@ -998,10 +998,11 @@ export function usePartEdit(context: PartEditContext) {
                     // פריטים ראשיים (מהתרגום הנוכחי)
                     changedIdList.forEach((id) => {
                         const isNew = id.startsWith("new_");
-                        const vals = stripDefaultFields({
-                            ...localValues[id],
-                            timestamp: saveTimestamp,
-                        });
+                        // "firestore": doSavePartToProd כותב ישירות ב-SDK, לא דרך FireCMS
+                        const vals = stripDefaultFields(
+                            { ...localValues[id], timestamp: saveTimestamp },
+                            isNew ? "omit" : "firestore"
+                        );
                         const entityId = isNew ? String(localValues[id]?.itemId ?? id) : id;
                         next.set(`${path}/${entityId}`, { path, entityId, values: vals });
                     });
@@ -1015,11 +1016,10 @@ export function usePartEdit(context: PartEditContext) {
                             const ents = enhancements[tid] ?? [];
                             const ent = ents.find((e: any) => e.id === eid);
                             const base = ent?.values ?? {};
-                            const vals = stripDefaultFields({
-                                ...base,
-                                ...enhancementLocalValues[eid],
-                                timestamp: saveTimestamp,
-                            });
+                            const vals = stripDefaultFields(
+                                { ...base, ...enhancementLocalValues[eid], timestamp: saveTimestamp },
+                                "firestore"
+                            );
                             next.set(`${enhPath}/${eid}`, {
                                 path: enhPath,
                                 entityId: eid,
@@ -2718,10 +2718,11 @@ export function usePartEdit(context: PartEditContext) {
                 basePendingWrite = {
                     path: basePath,
                     entityId: baseEntityId,
-                    values: stripDefaultFields({
-                        ...localValues[addTranslationBaseItem.id],
-                        timestamp: baseSaveTimestamp,
-                    }),
+                    // פריט חדש (baseIsNew) – אין ערך קודם בפרוד למחוק
+                    values: stripDefaultFields(
+                        { ...localValues[addTranslationBaseItem.id], timestamp: baseSaveTimestamp },
+                        "omit"
+                    ),
                 };
             }
 

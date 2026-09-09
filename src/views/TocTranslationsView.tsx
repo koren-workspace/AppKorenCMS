@@ -314,6 +314,9 @@ export function TocTranslationsView() {
                 saving={partEdit.saving || nav.isSaving}
                 onFinalPublish={partEdit.handleFinalPublish}
                 onPublishToProd={partEdit.isProdFeatureEnabled ? partEdit.handlePublishToProd : undefined}
+                onPreviewPublishToProd={
+                    partEdit.isProdFeatureEnabled ? partEdit.previewPublishToProd : undefined
+                }
                 pendingProdNavCount={nav.pendingProdNavCount}
                 onSaveTocToProd={
                     partEdit.isProdFeatureEnabled ? nav.handleSaveTocToProd : undefined

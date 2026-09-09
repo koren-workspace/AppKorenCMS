@@ -72,6 +72,60 @@ export type ReconcileResult = {
 
 export type ReconcileProgress = (message: string) => void;
 
+/** מסמך שהתכנון סימן להעתקה לפרוד */
+export type ReconcileCopy = {
+    path: string;
+    docId: string;
+    data: Record<string, any>;
+    /** "missing" = אינו קיים בפרוד; "changed" = קיים אבל ערכיו שונים */
+    reason: "missing" | "changed";
+    kind: "item" | "calendar" | "toc";
+};
+
+/**
+ * תוצאת שלב התכנון — מה *היה* מועתק, בלי לכתוב כלום.
+ * משמש גם את התצוגה המקדימה שלפני האישור וגם את הפרסום עצמו.
+ */
+export type ReconcilePlan = {
+    scannedDocs: number;
+    copies: ReconcileCopy[];
+    skippedProdNewer: Array<{ path: string; docId: string }>;
+    firstRun: boolean;
+    /** החותמת שתוטבע במסמכים המועתקים */
+    stampTimestamp: number;
+};
+
+/** פירוק מסמך מתוכנן לתצוגה בממשק (טהור – נבדק ביחידה) */
+export type CopySummary = {
+    kind: ReconcileCopy["kind"];
+    reason: ReconcileCopy["reason"];
+    docId: string;
+    translationId?: string;
+    prayerId?: string;
+    /** תחילת התוכן, לזיהוי מהיר של הפריט */
+    snippet?: string;
+};
+
+const SNIPPET_MAX = 60;
+
+export function summarizeCopy(copy: ReconcileCopy): CopySummary {
+    const match = /^translations\/([^/]+)\/prayers\/([^/]+)\/items$/.exec(copy.path);
+    const rawContent = copy.data?.content;
+    const content = typeof rawContent === "string" ? rawContent.trim() : "";
+    return {
+        kind: copy.kind,
+        reason: copy.reason,
+        docId: copy.docId,
+        translationId: match?.[1],
+        prayerId: match?.[2],
+        snippet: content
+            ? content.length > SNIPPET_MAX
+                ? `${content.slice(0, SNIPPET_MAX)}…`
+                : content
+            : undefined,
+    };
+}
+
 /** אוסף את כל צמדי (translationId, prayerId) מתוך אובייקט ה־TOC של הנוסח */
 export function collectTranslationPrayerPairs(tocData: any): TranslationPrayerPair[] {
     const pairs: TranslationPrayerPair[] = [];
@@ -133,7 +187,7 @@ export function shouldCopyToProd(
     return stageTs >= prodTs ? "copy" : "skip-prod-newer";
 }
 
-type PendingCopy = { path: string; docId: string; data: Record<string, any> };
+
 
 /** מריץ מיפוי אסינכרוני עם מגבלת מקביליות */
 async function mapWithConcurrency<T, R>(
@@ -179,10 +233,11 @@ async function reconcileCollection(
     stageDb: Firestore,
     prodDb: Firestore,
     path: string,
+    kind: ReconcileCopy["kind"],
     since: number,
     now: number,
     skippedProdNewer: Array<{ path: string; docId: string }>
-): Promise<{ scanned: number; copies: PendingCopy[] }> {
+): Promise<{ scanned: number; copies: ReconcileCopy[] }> {
     const stageCol = collection(stageDb, path);
     const stageSnap = await getDocs(
         since > 0 ? query(stageCol, where("timestamp", ">=", since)) : stageCol
@@ -195,13 +250,19 @@ async function reconcileCollection(
         stageSnap.docs.map((d) => d.id)
     );
 
-    const copies: PendingCopy[] = [];
+    const copies: ReconcileCopy[] = [];
     for (const stageDoc of stageSnap.docs) {
         const stageData = stageDoc.data();
         const decision = shouldCopyToProd(stageData, prodMap.get(stageDoc.id));
         if (decision === "copy") {
             // timestamp טרי – כדי שמכשירים עם watermark מהפרסום הקודם ימשכו את המסמך
-            copies.push({ path, docId: stageDoc.id, data: { ...stageData, timestamp: now } });
+            copies.push({
+                path,
+                docId: stageDoc.id,
+                data: { ...stageData, timestamp: now },
+                reason: prodMap.has(stageDoc.id) ? "changed" : "missing",
+                kind,
+            });
         } else if (decision === "skip-prod-newer") {
             skippedProdNewer.push({ path, docId: stageDoc.id });
         }
@@ -210,15 +271,15 @@ async function reconcileCollection(
 }
 
 /**
- * סנכרון מבוסס־השוואה של נוסח שלם: פריטים + לוח שנה + מסמך TOC.
- * לא מעדכן את העוגן — זה באחריות הקורא (doPublishToProd), אחרי שגם ה־watermark
- * וה־Bagel עודכנו, כדי שכשל באמצע ישאיר את העוגן מאחור והריצה הבאה תשלים.
+ * שלב התכנון: משווה סטייג' מול פרוד ומחזיר את רשימת המסמכים שהיו מועתקים —
+ * בלי לכתוב כלום. קורא בלבד, ולכן בטוח להריץ אותו גם רק כדי להציג למשתמש
+ * מה עומד לצאת לפרוד לפני שהוא מאשר.
  */
-export async function reconcileNusachToProd(params: {
+export async function planNusachReconcile(params: {
     tocData: any;
     tocId: string;
     onProgress?: ReconcileProgress;
-}): Promise<ReconcileResult> {
+}): Promise<ReconcilePlan> {
     const { tocData, tocId, onProgress } = params;
     const stageDb = getFirestore(getFirebaseApp());
     const prodDb = getProdFirestore();
@@ -238,13 +299,14 @@ export async function reconcileNusachToProd(params: {
 
     const skippedProdNewer: Array<{ path: string; docId: string }> = [];
     let scannedDocs = 0;
-    const itemCopies: PendingCopy[] = [];
+    const copies: ReconcileCopy[] = [];
 
     const pairResults = await mapWithConcurrency(pairs, PAIR_CONCURRENCY, (pair) =>
         reconcileCollection(
             stageDb,
             prodDb,
             `translations/${pair.translationId}/prayers/${pair.prayerId}/items`,
+            "item",
             since,
             now,
             skippedProdNewer
@@ -252,22 +314,23 @@ export async function reconcileNusachToProd(params: {
     );
     for (const r of pairResults) {
         scannedDocs += r.scanned;
-        itemCopies.push(...r.copies);
+        copies.push(...r.copies);
     }
 
-    // לוח שנה – אותו כלל, קולקציה אחת
+    // לוח שנה – אותו כלל, קולקציה אחת (גלובלית לכל הנוסחים)
     const calendarResult = await reconcileCollection(
         stageDb,
         prodDb,
+        "calendar",
         "calendar",
         since,
         now,
         skippedProdNewer
     );
     scannedDocs += calendarResult.scanned;
+    copies.push(...calendarResult.copies);
 
     // מסמך ה־TOC של הנוסח
-    let copiedToc = false;
     const stageTocSnap = await getDoc(doc(stageDb, "toc", tocId));
     if (stageTocSnap.exists()) {
         const prodTocSnap = await getDoc(doc(prodDb, "toc", tocId));
@@ -275,25 +338,58 @@ export async function reconcileNusachToProd(params: {
             stageTocSnap.data() as Record<string, any>,
             prodTocSnap.exists() ? (prodTocSnap.data() as Record<string, any>) : undefined
         );
-        if (decision === "copy") copiedToc = true;
-        else if (decision === "skip-prod-newer")
+        if (decision === "copy") {
+            copies.push({
+                path: "toc",
+                docId: tocId,
+                data: { ...(stageTocSnap.data() as Record<string, any>), timestamp: now },
+                reason: prodTocSnap.exists() ? "changed" : "missing",
+                kind: "toc",
+            });
+        } else if (decision === "skip-prod-newer") {
             skippedProdNewer.push({ path: "toc", docId: tocId });
+        }
     }
 
-    const allCopies: PendingCopy[] = [...itemCopies, ...calendarResult.copies];
-    if (copiedToc) {
-        allCopies.push({
-            path: "toc",
-            docId: tocId,
-            data: { ...(stageTocSnap.data() as Record<string, any>), timestamp: now },
-        });
-    }
+    return { scannedDocs, copies, skippedProdNewer, firstRun, stampTimestamp: now };
+}
 
-    if (allCopies.length > 0) {
-        onProgress?.(`מעתיק ${allCopies.length} מסמכים לפרוד...`);
-        for (let i = 0; i < allCopies.length; i += WRITE_BATCH_SIZE) {
+/** סופר את המסמכים המתוכננים לפי סוג – לתצוגה ולתיעוד ביומן */
+export function countCopiesByKind(copies: ReconcileCopy[]): {
+    items: number;
+    calendar: number;
+    toc: number;
+} {
+    return {
+        items: copies.filter((c) => c.kind === "item").length,
+        calendar: copies.filter((c) => c.kind === "calendar").length,
+        toc: copies.filter((c) => c.kind === "toc").length,
+    };
+}
+
+/**
+ * סנכרון מבוסס־השוואה של נוסח שלם: פריטים + לוח שנה + מסמך TOC.
+ *
+ * מריץ תכנון טרי ואז כותב. התכנון נעשה כאן מחדש בכוונה — גם כשהמשתמש כבר ראה
+ * תצוגה מקדימה — כדי שהכתיבה תתבסס על מצב עדכני ולא על תמונה שהתיישנה.
+ *
+ * לא מעדכן את העוגן — זה באחריות הקורא (doPublishToProd), אחרי שגם ה־watermark
+ * וה־Bagel עודכנו, כדי שכשל באמצע ישאיר את העוגן מאחור והריצה הבאה תשלים.
+ */
+export async function reconcileNusachToProd(params: {
+    tocData: any;
+    tocId: string;
+    onProgress?: ReconcileProgress;
+}): Promise<ReconcileResult> {
+    const { onProgress } = params;
+    const plan = await planNusachReconcile(params);
+    const prodDb = getProdFirestore();
+
+    if (plan.copies.length > 0) {
+        onProgress?.(`מעתיק ${plan.copies.length} מסמכים לפרוד...`);
+        for (let i = 0; i < plan.copies.length; i += WRITE_BATCH_SIZE) {
             const batch = writeBatch(prodDb);
-            for (const copy of allCopies.slice(i, i + WRITE_BATCH_SIZE)) {
+            for (const copy of plan.copies.slice(i, i + WRITE_BATCH_SIZE)) {
                 // set ללא merge – פרוד הופך לעותק מדויק של סטייג' (כולל שדות שהוסרו)
                 batch.set(doc(prodDb, copy.path, copy.docId), copy.data);
             }
@@ -301,19 +397,20 @@ export async function reconcileNusachToProd(params: {
         }
     }
 
-    if (skippedProdNewer.length > 0) {
+    if (plan.skippedProdNewer.length > 0) {
         console.warn(
-            `[CMS] reconcileNusachToProd: ${skippedProdNewer.length} docs differ but prod is newer (direct prod edits?) – NOT overwritten:`,
-            skippedProdNewer
+            `[CMS] reconcileNusachToProd: ${plan.skippedProdNewer.length} docs differ but prod is newer (direct prod edits?) – NOT overwritten:`,
+            plan.skippedProdNewer
         );
     }
 
+    const counts = countCopiesByKind(plan.copies);
     return {
-        scannedDocs,
-        copiedItems: itemCopies.length,
-        copiedCalendar: calendarResult.copies.length,
-        copiedToc,
-        skippedProdNewer,
-        firstRun,
+        scannedDocs: plan.scannedDocs,
+        copiedItems: counts.items,
+        copiedCalendar: counts.calendar,
+        copiedToc: counts.toc > 0,
+        skippedProdNewer: plan.skippedProdNewer,
+        firstRun: plan.firstRun,
     };
 }

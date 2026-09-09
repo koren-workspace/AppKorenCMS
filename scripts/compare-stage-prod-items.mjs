@@ -40,6 +40,10 @@
  *   ... node scripts/compare-stage-prod-items.mjs --samples 40
  *   ... node scripts/compare-stage-prod-items.mjs --json /tmp/diff.json
  *
+ * הדוח הקריא נכתב ל-stdout, והודעות המצב וההתקדמות ל-stderr — כך שהפניה
+ * לקובץ נותנת את הדוח נקי, וההתקדמות עדיין נראית על המסך בזמן הריצה:
+ *   ... node scripts/compare-stage-prod-items.mjs --samples 1000 > report.txt
+ *
  * קונפיגורציה: נקרא מ-.env.local (או .env) של ה-CMS —
  *   stage: VITE_FIREBASE_API_KEY / VITE_FIREBASE_PROJECT_ID / VITE_FIREBASE_AUTH_DOMAIN
  *   prod:  VITE_PROD_FIREBASE_API_KEY / VITE_PROD_FIREBASE_PROJECT_ID / VITE_PROD_FIREBASE_AUTH_DOMAIN
@@ -170,9 +174,10 @@ const { getFirestore, collection, getDocs } = await import("firebase/firestore")
 const stageApp = initializeApp(stageConfig, "stage");
 const prodApp = initializeApp(prodConfig, "prod");
 
-console.log(`מתחבר לסטייג' (${stageConfig.projectId}) בתור ${stageEmail}...`);
+// הודעות מצב והתקדמות ל-stderr, כדי ש-`> report.txt` יקבל את הדוח בלבד
+console.error(`מתחבר לסטייג' (${stageConfig.projectId}) בתור ${stageEmail}...`);
 await signInWithEmailAndPassword(getAuth(stageApp), stageEmail, stagePassword);
-console.log(`מתחבר לפרוד (${prodConfig.projectId}) בתור ${prodEmail}...`);
+console.error(`מתחבר לפרוד (${prodConfig.projectId}) בתור ${prodEmail}...`);
 await signInWithEmailAndPassword(getAuth(prodApp), prodEmail, prodPassword);
 
 const stageDb = getFirestore(stageApp);
@@ -237,7 +242,7 @@ for (const [tocId, tocData] of nusachim) {
     }
 }
 
-console.log(
+console.error(
     `\nמשווה ${nusachim.length} נוסחים (${nusachim.map(([id]) => id).join(", ")}) — ` +
         `${pairs.length} תתי־אוספים. זה עשוי לקחת כמה דקות.\n`
 );
@@ -312,10 +317,10 @@ await mapWithConcurrency(pairs, 5, async (pair) => {
     );
     done++;
     if (done % 25 === 0 || done === pairs.length) {
-        process.stdout.write(`\r  נסרקו ${done}/${pairs.length} תתי־אוספים…`);
+        process.stderr.write(`\r  נסרקו ${done}/${pairs.length} תתי־אוספים…`);
     }
 });
-process.stdout.write("\n");
+process.stderr.write("\n");
 
 // לוח שנה – קולקציה אחת, גלובלית לכל הנוסחים
 await comparePath("calendar", { kind: "calendar" });
@@ -398,7 +403,7 @@ if (jsonPath) {
         ),
         "utf8"
     );
-    console.log(`הדוח המלא נכתב ל-${resolve(jsonPath)}`);
+    console.error(`הדוח המלא נכתב ל-${resolve(jsonPath)}`);
 }
 
 if (findings.conflict.length === 0) {

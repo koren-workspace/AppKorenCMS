@@ -177,6 +177,12 @@ export type SavePartParams = {
     path: string;
     changedIds: string[];
     localValues: Record<string, any>;
+    /**
+     * חותמת אחידה לכתיבה. חובה להעביר אותה כשהקורא גם מוסיף את אותם פריטים
+     * לרשימת ההמתנה לפרוד — אחרת פרוד מקבל חותמת מאוחרת יותר מסטייג', וההשוואה
+     * ב-prodReconcileService מסווגת את הפריט כ"פרוד חדש יותר" ומדלגת עליו לנצח.
+     */
+    timestamp?: number;
 };
 
 /** גודל מנה לשמירה – מונע מאות כתיבות סימולטניות ל-Firestore (rate limits / timeouts) */
@@ -200,7 +206,7 @@ const OPTIONAL_STRING_FIELDS = ["titleType", "title", "role", "reference", "spec
  * - שדות בוליאניים: מוסר אם false/undefined (היעדר = false באפליקציה)
  * - שדות מחרוזת אופציונליים: מוסר אם ריק
  */
-function stripDefaultFields(values: Record<string, any>): Record<string, any> {
+export function stripDefaultFields(values: Record<string, any>): Record<string, any> {
     const cleaned = { ...values };
     for (const field of NULLABLE_FILTER_FIELDS) {
         if (cleaned[field] === null || cleaned[field] === undefined) {
@@ -227,8 +233,8 @@ export async function savePartItems(
     dataSource: DataSource,
     params: SavePartParams
 ): Promise<void> {
-    const { path, changedIds, localValues } = params;
-    const now = Date.now();
+    const { path, changedIds, localValues, timestamp } = params;
+    const now = timestamp ?? Date.now();
 
     for (const id of changedIds) {
         if (!id.startsWith("new_")) continue;
@@ -498,7 +504,16 @@ export type CreateTranslationItemParams = {
 };
 
 /** תוצאה מ-createTranslationItem – מזההים ללוג שינויים */
-export type CreateTranslationItemResult = { newItemId: string; newMitId: string };
+export type CreateTranslationItemResult = {
+    newItemId: string;
+    newMitId: string;
+    /**
+     * המסמך שנכתב בפועל לסטייג'. הקורא מעביר אותו כמו שהוא לרשימת ההמתנה
+     * לפרוד — לא בונה עותק משלו, שנוטה לכלול שדות ברירת מחדל שהכתיבה לסטייג'
+     * מסננת (ואז ההשוואה מול פרוד מסמנת הבדל שלא קיים).
+     */
+    write: PendingWrite;
+};
 
 /**
  * יוצר פריט תרגום חדש בתרגום היעד, מקושר לפריט הבסיס (linkedItem).
@@ -802,7 +817,11 @@ export async function createTranslationItem(
         status: "new",
         collection: itemsCollection,
     });
-    return { newItemId, newMitId };
+    return {
+        newItemId,
+        newMitId,
+        write: { collectionPath: path, docId: newItemId, data: values },
+    };
 }
 
 // ─── Split Part ──────────────────────────────────────────────────────────────

@@ -41,6 +41,7 @@ import {
     createTranslationItem,
     copyItemsToPart,
     updatePartMetadataInItems,
+    stripDefaultFields,
     type DeletePartItemParams,
     type SplitPartItemsParams,
     type MoveItemsToPartParams,
@@ -1589,5 +1590,88 @@ describe("partEditService – pending writes return contracts", () => {
         expect(writes).toHaveLength(2);
         expect(writes.map((w) => w.docId)).toEqual(expect.arrayContaining(["i1", "i2"]));
         expect(dataSource.saveEntity).toHaveBeenCalledTimes(2);
+    });
+});
+
+/**
+ * החוזה שמונע את התרחיש של "פרוד חדש יותר" שגוי: מה שנכתב לסטייג' ומה שנכנס
+ * לרשימת ההמתנה לפרוד חייבים להיות זהים – אותם שדות ואותה חותמת. כל סטייה
+ * גורמת ל-prodReconcileService לסווג את הפריט כעריכת פרוד ישירה ולדלג עליו.
+ */
+describe("partEditService – זהות בין הכתיבה לסטייג' לעותק לפרוד", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        firestoreBatchWrites.length = 0;
+    });
+
+    it("stripDefaultFields מסיר בוליאנים false, מחרוזות ריקות ו-null", () => {
+        const cleaned = stripDefaultFields({
+            content: "א",
+            bold: false,
+            red: true,
+            title: "",
+            role: "hazan",
+            cohanim: null,
+            minyan: true,
+            timestamp: 5,
+        });
+        expect(cleaned).toEqual({
+            content: "א",
+            red: true,
+            role: "hazan",
+            minyan: true,
+            timestamp: 5,
+        });
+    });
+
+    it("savePartItems משתמש ב-timestamp שהועבר, כדי שפרוד יקבל אותה חותמת", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const dataSource = { fetchCollection: vi.fn(), saveEntity, deleteEntity: vi.fn() };
+
+        await savePartItems(dataSource, {
+            path: "translations/0-ashkenaz/prayers/p1/items",
+            changedIds: ["item_1"],
+            localValues: { item_1: { content: "א", itemId: "item_1", timestamp: 1 } },
+            timestamp: 1234567,
+        });
+
+        expect(saveEntity.mock.calls[0][0].values.timestamp).toBe(1234567);
+    });
+
+    it("createTranslationItem מחזיר את המסמך שנכתב לסטייג' – בלי שדות ברירת מחדל", async () => {
+        const saveEntity = vi.fn().mockResolvedValue(undefined);
+        const dataSource = {
+            fetchCollection: vi.fn().mockResolvedValue([]),
+            saveEntity,
+            deleteEntity: vi.fn(),
+        };
+
+        const result = await createTranslationItem(dataSource as any, {
+            targetTranslationId: "1-ashkenaz",
+            selectedPrayerId: "p1",
+            partId: "part-a",
+            baseItemId: "100",
+            afterItemId: null,
+            baseItemIdsInPartOrder: ["100"],
+            currentBaseRowIndex: 0,
+            translations: [],
+            content: "translated",
+            // ברירות מחדל שהטופס שולח – אסור שיגיעו לפרוד אם לא הגיעו לסטייג'
+            bold: false,
+            red: true,
+            title: "",
+            cohanim: undefined,
+        });
+
+        const savedValues = saveEntity.mock.calls[0][0].values;
+        const savedPath = saveEntity.mock.calls[0][0].path;
+
+        expect(result.write.collectionPath).toBe(savedPath);
+        expect(result.write.docId).toBe(result.newItemId);
+        expect(result.write.data).toEqual(savedValues);
+        expect(result.write.data).not.toHaveProperty("bold");
+        expect(result.write.data).not.toHaveProperty("title");
+        expect(result.write.data).not.toHaveProperty("cohanim");
+        expect(result.write.data.red).toBe(true);
     });
 });

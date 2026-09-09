@@ -24,6 +24,7 @@ import {
     splitPartItems,
     moveItemsToPart,
     copyItemsToPart,
+    stripDefaultFields,
     type PendingWrite,
 } from "../services/partEditService";
 import { isBaseTranslation } from "../services/navigationService";
@@ -680,12 +681,19 @@ export function usePartEdit(context: PartEditContext) {
         const pendingEnhancementDeleteIds = new Set(
             pendingEnhancementDeletesList.map((p) => p.entity.id)
         );
+        /**
+         * חותמת אחת לכל השמירה — גם לסטייג' וגם לרשומות שנכנסות לרשימת ההמתנה
+         * לפרוד. בעבר פרוד קיבל Date.now() מאוחר יותר, ולכן ההשוואה בפרסום
+         * סיווגה כל פריט כזה כ"פרוד חדש יותר" ודילגה עליו.
+         */
+        const saveTimestamp = Date.now();
         try {
             if (changedIds.size > 0) {
                 await savePartItems(dataSource, {
                     path,
                     changedIds: changedIdList,
                     localValues,
+                    timestamp: saveTimestamp,
                 });
             }
             if (enhancementChangedIds.size > 0 && selectedPrayerId) {
@@ -708,13 +716,14 @@ export function usePartEdit(context: PartEditContext) {
                         vals[id] = {
                             ...base,
                             ...enhancementLocalValues[id],
-                            timestamp: Date.now(),
+                            timestamp: saveTimestamp,
                         };
                     });
                     await savePartItems(dataSource, {
                         path: enhPath,
                         changedIds: ids,
                         localValues: vals,
+                        timestamp: saveTimestamp,
                     });
                 }
                 setEnhancementChangedIds(new Set());
@@ -981,13 +990,18 @@ export function usePartEdit(context: PartEditContext) {
 
             // ── Prod dual-write: סמן פריטים שנשמרו לסטייג' כממתינים לפרוד ──
             if (isProdConfigured()) {
-                const savedNow = Date.now();
+                // stripDefaultFields + saveTimestamp: בדיוק מה שנכתב לסטייג'. כל
+                // סטייה (שדה ברירת מחדל שנשאר, או חותמת מאוחרת יותר) גורמת
+                // לפרסום הבא לסווג את הפריט כ"פרוד חדש יותר" ולדלג עליו.
                 setPendingProdItems((prev) => {
                     const next = new Map(prev);
                     // פריטים ראשיים (מהתרגום הנוכחי)
                     changedIdList.forEach((id) => {
                         const isNew = id.startsWith("new_");
-                        const vals = { ...localValues[id], timestamp: savedNow };
+                        const vals = stripDefaultFields({
+                            ...localValues[id],
+                            timestamp: saveTimestamp,
+                        });
                         const entityId = isNew ? String(localValues[id]?.itemId ?? id) : id;
                         next.set(`${path}/${entityId}`, { path, entityId, values: vals });
                     });
@@ -1001,7 +1015,11 @@ export function usePartEdit(context: PartEditContext) {
                             const ents = enhancements[tid] ?? [];
                             const ent = ents.find((e: any) => e.id === eid);
                             const base = ent?.values ?? {};
-                            const vals = { ...base, ...enhancementLocalValues[eid], timestamp: savedNow };
+                            const vals = stripDefaultFields({
+                                ...base,
+                                ...enhancementLocalValues[eid],
+                                timestamp: saveTimestamp,
+                            });
                             next.set(`${enhPath}/${eid}`, {
                                 path: enhPath,
                                 entityId: eid,
@@ -2686,10 +2704,13 @@ export function usePartEdit(context: PartEditContext) {
                     return;
                 }
                 const basePath = `translations/${baseTid}/prayers/${selectedPrayerId}/items`;
+                // חותמת אחת לסטייג' ולפרוד – ראה ההערה ב-handleSaveGroup
+                const baseSaveTimestamp = Date.now();
                 await savePartItems(dataSource, {
                     path: basePath,
                     changedIds: [addTranslationBaseItem.id],
                     localValues,
+                    timestamp: baseSaveTimestamp,
                 });
                 const baseEntityId = String(
                     localValues[addTranslationBaseItem.id]?.itemId ?? addTranslationBaseItem.id
@@ -2697,10 +2718,10 @@ export function usePartEdit(context: PartEditContext) {
                 basePendingWrite = {
                     path: basePath,
                     entityId: baseEntityId,
-                    values: {
+                    values: stripDefaultFields({
                         ...localValues[addTranslationBaseItem.id],
-                        timestamp: Date.now(),
-                    },
+                        timestamp: baseSaveTimestamp,
+                    }),
                 };
             }
 
@@ -2781,53 +2802,16 @@ export function usePartEdit(context: PartEditContext) {
                 newItemId = result.newItemId;
                 newMitId = result.newMitId;
                 if (isProdConfigured()) {
+                    // result.write הוא המסמך שנכתב לסטייג' בפועל. בעבר נבנה כאן
+                    // עותק ידני מהטופס, שכלל בוליאנים false ומחרוזות ריקות
+                    // שהכתיבה לסטייג' מסננת — ולכן הפרסום סימן הבדל שלא קיים.
+                    const { collectionPath, docId, data } = result.write;
                     setPendingProdItems((prev) => {
                         const next = new Map(prev);
-                        const newItemPath = `translations/${addTranslationTargetId}/prayers/${selectedPrayerId}/items`;
-                        next.set(`${newItemPath}/${newItemId}`, {
-                            path: newItemPath,
-                            entityId: newItemId,
-                            values: {
-                                content: translationContent,
-                                type: form.type ?? "body",
-                                titleType: form.titleType,
-                                title: form.title,
-                                fontTanach: form.fontTanach,
-                                bold: form.bold,
-                                centerAlign: form.centerAlign,
-                                lineLine: form.lineLine,
-                                red: form.red,
-                                justifyBlock: form.justifyBlock,
-                                noSpace: form.noSpace,
-                                block: form.block,
-                                firstInPage: form.firstInPage,
-                                specialDate: form.specialDate,
-                                cohanim: form.cohanim,
-                                hazan: form.hazan,
-                                minyan: form.minyan,
-                                role: form.role,
-                                reference: form.reference,
-                                specialSign: form.specialSign,
-                                dateSetId: form.dateSetId?.trim() || "100",
-                                partId: selectedGroupId,
-                                partName:
-                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
-                                        ?.nameHe ??
-                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
-                                        ?.name ??
-                                    "",
-                                partIdAndName: `${selectedGroupId} ${
-                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
-                                        ?.nameHe ??
-                                    (currentParts ?? []).find((p: any) => p.id === selectedGroupId)
-                                        ?.name ??
-                                    ""
-                                }`,
-                                itemId: newItemId,
-                                mit_id: newMitId,
-                                linkedItem: [baseItemId],
-                                timestamp: Date.now(),
-                            },
+                        next.set(`${collectionPath}/${docId}`, {
+                            path: collectionPath,
+                            entityId: docId,
+                            values: data,
                         });
                         if (basePendingWrite) {
                             next.set(`${basePendingWrite.path}/${basePendingWrite.entityId}`, basePendingWrite);

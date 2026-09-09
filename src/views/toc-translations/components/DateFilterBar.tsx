@@ -15,6 +15,7 @@ import React, { useState } from "react";
 import { HebrewSingleDatePicker } from "./HebrewSingleDatePicker";
 import { getNusachPalette } from "../utils/nusachPalette";
 import { PublishConfirmModal, type PublishEnvironment } from "./PublishConfirmModal";
+import type { ReconcilePlan } from "../services/prodReconcileService";
 
 export type DateFilterBarProps = {
     filterDate: Date;
@@ -31,6 +32,8 @@ export type DateFilterBarProps = {
     onFinalPublish?: () => void;
     /** Prod dual-write */
     onPublishToProd?: () => void;
+    /** תצוגה מקדימה לפרסום לפרוד – קריאה בלבד, רצה כשמודל האישור נפתח */
+    onPreviewPublishToProd?: () => Promise<ReconcilePlan | null>;
     /** שמירת מבנה TOC לפרוד */
     pendingProdNavCount?: number;
     onSaveTocToProd?: () => void;
@@ -57,6 +60,7 @@ export function DateFilterBar({
     saving = false,
     onFinalPublish,
     onPublishToProd,
+    onPreviewPublishToProd,
     pendingProdNavCount = 0,
     onSaveTocToProd,
 }: DateFilterBarProps) {
@@ -215,6 +219,7 @@ export function DateFilterBar({
                 saving={saving}
                 onConfirm={handlePublishConfirm}
                 onClose={() => setConfirmOpen(false)}
+                onPreview={onPreviewPublishToProd}
             />
         </div>
     );

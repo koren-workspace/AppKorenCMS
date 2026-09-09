@@ -32,7 +32,11 @@ import { appendChangeLog } from "../services/changeLogService";
 import { updateBagelTimestamp } from "../services/bagelUpdateTimeService";
 import { isProdConfigured } from "../../../firebase_config";
 import { isProdAuthenticated, getProdFirestore } from "../services/prodAuthService";
-import { reconcileNusachToProd } from "../services/prodReconcileService";
+import {
+    planNusachReconcile,
+    reconcileNusachToProd,
+    type ReconcilePlan,
+} from "../services/prodReconcileService";
 import { idBetween, computeItemIdForInsert, NO_SPACE_BETWEEN_ITEMS, splitParagraphSentences } from "../utils/itemUtils";
 import { itemMinIdBefore, resolveDigitMillions } from "../utils/nusachIdPolicy";
 import { getNusachDisplayLabel } from "../utils/nusachDisplay";
@@ -1272,6 +1276,21 @@ export function usePartEdit(context: PartEditContext) {
             return next;
         });
         setPendingProdCalendar(new Map());
+    };
+
+    /**
+     * תצוגה מקדימה לפרסום: מריץ את שלב התכנון בלבד (קריאה בלבד, בלי כתיבה)
+     * ומחזיר את רשימת המסמכים שיצאו לפרוד. מחזיר null אם אין נוסח נבחר או
+     * שהמשתמש ביטל את מודל הסיסמה.
+     */
+    const previewPublishToProd = async (): Promise<ReconcilePlan | null> => {
+        if (!selectedTocId || !isProdConfigured()) return null;
+        if (!(await requestProdAuth())) return null;
+        return planNusachReconcile({
+            tocData: currentTocData,
+            tocId: selectedTocId,
+            onProgress: (message) => console.log(`${LOG_PREFIX} preview: ${message}`),
+        });
     };
 
     /** פרסום לפרוד. אם המשתמש לא מחובר לפרוד — פותח מודל סיסמה */
@@ -2902,6 +2921,7 @@ export function usePartEdit(context: PartEditContext) {
         handleSavePartToProd,
         handlePublishToProd,
         requestProdAuth,
+        previewPublishToProd,
         addToPendingProdItems,
         addToCalendarPending: addToPendingProdCalendar,
         prodAuthModalOpen,

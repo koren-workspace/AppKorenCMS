@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
     collectTranslationPrayerPairs,
+    countCopiesByKind,
     itemValuesEqual,
     shouldCopyToProd,
+    summarizeCopy,
+    type ReconcileCopy,
 } from "./prodReconcileService";
 
 describe("collectTranslationPrayerPairs", () => {
@@ -139,5 +142,69 @@ describe("shouldCopyToProd", () => {
         expect(
             shouldCopyToProd({ content: "א" }, { content: "ב", timestamp: 100 })
         ).toBe("skip-prod-newer");
+    });
+});
+
+/** העזרים שמזינים את התצוגה המקדימה שלפני אישור הפרסום */
+describe("תצוגה מקדימה לפרסום", () => {
+    const itemCopy = (over: Partial<ReconcileCopy> = {}): ReconcileCopy => ({
+        path: "translations/0-ashkenaz/prayers/1015010/items",
+        docId: "103250811270",
+        data: { content: "אֲנִי מַאֲמִין" },
+        reason: "changed",
+        kind: "item",
+        ...over,
+    });
+
+    it("summarizeCopy מפרק נתיב פריט לתרגום ולתפילה", () => {
+        expect(summarizeCopy(itemCopy())).toEqual({
+            kind: "item",
+            reason: "changed",
+            docId: "103250811270",
+            translationId: "0-ashkenaz",
+            prayerId: "1015010",
+            snippet: "אֲנִי מַאֲמִין",
+        });
+    });
+
+    it("summarizeCopy קוטם תוכן ארוך", () => {
+        const long = "א".repeat(200);
+        const snippet = summarizeCopy(itemCopy({ data: { content: long } })).snippet!;
+        expect(snippet.endsWith("…")).toBe(true);
+        expect(snippet.length).toBe(61);
+    });
+
+    it("summarizeCopy על לוח שנה ומבנה – בלי תרגום/תפילה ובלי תוכן", () => {
+        expect(
+            summarizeCopy({
+                path: "calendar",
+                docId: "100",
+                data: { dates: [] },
+                reason: "missing",
+                kind: "calendar",
+            })
+        ).toEqual({
+            kind: "calendar",
+            reason: "missing",
+            docId: "100",
+            translationId: undefined,
+            prayerId: undefined,
+            snippet: undefined,
+        });
+    });
+
+    it("countCopiesByKind סופר לפי סוג", () => {
+        expect(
+            countCopiesByKind([
+                itemCopy(),
+                itemCopy({ docId: "2" }),
+                { path: "calendar", docId: "100", data: {}, reason: "missing", kind: "calendar" },
+                { path: "toc", docId: "ashkenaz", data: {}, reason: "changed", kind: "toc" },
+            ])
+        ).toEqual({ items: 2, calendar: 1, toc: 1 });
+    });
+
+    it("countCopiesByKind על רשימה ריקה", () => {
+        expect(countCopiesByKind([])).toEqual({ items: 0, calendar: 0, toc: 0 });
     });
 });

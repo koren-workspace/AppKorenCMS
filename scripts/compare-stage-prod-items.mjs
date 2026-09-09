@@ -178,11 +178,37 @@ const { getFirestore, collection, getDocs } = await import("firebase/firestore")
 const stageApp = initializeApp(stageConfig, "stage");
 const prodApp = initializeApp(prodConfig, "prod");
 
-// הודעות מצב והתקדמות ל-stderr, כדי ש-`> report.txt` יקבל את הדוח בלבד
-console.error(`מתחבר לסטייג' (${stageConfig.projectId}) בתור ${stageEmail}...`);
-await signInWithEmailAndPassword(getAuth(stageApp), stageEmail, stagePassword);
-console.error(`מתחבר לפרוד (${prodConfig.projectId}) בתור ${prodEmail}...`);
-await signInWithEmailAndPassword(getAuth(prodApp), prodEmail, prodPassword);
+/**
+ * סטייג' ופרוד הם שני פרויקטי Firebase נפרדים עם מאגרי משתמשים נפרדים —
+ * חשבון שקיים באחד לא בהכרח קיים בשני. כשל התחברות מדווח כאן בהודעה ברורה
+ * במקום stack של ה-SDK, כי זו הטעות הצפויה ביותר בהרצה הראשונה.
+ */
+async function signIn(label, app, config, email, password, emailVar, passwordVar) {
+    // הודעות מצב ל-stderr, כדי ש---out וההפניה יקבלו את הדוח בלבד
+    console.error(`מתחבר ל${label} (${config.projectId}) בתור ${email}...`);
+    try {
+        await signInWithEmailAndPassword(getAuth(app), email, password);
+    } catch (err) {
+        const code = err?.code ?? "";
+        console.error(`\nההתחברות ל${label} נכשלה (${code || err?.message || err}).`);
+        if (code === "auth/user-not-found") {
+            console.error(
+                `המשתמש ${email} לא קיים בפרויקט ${config.projectId}.\n` +
+                    `סטייג' ופרוד הם פרויקטים נפרדים — חשבון באחד אינו קיים אוטומטית בשני.\n` +
+                    `בדקו ב-Firebase Console › ${config.projectId} › Authentication › Users איזה חשבון קיים,\n` +
+                    `והגדירו אותו ב-${emailVar}.`
+            );
+        } else if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+            console.error(`הסיסמה ב-${passwordVar} שגויה עבור ${email} בפרויקט ${config.projectId}.`);
+        } else if (code === "auth/invalid-email") {
+            console.error(`הכתובת ב-${emailVar} אינה תקינה: ${email}`);
+        }
+        process.exit(1);
+    }
+}
+
+await signIn("סטייג'", stageApp, stageConfig, stageEmail, stagePassword, "SEED_EMAIL", "SEED_PASSWORD");
+await signIn("פרוד", prodApp, prodConfig, prodEmail, prodPassword, "PROD_SEED_EMAIL", "PROD_SEED_PASSWORD");
 
 const stageDb = getFirestore(stageApp);
 const prodDb = getFirestore(prodApp);

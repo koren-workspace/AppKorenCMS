@@ -40,9 +40,11 @@
  *   ... node scripts/compare-stage-prod-items.mjs --samples 40
  *   ... node scripts/compare-stage-prod-items.mjs --json /tmp/diff.json
  *
- * הדוח הקריא נכתב ל-stdout, והודעות המצב וההתקדמות ל-stderr — כך שהפניה
- * לקובץ נותנת את הדוח נקי, וההתקדמות עדיין נראית על המסך בזמן הריצה:
- *   ... node scripts/compare-stage-prod-items.mjs --samples 1000 > report.txt
+ * הדוח הקריא נכתב ל-stdout, והודעות המצב וההתקדמות ל-stderr.
+ *
+ * לכתיבה לקובץ העדיפו את --out על פני הפניה של המעטפת: ב-PowerShell הפניה
+ * עם `>` מקודדת UTF-16 ומשבשת את העברית, ו---out כותב UTF-8 בכל מערכת:
+ *   node scripts/compare-stage-prod-items.mjs --nusach ashkenaz --samples 1000 --out report.txt
  *
  * קונפיגורציה: נקרא מ-.env.local (או .env) של ה-CMS —
  *   stage: VITE_FIREBASE_API_KEY / VITE_FIREBASE_PROJECT_ID / VITE_FIREBASE_AUTH_DOMAIN
@@ -79,6 +81,7 @@ if (args.includes("--help") || args.includes("-h")) {
             "",
             "  --nusach <id>    להשוות נוסח אחד בלבד (אפשר לחזור על הדגל)",
             "  --samples <n>    כמה דוגמאות להדפיס לכל קטגוריה (ברירת מחדל 20)",
+            "  --out <path>     לכתוב את הדוח הקריא לקובץ (UTF-8)",
             "  --json <path>    לכתוב את הדוח המלא כ-JSON",
             "  --help           העזרה הזו",
         ].join("\n")
@@ -98,6 +101,7 @@ const onlyNusachim = argValues("--nusach");
 const samplesArg = argValues("--samples")[0];
 const sampleLimit = samplesArg ? Number(samplesArg) : 20;
 const jsonPath = argValues("--json")[0];
+const outPath = argValues("--out")[0];
 
 if (!Number.isFinite(sampleLimit) || sampleLimit < 0) {
     console.error(`--samples חייב להיות מספר (התקבל: ${samplesArg})`);
@@ -329,61 +333,82 @@ await comparePath("calendar", { kind: "calendar" });
 // הדוח
 // ---------------------------------------------------------------------------
 
+/**
+ * כותב שורת דוח למסך, ואוגר אותה לכתיבה ל---out.
+ * הכתיבה לקובץ נעשית כאן ולא בהפניה של המעטפת (`> report.txt`) בכוונה:
+ * ב-PowerShell הפניה כזו מקודדת ב-UTF-16 ומשבשת את העברית. writeFileSync
+ * כותב UTF-8 בכל מערכת הפעלה.
+ */
+const reportLines = [];
+const say = (line = "") => {
+    reportLines.push(line);
+    console.log(line);
+};
+
 const short = (v) => {
     if (v === undefined) return "(אין שדה)";
     if (typeof v === "string") return v.length > 40 ? `"${v.slice(0, 40)}…"` : `"${v}"`;
     return JSON.stringify(v);
 };
 
-console.log(`\n${"=".repeat(72)}`);
-console.log(`נקראו ${docsRead} מסמכים | הושוו ${comparedDocs} | זהים ${identicalDocs}`);
-console.log(`${"=".repeat(72)}\n`);
+say(`\n${"=".repeat(72)}`);
+say(`נקראו ${docsRead} מסמכים | הושוו ${comparedDocs} | זהים ${identicalDocs}`);
+say(`${"=".repeat(72)}\n`);
 
-console.log(`⚠  התנגשויות אמיתיות: ${findings.conflict.length}`);
-console.log(`   רעש ברירת מחדל בלבד: ${findings.defaultOnly.length}`);
-console.log(`   קיימים רק בסטייג': ${findings.stageOnly.length}`);
-console.log(`   קיימים רק בפרוד: ${findings.prodOnly.length}\n`);
+say(`⚠  התנגשויות אמיתיות: ${findings.conflict.length}`);
+say(`   רעש ברירת מחדל בלבד: ${findings.defaultOnly.length}`);
+say(`   קיימים רק בסטייג': ${findings.stageOnly.length}`);
+say(`   קיימים רק בפרוד: ${findings.prodOnly.length}\n`);
 
 if (findings.conflict.length > 0) {
-    console.log("— התנגשויות אמיתיות (אלה שדורשות טיפול) —\n");
+    say("— התנגשויות אמיתיות (אלה שדורשות טיפול) —\n");
     for (const f of findings.conflict.slice(0, sampleLimit)) {
         const where = f.kind === "calendar" ? "calendar" : `${f.translationId} · ${f.prayerId}`;
-        console.log(`  ${where} · ${f.docId}`);
-        if (f.content) console.log(`    ${f.content}`);
+        say(`  ${where} · ${f.docId}`);
+        if (f.content) say(`    ${f.content}`);
         for (const d of f.diffs) {
-            console.log(`    ${d.field}:  סטייג' ${short(d.stage)}  |  פרוד ${short(d.prod)}`);
+            say(`    ${d.field}:  סטייג' ${short(d.stage)}  |  פרוד ${short(d.prod)}`);
         }
-        console.log(`    → ${f.nextPublish}`);
-        if (f.noiseCount > 0) console.log(`    (ועוד ${f.noiseCount} הפרשי ברירת מחדל)`);
-        console.log("");
+        say(`    → ${f.nextPublish}`);
+        if (f.noiseCount > 0) say(`    (ועוד ${f.noiseCount} הפרשי ברירת מחדל)`);
+        say("");
     }
     if (findings.conflict.length > sampleLimit) {
-        console.log(`  … ועוד ${findings.conflict.length - sampleLimit}. השתמשו ב---json לרשימה המלאה.\n`);
+        say(`  … ועוד ${findings.conflict.length - sampleLimit}. השתמשו ב---json לרשימה המלאה.\n`);
     }
 }
 
 if (findings.stageOnly.length > 0) {
-    console.log(`— קיימים רק בסטייג' (${findings.stageOnly.length}) — יועתקו בפרסום הבא —\n`);
+    say(`— קיימים רק בסטייג' (${findings.stageOnly.length}) — יועתקו בפרסום הבא —\n`);
     for (const f of findings.stageOnly.slice(0, sampleLimit)) {
         const where = f.kind === "calendar" ? "calendar" : `${f.translationId} · ${f.prayerId}`;
-        console.log(`  ${where} · ${f.docId}${f.content ? `  ${f.content}` : ""}`);
+        say(`  ${where} · ${f.docId}${f.content ? `  ${f.content}` : ""}`);
     }
     if (findings.stageOnly.length > sampleLimit) {
-        console.log(`  … ועוד ${findings.stageOnly.length - sampleLimit}`);
+        say(`  … ועוד ${findings.stageOnly.length - sampleLimit}`);
     }
-    console.log("");
+    say("");
 }
 
 if (findings.prodOnly.length > 0) {
-    console.log(`— קיימים רק בפרוד (${findings.prodOnly.length}) — לא ימחקו בפרסום —\n`);
+    say(`— קיימים רק בפרוד (${findings.prodOnly.length}) — לא ימחקו בפרסום —\n`);
     for (const f of findings.prodOnly.slice(0, sampleLimit)) {
         const where = f.kind === "calendar" ? "calendar" : `${f.translationId} · ${f.prayerId}`;
-        console.log(`  ${where} · ${f.docId}`);
+        say(`  ${where} · ${f.docId}`);
     }
     if (findings.prodOnly.length > sampleLimit) {
-        console.log(`  … ועוד ${findings.prodOnly.length - sampleLimit}`);
+        say(`  … ועוד ${findings.prodOnly.length - sampleLimit}`);
     }
-    console.log("");
+    say("");
+}
+
+if (findings.conflict.length === 0) {
+    say("אין התנגשויות אמיתיות בין סטייג' לפרוד. ✓");
+}
+
+if (outPath) {
+    writeFileSync(resolve(outPath), `${reportLines.join("\n")}\n`, "utf8");
+    console.error(`הדוח הקריא נכתב ל-${resolve(outPath)}`);
 }
 
 if (jsonPath) {
@@ -404,10 +429,6 @@ if (jsonPath) {
         "utf8"
     );
     console.error(`הדוח המלא נכתב ל-${resolve(jsonPath)}`);
-}
-
-if (findings.conflict.length === 0) {
-    console.log("אין התנגשויות אמיתיות בין סטייג' לפרוד. ✓");
 }
 
 process.exit(0);

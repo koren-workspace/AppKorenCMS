@@ -846,7 +846,7 @@ export function usePartEdit(context: PartEditContext) {
 
             snackbar.open({
                 type: "success",
-                message: "המקטע נשמר בהצלחה (מקומי)",
+                message: "נשמר בסטייג' ✓ — עדיין לא אצל המתפללים",
             });
 
             // --- יומן שינויים: חישוב diff לפני ניקוי state ---
@@ -1145,7 +1145,10 @@ export function usePartEdit(context: PartEditContext) {
             }
             setPendingProdItems(new Map());
             setPendingProdCalendar(new Map());
-            snackbar.open({ type: "success", message: "נשמר לפרוד בהצלחה ✓" });
+            snackbar.open({
+                type: "success",
+                message: "הועתק לפרוד ✓ — כדי שיגיע למתפללים לחצו «פרסם · פרוד»",
+            });
         } catch (err) {
             console.error(`${LOG_PREFIX} Save to Prod failed`, err);
             const message =
@@ -1211,13 +1214,13 @@ export function usePartEdit(context: PartEditContext) {
                 (reconcile.copiedToc ? 1 : 0);
             const nusachLabel = getNusachDisplayLabel(selectedTocId ?? "", currentTocData?.nusach).trim();
             const scopeBase = nusachLabel.length > 0
-                ? `הנוסח «${nusachLabel}» פורסם לפרוד — האפליקציה תסנכרן.`
-                : "הנוסח הנבחר פורסם לפרוד.";
+                ? `«${nusachLabel}» פורסם — המתפללים יקבלו את השינויים בסנכרון הבא.`
+                : "הנוסח פורסם — המתפללים יקבלו את השינויים בסנכרון הבא.";
             const syncNote = copiedTotal > 0
-                ? ` הועתקו ${copiedTotal} מסמכים שחסרו/עודכנו בפרוד.`
-                : "";
+                ? ` הועתקו ${copiedTotal} מסמכים לפרוד.`
+                : " לא היה מה להעתיק — התוכן כבר היה בפרוד.";
             const prodNewerNote = reconcile.skippedProdNewer.length > 0
-                ? ` ${reconcile.skippedProdNewer.length} מסמכים חדשים יותר בפרוד לא נדרסו (ראו קונסול).`
+                ? ` ${reconcile.skippedProdNewer.length} מסמכים נשארו כפי שהם בפרוד (העותק שם חדש יותר).`
                 : "";
             snackbar.open({ type: "success", message: `${scopeBase}${syncNote}${prodNewerNote}` });
             appendChangeLog({

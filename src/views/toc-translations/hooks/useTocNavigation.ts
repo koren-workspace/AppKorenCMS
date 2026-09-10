@@ -2083,7 +2083,10 @@ export function useTocNavigation(options?: TocNavigationOptions) {
             }
             setPendingProdNavWrites(new Map());
             setPendingProdNavEntityKeys(new Set());
-            snackbar.open({ type: "success", message: "מבנה נשמר לפרוד בהצלחה ✓" });
+            snackbar.open({
+                type: "success",
+                message: "המבנה הועתק לפרוד ✓ — כדי שיגיע למתפללים לחצו «פרסם · פרוד»",
+            });
         } catch (err) {
             console.error(`${LOG_PREFIX} Save TOC to Prod failed`, err);
             const message =

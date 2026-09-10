@@ -78,15 +78,17 @@ export function DateFilterBar({
 
     const trimmedNusach = publishNusachLabel?.trim() ?? "";
     const hasNusachLabel = trimmedNusach.length > 0;
+    // ההודעות מנוסחות במונחי "מי יראה את זה", לא במונחי המנגנון (בייגל / חותמות).
+    // זה מה שהעורכת צריכה לדעת כדי להחליט אם לחצה על הכפתור הנכון.
     const publishTitle = hasNusachLabel
-        ? `פרסם בסטייג': מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל של סטייג'. האפליקציה מסנכרנת את כל התרגומים של נוסח זה.`
-        : "פרסם בסטייג': מסמן שהנוסח הנבחר התעדכן בבייגל של סטייג'.";
+        ? `מודיע לאפליקציה בסטייג' שהנוסח «${trimmedNusach}» התעדכן. מכשירי הבדיקה יסנכרנו את כל התרגומים של הנוסח. המתפללים לא מושפעים.`
+        : "מודיע לאפליקציה בסטייג' שהנוסח הנבחר התעדכן. המתפללים לא מושפעים.";
     const publishButtonLabel = hasNusachLabel
         ? `פרסם ${trimmedNusach} · סטייג'`
         : "פרסם · סטייג'";
     const prodPublishTitle = hasNusachLabel
-        ? `פרסם בפרוד: מסמן שהנוסח «${trimmedNusach}» התעדכן בבייגל של פרוד. האפליקציה בפרוד תסנכרן.`
-        : "פרסם בפרוד: מסמן שהנוסח הנבחר התעדכן בבייגל של פרוד.";
+        ? `שלב 3 מתוך 3: מודיע לאפליקציה שהנוסח «${trimmedNusach}» התעדכן. זו הפעולה היחידה שמעבירה את התוכן למתפללים בפועל.`
+        : "שלב 3 מתוך 3: מודיע לאפליקציה שהנוסח הנבחר התעדכן. זו הפעולה שמעבירה את התוכן למתפללים.";
     const prodPublishButtonLabel = hasNusachLabel
         ? `פרסם ${trimmedNusach} · פרוד`
         : "פרסם · פרוד";
@@ -206,7 +208,7 @@ export function DateFilterBar({
                         onClick={onSaveTocToProd}
                         disabled={saving || !canSaveNavToProd}
                         className="shrink-0 px-3 py-1 rounded font-bold border-2 text-sm border-blue-600 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-30"
-                        title="שומר שינויי מבנה (קטגוריה/תפילה/חלק) שנשמרו לסטייג' בלבד — לפרוד"
+                        title="מעתיק שינויי מבנה (קטגוריה / תפילה / חלק) שנשמרו בסטייג' בלבד אל השרת של פרוד. המתפללים יראו אותם רק אחרי «פרסם · פרוד»."
                     >
                         {saving ? "שומר…" : `שמור מבנה · פרוד (${pendingProdNavCount})`}
                     </button>

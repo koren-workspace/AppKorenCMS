@@ -70,7 +70,7 @@ export function PartEditToolbar({
                             disabled={saving || !hasChanges}
                             className={`${actionBtn} font-bold px-2.5`}
                             style={btn(1)}
-                            title="שמור שינויים בחלק זה ל-Firestore של סטייג'"
+                            title="שומר את השינויים בחלק זה בשרת של סטייג'. זה שלב 1 מתוך 3 — המתפללים עדיין לא רואים אותם."
                         >
                             {saving ? "שומר · סטייג'…" : "שמור · סטייג'"}
                         </button>
@@ -88,8 +88,8 @@ export function PartEditToolbar({
                                 }}
                                 title={
                                     pendingProdCount > 0
-                                        ? `שמור ${pendingProdCount} פריטים שכבר נשמרו בסטייג' — ל-Firestore של פרוד`
-                                        : "אין פריטים שממתינים לשמירה בפרוד (קודם שמור בסטייג')"
+                                        ? `שלב 2 מתוך 3: מעתיק ${pendingProdCount} פריטים שנשמרו בסטייג' אל השרת של פרוד. גם אחרי זה המתפללים לא יראו אותם — לשם כך צריך «פרסם · פרוד».`
+                                        : "אין פריטים להעתקה. קודם ערכו ושמרו בסטייג'."
                                 }
                             >
                                 שמור · פרוד

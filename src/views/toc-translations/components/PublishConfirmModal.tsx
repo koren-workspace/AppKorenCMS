@@ -1,5 +1,5 @@
 /**
- * PublishConfirmModal – אישור לפני פרסום נוסח לבייגל (סטייג' / פרוד)
+ * PublishConfirmModal – אישור לפני פרסום נוסח (סטייג' / פרוד)
  *
  * בפרסום לפרוד המודל מציג גם תצוגה מקדימה: בדיוק אילו מסמכים יועתקו מסטייג'
  * לפרוד. זה חשוב כי הפרסום מיישר את *כל* הסטייג' של הנוסח — כולל עריכות של
@@ -93,12 +93,14 @@ export function PublishConfirmModal({
             <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
                 <h3 style={styles.title}>אישור פרסום · {envLabel}</h3>
                 <p style={styles.subtitle}>
-                    לפרסם את {nusachText} לבייגל של <strong>{envLabel}</strong>?
+                    {isProd
+                        ? `לפרסם את ${nusachText} למתפללים?`
+                        : `לפרסם את ${nusachText} לסביבת הבדיקה?`}
                 </p>
                 <p style={styles.detail}>
                     {isProd
-                        ? "האפליקציה בפרוד תסנכרן את כל התרגומים של נוסח זה. פעולה זו משפיעה על משתמשים אמיתיים."
-                        : "האפליקציה בסטייג' תסנכרן את כל התרגומים של נוסח זה."}
+                        ? "זו הפעולה שמעבירה את התוכן למשתמשים אמיתיים. המכשירים יסנכרנו את כל התרגומים של הנוסח בפעם הבאה שייפתחו."
+                        : "מכשירי הבדיקה יסנכרנו את כל התרגומים של הנוסח. המתפללים לא מושפעים."}
                 </p>
 
                 {wantsPreview && (
@@ -172,7 +174,7 @@ function PublishPreview({
     if (loading) {
         return (
             <div style={styles.previewBox}>
-                <span style={styles.previewMuted}>משווה סטייג' מול פרוד…</span>
+                <span style={styles.previewMuted}>בודק מה יועתק מסטייג' לפרוד…</span>
             </div>
         );
     }
@@ -180,10 +182,11 @@ function PublishPreview({
     if (error) {
         return (
             <div style={{ ...styles.previewBox, borderColor: "#e57373", background: "#ffebee" }}>
-                <strong style={{ color: "#c62828" }}>לא הצלחתי לחשב מה יעודכן.</strong>
+                <strong style={{ color: "#c62828" }}>לא הצלחתי להראות מראש מה יועתק.</strong>
                 <div style={styles.previewMuted}>{error}</div>
                 <div style={styles.previewMuted}>
-                    אפשר לפרסם בכל זאת — הפרסום עצמו יריץ את ההשוואה מחדש.
+                    זו תקלה בתצוגה המקדימה בלבד. אפשר לפרסם בכל זאת — הפרסום מבצע את ההשוואה
+                    בעצמו — אבל תפרסמו בלי לראות מראש מה יוצא.
                 </div>
             </div>
         );
@@ -217,13 +220,18 @@ function PublishPreview({
 
     return (
         <div style={styles.previewBox}>
-            <strong>{total} מסמכים יועתקו מסטייג' לפרוד:</strong>
+            <strong>
+                {total === 1 ? "מסמך אחד יועתק" : `${total} מסמכים יועתקו`} מסטייג' לפרוד,
+                והתוכן יגיע למתפללים:
+            </strong>
             <div style={styles.previewMuted}>
                 {counts.items} פריטים · {counts.calendar} לוח שנה · {counts.toc} מבנה
                 {plan.firstRun && " · השוואה מלאה ראשונה"}
             </div>
             <div style={styles.previewNote}>
-                כולל כל שינוי שנשמר לסטייג' מאז הפרסום הקודם — גם עריכות של אחרים.
+                <strong>שימו לב:</strong> הפרסום מיישר את פרוד לפי סטייג' — כלומר יוצא כאן{" "}
+                <strong>כל</strong> שינוי שנשמר בסטייג' מאז הפרסום הקודם, גם עריכות של אנשים
+                אחרים. עברו על הרשימה לפני האישור.
             </div>
 
             <ul style={styles.previewList}>
@@ -267,8 +275,10 @@ function PublishPreview({
 function ProdNewerNote({ count }: { count: number }) {
     return (
         <div style={styles.prodNewerNote}>
-            ⚠ {count} מסמכים חדשים יותר בפרוד — לא ידרסו. בדרך כלל זו עריכה שנעשתה
-            ישירות בפרוד. הרשימה המלאה בקונסול.
+            ⚠ {count === 1 ? "מסמך אחד שונה" : `${count} מסמכים שונים`} בפרוד מהמצב בסטייג',
+            והעותק שבפרוד חדש יותר — לכן הפרסום <strong>לא</strong> יגע בהם, והם יישארו
+            בפרוד כפי שהם. בדרך כלל זו עריכה שנעשתה ישירות בפרוד, או שינוי שנשמר לפרוד
+            ולא לסטייג'. אם ציפיתם שהם יתעדכנו — עצרו ובדקו לפני הפרסום.
         </div>
     );
 }

@@ -140,6 +140,25 @@ export function PublishConfirmModal({
     );
 }
 
+/**
+ * מנסח מה בדיוק נבדק כשאין מה להעתיק. חשוב שלא יישמע כאילו זה כל הנוסח:
+ * הסריקה הרגילה מוגבלת למסמכים שהשתנו מאז הפרסום הקודם (ראו OVERLAP_MS
+ * ב-prodReconcileService), ורק הריצה הראשונה סורקת הכול.
+ */
+function describeEmptyScan(plan: ReconcilePlan): string {
+    const n = plan.scannedDocs;
+    if (plan.firstRun) {
+        return `נבדקו כל ${n} המסמכים של הנוסח (השוואה מלאה ראשונה) — כולם זהים בפרוד.`;
+    }
+    if (n === 0) {
+        return "לא השתנה שום מסמך בסטייג' מאז הפרסום הקודם.";
+    }
+    if (n === 1) {
+        return "נבדק מסמך אחד שהשתנה בסטייג' מאז הפרסום הקודם, והוא כבר זהה בפרוד.";
+    }
+    return `נבדקו ${n} מסמכים שהשתנו בסטייג' מאז הפרסום הקודם, וכולם כבר זהים בפרוד.`;
+}
+
 /** גוף התצוגה המקדימה: טעינה / שגיאה / סיכום + רשימת המסמכים */
 function PublishPreview({
     plan,
@@ -179,10 +198,12 @@ function PublishPreview({
     if (total === 0) {
         return (
             <div style={styles.previewBox}>
-                <strong>פרוד כבר מעודכן — לא יועתק אף מסמך.</strong>
-                <div style={styles.previewMuted}>
-                    נסרקו {plan.scannedDocs} מסמכים בסטייג'. הפרסום עדיין יעדכן את חותמת
-                    הסנכרון, כדי שהמכשירים יבדקו מחדש.
+                <strong>התוכן כבר נמצא בפרוד — אין מסמכים להעתיק.</strong>
+                <div style={styles.previewMuted}>{describeEmptyScan(plan)}</div>
+                <div style={styles.publishStillNeeded}>
+                    <strong>עדיין יש טעם לפרסם.</strong> העתקת המסמכים והודעה למכשירים הן שתי
+                    פעולות נפרדות: המסמכים כבר בפרוד, אבל האפליקציה מושכת תוכן חדש רק אחרי
+                    פרסום. בלי הפרסום השינויים יישארו בפרוד ולא יגיעו למתפללים.
                 </div>
                 {plan.skippedProdNewer.length > 0 && (
                     <ProdNewerNote count={plan.skippedProdNewer.length} />
@@ -341,6 +362,15 @@ const styles: Record<string, React.CSSProperties> = {
         color: "#555",
         marginTop: 2,
         overflowWrap: "anywhere",
+    },
+    publishStillNeeded: {
+        marginTop: 8,
+        padding: "8px 10px",
+        borderRadius: 4,
+        background: "#e8f5e9",
+        color: "#1b5e20",
+        fontSize: 12,
+        lineHeight: 1.6,
     },
     prodNewerNote: {
         marginTop: 8,

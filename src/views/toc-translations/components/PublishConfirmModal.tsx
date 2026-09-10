@@ -1,5 +1,5 @@
 /**
- * PublishConfirmModal – אישור לפני פרסום נוסח לבייגל (סטייג' / פרוד)
+ * PublishConfirmModal – אישור לפני פרסום נוסח (סטייג' / פרוד)
  *
  * בפרסום לפרוד המודל מציג גם תצוגה מקדימה: בדיוק אילו מסמכים יועתקו מסטייג'
  * לפרוד. זה חשוב כי הפרסום מיישר את *כל* הסטייג' של הנוסח — כולל עריכות של
@@ -93,12 +93,14 @@ export function PublishConfirmModal({
             <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
                 <h3 style={styles.title}>אישור פרסום · {envLabel}</h3>
                 <p style={styles.subtitle}>
-                    לפרסם את {nusachText} לבייגל של <strong>{envLabel}</strong>?
+                    {isProd
+                        ? `לפרסם את ${nusachText} למתפללים?`
+                        : `לפרסם את ${nusachText} לסביבת הבדיקה?`}
                 </p>
                 <p style={styles.detail}>
                     {isProd
-                        ? "האפליקציה בפרוד תסנכרן את כל התרגומים של נוסח זה. פעולה זו משפיעה על משתמשים אמיתיים."
-                        : "האפליקציה בסטייג' תסנכרן את כל התרגומים של נוסח זה."}
+                        ? "זו הפעולה שמעבירה את התוכן למשתמשים אמיתיים. המכשירים יסנכרנו את כל התרגומים של הנוסח בפעם הבאה שייפתחו."
+                        : "מכשירי הבדיקה יסנכרנו את כל התרגומים של הנוסח. המתפללים לא מושפעים."}
                 </p>
 
                 {wantsPreview && (
@@ -140,6 +142,25 @@ export function PublishConfirmModal({
     );
 }
 
+/**
+ * מנסח מה בדיוק נבדק כשאין מה להעתיק. חשוב שלא יישמע כאילו זה כל הנוסח:
+ * הסריקה הרגילה מוגבלת למסמכים שהשתנו מאז הפרסום הקודם (ראו OVERLAP_MS
+ * ב-prodReconcileService), ורק הריצה הראשונה סורקת הכול.
+ */
+function describeEmptyScan(plan: ReconcilePlan): string {
+    const n = plan.scannedDocs;
+    if (plan.firstRun) {
+        return `נבדקו כל ${n} המסמכים של הנוסח (השוואה מלאה ראשונה) — כולם זהים בפרוד.`;
+    }
+    if (n === 0) {
+        return "לא השתנה שום מסמך בסטייג' מאז הפרסום הקודם.";
+    }
+    if (n === 1) {
+        return "נבדק מסמך אחד שהשתנה בסטייג' מאז הפרסום הקודם, והוא כבר זהה בפרוד.";
+    }
+    return `נבדקו ${n} מסמכים שהשתנו בסטייג' מאז הפרסום הקודם, וכולם כבר זהים בפרוד.`;
+}
+
 /** גוף התצוגה המקדימה: טעינה / שגיאה / סיכום + רשימת המסמכים */
 function PublishPreview({
     plan,
@@ -153,7 +174,7 @@ function PublishPreview({
     if (loading) {
         return (
             <div style={styles.previewBox}>
-                <span style={styles.previewMuted}>משווה סטייג' מול פרוד…</span>
+                <span style={styles.previewMuted}>בודק מה יועתק מסטייג' לפרוד…</span>
             </div>
         );
     }
@@ -161,10 +182,11 @@ function PublishPreview({
     if (error) {
         return (
             <div style={{ ...styles.previewBox, borderColor: "#e57373", background: "#ffebee" }}>
-                <strong style={{ color: "#c62828" }}>לא הצלחתי לחשב מה יעודכן.</strong>
+                <strong style={{ color: "#c62828" }}>לא הצלחתי להראות מראש מה יועתק.</strong>
                 <div style={styles.previewMuted}>{error}</div>
                 <div style={styles.previewMuted}>
-                    אפשר לפרסם בכל זאת — הפרסום עצמו יריץ את ההשוואה מחדש.
+                    זו תקלה בתצוגה המקדימה בלבד. אפשר לפרסם בכל זאת — הפרסום מבצע את ההשוואה
+                    בעצמו — אבל תפרסמו בלי לראות מראש מה יוצא.
                 </div>
             </div>
         );
@@ -179,10 +201,12 @@ function PublishPreview({
     if (total === 0) {
         return (
             <div style={styles.previewBox}>
-                <strong>פרוד כבר מעודכן — לא יועתק אף מסמך.</strong>
-                <div style={styles.previewMuted}>
-                    נסרקו {plan.scannedDocs} מסמכים בסטייג'. הפרסום עדיין יעדכן את חותמת
-                    הסנכרון, כדי שהמכשירים יבדקו מחדש.
+                <strong>התוכן כבר נמצא בפרוד — אין מסמכים להעתיק.</strong>
+                <div style={styles.previewMuted}>{describeEmptyScan(plan)}</div>
+                <div style={styles.publishStillNeeded}>
+                    <strong>עדיין יש טעם לפרסם.</strong> העתקת המסמכים והודעה למכשירים הן שתי
+                    פעולות נפרדות: המסמכים כבר בפרוד, אבל האפליקציה מושכת תוכן חדש רק אחרי
+                    פרסום. בלי הפרסום השינויים יישארו בפרוד ולא יגיעו למתפללים.
                 </div>
                 {plan.skippedProdNewer.length > 0 && (
                     <ProdNewerNote count={plan.skippedProdNewer.length} />
@@ -196,13 +220,18 @@ function PublishPreview({
 
     return (
         <div style={styles.previewBox}>
-            <strong>{total} מסמכים יועתקו מסטייג' לפרוד:</strong>
+            <strong>
+                {total === 1 ? "מסמך אחד יועתק" : `${total} מסמכים יועתקו`} מסטייג' לפרוד,
+                והתוכן יגיע למתפללים:
+            </strong>
             <div style={styles.previewMuted}>
                 {counts.items} פריטים · {counts.calendar} לוח שנה · {counts.toc} מבנה
                 {plan.firstRun && " · השוואה מלאה ראשונה"}
             </div>
             <div style={styles.previewNote}>
-                כולל כל שינוי שנשמר לסטייג' מאז הפרסום הקודם — גם עריכות של אחרים.
+                <strong>שימו לב:</strong> הפרסום מיישר את פרוד לפי סטייג' — כלומר יוצא כאן{" "}
+                <strong>כל</strong> שינוי שנשמר בסטייג' מאז הפרסום הקודם, גם עריכות של אנשים
+                אחרים. עברו על הרשימה לפני האישור.
             </div>
 
             <ul style={styles.previewList}>
@@ -246,8 +275,10 @@ function PublishPreview({
 function ProdNewerNote({ count }: { count: number }) {
     return (
         <div style={styles.prodNewerNote}>
-            ⚠ {count} מסמכים חדשים יותר בפרוד — לא ידרסו. בדרך כלל זו עריכה שנעשתה
-            ישירות בפרוד. הרשימה המלאה בקונסול.
+            ⚠ {count === 1 ? "מסמך אחד שונה" : `${count} מסמכים שונים`} בפרוד מהמצב בסטייג',
+            והעותק שבפרוד חדש יותר — לכן הפרסום <strong>לא</strong> יגע בהם, והם יישארו
+            בפרוד כפי שהם. בדרך כלל זו עריכה שנעשתה ישירות בפרוד, או שינוי שנשמר לפרוד
+            ולא לסטייג'. אם ציפיתם שהם יתעדכנו — עצרו ובדקו לפני הפרסום.
         </div>
     );
 }
@@ -341,6 +372,15 @@ const styles: Record<string, React.CSSProperties> = {
         color: "#555",
         marginTop: 2,
         overflowWrap: "anywhere",
+    },
+    publishStillNeeded: {
+        marginTop: 8,
+        padding: "8px 10px",
+        borderRadius: 4,
+        background: "#e8f5e9",
+        color: "#1b5e20",
+        fontSize: 12,
+        lineHeight: 1.6,
     },
     prodNewerNote: {
         marginTop: 8,

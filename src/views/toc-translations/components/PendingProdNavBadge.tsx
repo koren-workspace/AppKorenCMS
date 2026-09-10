@@ -11,7 +11,7 @@ export function PendingProdNavBadge({ compact = false }: PendingProdNavBadgeProp
         return (
             <span
                 className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-blue-100 px-1 py-px text-[9px] font-semibold leading-none text-blue-800"
-                title="נשמר לסטייג' בלבד — ממתין לשמירת מבנה לפרוד"
+                title="נשמר בסטייג' בלבד. עדיין לא הועתק לפרוד ולא הגיע למתפללים — «שמור מבנה · פרוד» ואז «פרסם · פרוד»"
             >
                 <span
                     className="inline-block h-1 w-1 rounded-full bg-blue-700"
@@ -25,7 +25,7 @@ export function PendingProdNavBadge({ compact = false }: PendingProdNavBadgeProp
     return (
         <span
             className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800"
-            title="נשמר לסטייג' בלבד — ממתין לשמירת מבנה לפרוד"
+            title="נשמר בסטייג' בלבד. עדיין לא הועתק לפרוד ולא הגיע למתפללים — «שמור מבנה · פרוד» ואז «פרסם · פרוד»"
         >
             <span
                 className="inline-block h-1.5 w-1.5 rounded-full bg-blue-700"

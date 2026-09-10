@@ -463,7 +463,7 @@ export default defineConfig(({ mode }) => {
     return {
     test: {
         environment: "node",
-        include: ["src/**/*.test.ts", "src/**/*.spec.ts"],
+        include: ["src/**/*.test.ts", "src/**/*.spec.ts", "scripts/**/*.test.mjs"],
         globals: true,
     },
     server: {

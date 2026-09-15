@@ -6,6 +6,7 @@ import { ChangeLogView } from "./views/ChangeLogView";
 import { CouponsView } from "./views/CouponsView";
 import { AppFlagsView } from "./views/AppFlagsView";
 import { CatalogView } from "./views/CatalogView";
+import { TanakhView } from "./views/TanakhView";
 
 const appConfig = {
     version: "1",
@@ -40,6 +41,11 @@ const appConfig = {
             path: "catalog",
             name: "קטלוג תוספות",
             view: <CatalogView />,
+        },
+        {
+            path: "tanakh-lametayel",
+            name: "התנ\"ך למטייל",
+            view: <TanakhView />,
         },
     ],
     propertyConfigs: {

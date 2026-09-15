@@ -12,4 +12,11 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_SHEETS_SHEET_NAME?: string;
   /** true = לוגי itemId מפורטים בקונסולה (itemUtils / חלק מ-partEditService) */
   readonly VITE_DEBUG_CMS_ITEM_IDS?: string;
+  /** התנ"ך למטייל – פרויקט Firebase נפרד (ראו docs/tanakh-lametayel.md) */
+  readonly VITE_TLM_FIREBASE_API_KEY?: string;
+  readonly VITE_TLM_FIREBASE_AUTH_DOMAIN?: string;
+  readonly VITE_TLM_FIREBASE_PROJECT_ID?: string;
+  readonly VITE_TLM_FIREBASE_STORAGE_BUCKET?: string;
+  readonly VITE_TLM_FIREBASE_MESSAGING_SENDER_ID?: string;
+  readonly VITE_TLM_FIREBASE_APP_ID?: string;
 }

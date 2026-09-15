@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// Firestore rules – koren-tanakh-lametayel (התנ"ך למטייל)
+//
+// Only the CMS touches this database: editors signed in with email/password.
+// The mobile app never reads Firestore – it downloads the published content
+// file from Storage (see storage.rules). So there is no anonymous access here.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A CMS user: signed in with an email (Anonymous Auth has no email).
+    function isCmsUser() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    match /{document=**} {
+      allow read, write: if isCmsUser();
+    }
+  }
+}

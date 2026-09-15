@@ -17,6 +17,11 @@ export type ProdAuthModalProps = {
     onClose: () => void;
     /** מאפשר החלפת מנגנון הזדהות בבדיקות E2E */
     authenticate?: (email: string, password: string) => Promise<void>;
+    /** טקסטים חלופיים – כשהמודל משמש לפרויקט אחר (למשל התנ"ך למטייל) */
+    title?: string;
+    subtitle?: React.ReactNode;
+    /** שם הסביבה בהודעת "משתמש לא קיים" (ברירת מחדל: "בפרוד") */
+    envLabel?: string;
 };
 
 export function ProdAuthModal({
@@ -25,6 +30,9 @@ export function ProdAuthModal({
     onSuccess,
     onClose,
     authenticate,
+    title,
+    subtitle,
+    envLabel = "בפרוד",
 }: ProdAuthModalProps) {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -53,7 +61,7 @@ export function ProdAuthModal({
             if (code.includes("wrong-password") || code.includes("invalid-credential")) {
                 setError("סיסמה שגויה – נסה שוב.");
             } else if (code.includes("user-not-found")) {
-                setError("משתמש לא קיים בפרוד עם מייל זה.");
+                setError(`משתמש לא קיים ${envLabel} עם מייל זה.`);
             } else if (code.includes("too-many-requests")) {
                 setError("יותר מדי ניסיונות. נסה שוב מאוחר יותר.");
             } else {
@@ -67,11 +75,15 @@ export function ProdAuthModal({
     return (
         <div style={styles.overlay} onClick={onClose}>
             <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-                <h3 style={styles.title}>כניסה לסביבת Production</h3>
+                <h3 style={styles.title}>{title ?? "כניסה לסביבת Production"}</h3>
                 <p style={styles.subtitle}>
-                    כדי לשמור לפרוד, יש להתאמת עם פרויקט Production.
-                    <br />
-                    הכניסה תישמר עד לסגירת הטאב.
+                    {subtitle ?? (
+                        <>
+                            כדי לשמור לפרוד, יש להתאמת עם פרויקט Production.
+                            <br />
+                            הכניסה תישמר עד לסגירת הטאב.
+                        </>
+                    )}
                 </p>
 
                 <form onSubmit={handleSubmit} style={styles.form}>

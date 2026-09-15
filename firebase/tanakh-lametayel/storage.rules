@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Storage rules – koren-tanakh-lametayel (התנ"ך למטייל)
+//
+//   published/*  content files the app downloads (live + preview) – public read
+//   media/*      entry images the app displays                    – public read
+//   everything else: CMS users only
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isCmsUser() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    match /published/{file=**} {
+      allow read: if true;
+      allow write: if isCmsUser();
+    }
+
+    match /media/{file=**} {
+      allow read: if true;
+      allow write: if isCmsUser();
+    }
+
+    match /{path=**} {
+      allow read, write: if isCmsUser();
+    }
+  }
+}

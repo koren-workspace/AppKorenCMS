@@ -196,7 +196,8 @@ export function MapPicker({ value, entryId, label, onChange }: MapPickerProps) {
         } else {
             markerRef.current.setLatLng(latlng);
         }
-        if (label) markerRef.current.bindTooltip(label);
+        // "ערך:" ולא הכותרת לבדה – תווית צמודה לפין נקראת אחרת כשם המקום על המפה
+        if (label) markerRef.current.bindTooltip(`ערך: ${label}`);
     }, [value, ready, label]);
 
     // מעבר לערך אחר: למרכז מחדש (ולא להישאר במבט של הערך הקודם)

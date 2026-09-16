@@ -120,6 +120,8 @@ export function convertLegacyEntry(
         findByTitle: (title: string) => string | undefined;
         location?: LegacyLocation;
         anchors?: Anchor[];
+        /** הערות פנימיות (עמודת "הערות" בגיליון) */
+        notes?: string;
     },
     options: ConvertOptions = {},
 ): Entry {
@@ -208,6 +210,7 @@ export function convertLegacyEntry(
     if (ctx.location) {
         entry.location = { lat: ctx.location.lat, lng: ctx.location.lng, conf: clampConf(ctx.location.conf) };
     }
+    if (ctx.notes) entry.notes = ctx.notes;
     if (options.updatedBy) entry.updatedBy = options.updatedBy;
     return entry;
 }

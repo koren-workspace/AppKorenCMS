@@ -24,7 +24,8 @@ export interface ValidationContext {
     categoryKeys?: ReadonlySet<string>;
 }
 
-export const ENTRY_ID_PATTERN = /^[a-z][a-z0-9-]{1,40}$/;
+/** אותיות לטיניות קטנות, ספרות, מקף ונקודה (בגיליון יש מזהים כמו e0216.1) */
+export const ENTRY_ID_PATTERN = /^[a-z][a-z0-9.-]{1,40}$/;
 
 /** תיבת גבולות של עולם המקרא – מחוץ לה כנראה טעות הקלדה */
 export const WORLD_BBOX = { latMin: 25, latMax: 38, lngMin: 30, lngMax: 49 };
@@ -38,7 +39,7 @@ export function validateEntry(entry: Entry, ctx: ValidationContext = {}): Valida
     const err = (field: string, message: string) => issues.push({ level: "error", field, message });
     const warn = (field: string, message: string) => issues.push({ level: "warning", field, message });
 
-    if (!ENTRY_ID_PATTERN.test(entry.id)) err("id", "מזהה חייב להיות אותיות לטיניות קטנות, ספרות ומקפים, ולהתחיל באות");
+    if (!ENTRY_ID_PATTERN.test(entry.id)) err("id", "מזהה חייב להיות אותיות לטיניות קטנות, ספרות, מקפים ונקודות, ולהתחיל באות");
     if (!entry.cat) err("cat", "חסרה קטגוריה");
     else if (ctx.categoryKeys && !ctx.categoryKeys.has(entry.cat)) err("cat", `קטגוריה לא קיימת: ${entry.cat}`);
 

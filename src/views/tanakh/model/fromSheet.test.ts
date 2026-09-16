@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanTitle, columnIndex, imageBlocks, parseCoordPair, parseCsv, parseSheetRows, quoteBlocks, refItems } from "./fromSheet";
+import { cleanTitle, columnIndex, imageBlocks, parseCoordPair, parseCsv, parseSheetRows, quoteBlocks, refItems, sheetCsvUrl } from "./fromSheet";
 import { convertLegacyEntry } from "./fromLegacy";
 
 describe("parseCsv", () => {
@@ -132,5 +132,22 @@ describe("parseSheetRows", () => {
 
     it("גיליון בלי כותרות מוכרות → שגיאה", () => {
         expect(() => parseSheetRows([["a", "b"], ["1", "2"]])).toThrow();
+    });
+
+    it("כותרת שבלעה שורות נתונים → שגיאה, ולא גיליון מקוטע בשקט", () => {
+        // כך נראה הייצוא כש-gviz מחליט שמאות שורות הן שורת כותרת אחת:
+        // התא עדיין מתחיל ב-"id", ולכן זיהוי העמודות "מצליח".
+        const ids = Array.from({ length: 300 }, (_, i) => `e${String(i + 1).padStart(4, "0")}`).join(" ");
+        const header = [`id ${ids}`, "כותרת (Title)"];
+        expect(() => parseSheetRows([header, ["e0001", "שילה"]])).toThrow(/בלעה שורות נתונים/);
+    });
+});
+
+describe("sheetCsvUrl", () => {
+    it("מקבע headers=1 כדי ש-gviz לא ינחש כמה שורות הן כותרת", () => {
+        const url = sheetCsvUrl("SHEET", "ערכים");
+        expect(url).toContain("tqx=out:csv");
+        expect(url).toContain("headers=1");
+        expect(url).toContain(`sheet=${encodeURIComponent("ערכים")}`);
     });
 });

@@ -47,6 +47,9 @@ const ACTION_LABELS: Record<ChangeLogAction, string> = {
     split_part: "פיצול מקטע",
     save_app_copy: "שמירת טקסטי אפליקציה",
     publish_app_copy: "פרסום טקסטי אפליקציה",
+    save_tanakh_entry: "התנ\"ך למטייל: שמירת ערך",
+    delete_tanakh_entry: "התנ\"ך למטייל: מחיקת ערך",
+    save_tanakh_category: "התנ\"ך למטייל: שמירת קטגוריה",
 };
 
 function actionLabel(action: ChangeLogAction): string {
@@ -95,6 +98,7 @@ function formatSummary(entry: ChangeLogEntry): string {
         ].filter(Boolean);
         return parts.join(" · ");
     }
+    if (d.tanakh) return d.tanakh.summary;
     if (d.fieldChanges?.length) {
         const fields = d.fieldChanges.reduce((sum, fc) => sum + (fc.changes?.length ?? 0), 0);
         return `${fields} שינויי שדה ב-${d.fieldChanges.length} פריטים`;

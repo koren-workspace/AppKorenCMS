@@ -3,6 +3,7 @@ import { FireCMSFirebaseApp, FirebaseLoginView } from "@firecms/firebase";
 import appConfig from "./index";
 import { firebaseConfig } from "./firebase_config";
 import { ProdSyncPlaywrightHarness } from "./e2e/ProdSyncPlaywrightHarness";
+import { TanakhEditorHarness } from "./e2e/TanakhEditorHarness";
 
 const ALLOWED_EMAILS = (import.meta.env.VITE_ALLOWED_EMAILS as string ?? "")
     .split(",")
@@ -20,6 +21,7 @@ const appTitle = `My CMS (${environmentName})`;
 function App() {
     const search = new URLSearchParams(window.location.search);
     const isPlaywrightProdSyncHarness = search.get("playwright") === "prod-sync";
+    const isTanakhEditorHarness = search.get("playwright") === "tanakh-editor";
 
     React.useEffect(() => {
         document.title = appTitle;
@@ -27,6 +29,9 @@ function App() {
 
     if (isPlaywrightProdSyncHarness) {
         return <ProdSyncPlaywrightHarness />;
+    }
+    if (isTanakhEditorHarness) {
+        return <TanakhEditorHarness />;
     }
 
     return (

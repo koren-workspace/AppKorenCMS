@@ -93,7 +93,10 @@ export type ChangeLogAction =
     | "copy_items_to_part"  // העתקת פריטים לחלק תפילה אחר (יכול להיות תפילה/נוסח שונים)
     | "split_part"          // פיצול פריט לשני פריטים
     | "save_app_copy"       // שמירת טקסטים של האפליקציה (app-copy) ל-Stage
-    | "publish_app_copy";   // פרסום טקסטים של האפליקציה לפרוד
+    | "publish_app_copy"    // פרסום טקסטים של האפליקציה לפרוד
+    | "save_tanakh_entry"   // התנ"ך למטייל: שמירת ערך (יצירה או עדכון)
+    | "delete_tanakh_entry" // התנ"ך למטייל: מחיקת ערך
+    | "save_tanakh_category"; // התנ"ך למטייל: שמירת קטגוריה
 
 /** הקשר – איפה בוצעה הפעולה */
 export type ChangeLogContext = {
@@ -233,6 +236,8 @@ export type ChangeLogEntry = {
         copyChanges?: Array<{ key: string; changes: FieldChange[] }>;
         /** publish_app_copy: המפתחות שפורסמו לפרוד */
         publishedCopyKeys?: string[];
+        /** save_tanakh_entry / delete_tanakh_entry / save_tanakh_category */
+        tanakh?: { entryId?: string; categoryKey?: string; title?: string; summary: string };
     };
     /** האם נשמר ל-Firestore */
     savedToFirestore?: boolean;

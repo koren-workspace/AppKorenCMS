@@ -3,43 +3,54 @@
  * TanakhView – מסך "התנ"ך למטייל"
  * =============================================================================
  *
- * שלב 1 (תשתית): המסך מתחבר לפרויקט Firebase הנפרד של התנ"ך למטייל ומראה
- * את מצב החיבור וכמות הערכים. מסכי העריכה, התרגום והפרסום נבנים מעליו
- * בשלבים הבאים. ראו docs/tanakh-lametayel.md.
+ * ניהול תוכן המדריך בפרויקט Firebase הנפרד (ראו docs/tanakh-lametayel.md).
  *
- * זרימה: אם חסרים משתני סביבה – רשימה של מה חסר. אחרת, אם לא מחוברים –
- * מודל סיסמה (אותו מייל כמו ב-CMS, סיסמה של פרויקט התנ"ך). כשמחוברים –
- * פרטי הפרויקט וספירת המסמכים בקולקציית `entries`.
+ * זרימה: אם חסרים משתני סביבה – רשימה של מה חסר. אחרת, אם לא מחוברים – מודל
+ * סיסמה (אותו מייל כמו ב-CMS, סיסמה של פרויקט התנ"ך). כשמחוברים – סביבת
+ * העבודה: רשימת ערכים (חיפוש, סינון) וטופס עריכה לערך הנבחר.
+ *
+ * כל שמירה היא טיוטה. משתמשי האפליקציה רואים רק מה שמתפרסם (שלב 7).
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthController } from "@firecms/core";
-import { collection, getCountFromServer } from "firebase/firestore";
 import type { User } from "firebase/auth";
-import { isTanakhConfigured, missingTanakhEnvVars, tanakhProjectId, tanakhStorageBucket } from "../firebase_config";
+import { isTanakhConfigured, missingTanakhEnvVars, tanakhProjectId } from "../firebase_config";
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
-import {
-    getTanakhFirestore,
-    onTanakhAuthChanged,
-    signInToTanakh,
-    signOutOfTanakh,
-} from "./tanakh/services/tanakhAuthService";
-
-/** קולקציית הערכים בפרויקט התנ"ך (מוגדרת במלואה בשלב 2) */
-export const TANAKH_ENTRIES_COLLECTION = "entries";
+import { setChangeLogUser } from "./toc-translations/services/changeLogService";
+import { onTanakhAuthChanged, signInToTanakh, signOutOfTanakh } from "./tanakh/services/tanakhAuthService";
+import { deleteEntry, loadContent, saveEntry, seedCategories, type TanakhContent } from "./tanakh/services/entriesService";
+import { emptyEntry, type Entry } from "./tanakh/model/types";
+import { entriesEqual, nextEntryId, setTranslationStatus } from "./tanakh/model/entryOps";
+import { validateEntry } from "./tanakh/model/validate";
+import { EntryList } from "./tanakh/components/EntryList";
+import { EntryEditor } from "./tanakh/components/EntryEditor";
+import { ts } from "./tanakh/components/tanakhStyles";
 
 type Banner = { kind: "info" | "success" | "error"; text: string } | null;
 
 export function TanakhView() {
     const auth = useAuthController();
-    const currentUserEmail = (auth.user as any)?.email ?? "";
+    const currentUserEmail: string = (auth.user as any)?.email ?? "";
+    const currentUserUid: string = (auth.user as any)?.uid ?? "";
     const configured = isTanakhConfigured();
 
     /** undefined = Firebase עוד לא החזיר את מצב הסשן */
     const [user, setUser] = useState<User | null | undefined>(undefined);
     const [authOpen, setAuthOpen] = useState(false);
-    const [entryCount, setEntryCount] = useState<number | null>(null);
     const [banner, setBanner] = useState<Banner>(null);
+
+    const [content, setContent] = useState<TanakhContent | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [busy, setBusy] = useState(false);
+
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [draft, setDraft] = useState<Entry | null>(null);
+    const [isNew, setIsNew] = useState(false);
+
+    useEffect(() => {
+        setChangeLogUser({ email: currentUserEmail, uid: currentUserUid });
+    }, [currentUserEmail, currentUserUid]);
 
     // מעקב אחרי כניסה/יציאה לפרויקט התנ"ך (כולל שחזור סשן בטעינת הדף)
     useEffect(() => {
@@ -47,93 +58,210 @@ export function TanakhView() {
         return onTanakhAuthChanged(u => {
             setUser(u);
             if (!u) {
-                setEntryCount(null);
+                setContent(null);
+                setDraft(null);
+                setSelectedId(null);
                 setAuthOpen(true);
             }
         });
     }, [configured]);
 
-    // כשמחוברים – ספירת הערכים
+    const reload = useCallback(async () => {
+        setLoading(true);
+        try {
+            const c = await loadContent();
+            setContent(c);
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `קריאת Firestore נכשלה: ${err?.message ?? err}. בדקו את חוקי האבטחה (docs/tanakh-lametayel.md).` });
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
-        if (!user) return;
-        let cancelled = false;
-        (async () => {
-            try {
-                const snap = await getCountFromServer(collection(getTanakhFirestore(), TANAKH_ENTRIES_COLLECTION));
-                if (!cancelled) setEntryCount(snap.data().count);
-            } catch (err: any) {
-                if (!cancelled) setBanner({ kind: "error", text: `החיבור הצליח, אבל קריאת Firestore נכשלה: ${err?.message ?? err}. בדקו את חוקי האבטחה (docs/tanakh-lametayel.md).` });
+        if (user) void reload();
+    }, [user, reload]);
+
+    const entries = content?.entries ?? [];
+    const categories = content?.categories ?? [];
+    const original = useMemo(() => (selectedId ? entries.find(e => e.id === selectedId) ?? null : null), [entries, selectedId]);
+    const dirty = Boolean(draft && (isNew || (original && !entriesEqual(draft, original))));
+    const issues = useMemo(() => {
+        if (!draft) return [];
+        return validateEntry(draft, {
+            entryIds: new Set(entries.map(e => e.id)),
+            categoryKeys: new Set(categories.map(c => c.key)),
+        });
+    }, [draft, entries, categories]);
+
+    function confirmDiscard(): boolean {
+        return !dirty || window.confirm("יש שינויים שלא נשמרו בערך הנוכחי. לעזוב בלי לשמור?");
+    }
+
+    function select(id: string) {
+        if (id === selectedId) return;
+        if (!confirmDiscard()) return;
+        const e = entries.find(x => x.id === id);
+        if (!e) return;
+        setSelectedId(id);
+        setDraft(structuredClone(e));
+        setIsNew(false);
+        setBanner(null);
+    }
+
+    function startNew() {
+        if (!confirmDiscard()) return;
+        const id = nextEntryId(entries.map(e => e.id));
+        const cat = categories[0]?.key ?? "places";
+        setSelectedId(id);
+        setDraft(emptyEntry(id, cat));
+        setIsNew(true);
+        setBanner(null);
+    }
+
+    async function onSave() {
+        if (!draft || busy) return;
+        if (issues.some(i => i.level === "error")) return;
+        setBusy(true);
+        try {
+            // ערך ראשון במסד ריק: הקטגוריות המובנות נכתבות כדי שהקטגוריה של הערך תהיה קיימת
+            if (content && !content.categoriesFromDb) {
+                await seedCategories();
+                setContent(c => (c ? { ...c, categoriesFromDb: true } : c));
             }
-        })();
-        return () => { cancelled = true; };
-    }, [user]);
+            const saved = await saveEntry(draft, currentUserEmail || undefined, isNew);
+            setContent(c => {
+                if (!c) return c;
+                const others = c.entries.filter(e => e.id !== saved.id);
+                return { ...c, entries: [...others, saved] };
+            });
+            setDraft(structuredClone(saved));
+            setIsNew(false);
+            const warnings = issues.filter(i => i.level === "warning").length;
+            setBanner({ kind: "success", text: `נשמר: ${saved.title.he}${warnings ? ` (${warnings} אזהרות – לא חוסמות)` : ""}. זו טיוטה; משתמשים יראו אותה רק אחרי פרסום.` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `השמירה נכשלה: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function onDelete() {
+        if (!draft || busy || isNew) return;
+        const linking = entries.filter(e => e.xrefs.includes(draft.id) || e.see === draft.id);
+        const warning = linking.length ? `\n\nשימו לב: ${linking.length} ערכים מקשרים לערך הזה (${linking.slice(0, 5).map(e => e.title.he).join(", ")}${linking.length > 5 ? "…" : ""}). הקישורים יישברו. עדיף להסתיר במקום למחוק.` : "";
+        if (!window.confirm(`למחוק את הערך "${draft.title.he}" (${draft.id})?${warning}`)) return;
+        if (!window.confirm("המחיקה סופית ואינה ניתנת לשחזור. להמשיך?")) return;
+        setBusy(true);
+        try {
+            await deleteEntry(draft);
+            setContent(c => (c ? { ...c, entries: c.entries.filter(e => e.id !== draft.id) } : c));
+            setDraft(null);
+            setSelectedId(null);
+            setBanner({ kind: "info", text: `הערך ${draft.id} נמחק.` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `המחיקה נכשלה: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function onMarkTranslation(status: "reviewed" | "approved") {
+        if (!draft || busy || dirty) return;
+        const marked = setTranslationStatus(draft, "en", status, currentUserEmail || undefined);
+        setBusy(true);
+        try {
+            const saved = await saveEntry(marked, currentUserEmail || undefined, false);
+            setContent(c => (c ? { ...c, entries: c.entries.map(e => (e.id === saved.id ? saved : e)) } : c));
+            setDraft(structuredClone(saved));
+            setBanner({ kind: "success", text: `התרגום לאנגלית סומן: ${status === "approved" ? "מאושר" : "נבדק"}.` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `הסימון נכשל: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
+    }
 
     async function onSignOut() {
+        if (!confirmDiscard()) return;
         await signOutOfTanakh();
         setBanner({ kind: "info", text: "התנתקתם מפרויקט התנ\"ך. הכניסה ל-CMS עצמו לא השתנתה." });
     }
 
+    // ── תצוגה ─────────────────────────────────────────────────────────────
+
     if (!configured) {
         return (
-            <div style={styles.page}>
+            <div style={ts.page}>
                 <Header />
-                <div style={{ ...styles.banner, background: "#fff3e0", color: "#8a4b00" }}>
+                <div style={{ ...ts.banner, ...ts.bannerWarn }}>
                     פרויקט התנ"ך למטייל לא מוגדר בסביבה הזו. חסרים משתני הסביבה הבאים
-                    (ב-Vercel, או ב-<code style={styles.code}>.env.local</code> בפיתוח):
-                    <ul style={styles.list}>
-                        {missingTanakhEnvVars().map(name => (
-                            <li key={name}><code style={styles.code}>{name}</code></li>
-                        ))}
+                    (ב-Vercel, או ב-<code style={ts.code}>.env.local</code> בפיתוח):
+                    <ul style={{ margin: "6px 0", paddingInlineStart: 22 }}>
+                        {missingTanakhEnvVars().map(name => <li key={name}><code style={ts.code}>{name}</code></li>)}
                     </ul>
                     הערכים נמצאים בקונסולת Firebase של הפרויקט, Project settings ← Your apps ← SDK setup.
-                    הוראות מלאות ב-<code style={styles.code}>docs/tanakh-lametayel.md</code>.
+                    הוראות מלאות ב-<code style={ts.code}>docs/tanakh-lametayel.md</code>.
                 </div>
             </div>
         );
     }
 
     return (
-        <div style={styles.page}>
-            <Header />
+        <div style={ts.page}>
+            <Header
+                right={
+                    <div style={{ ...ts.row, fontSize: 13 }}>
+                        <span style={ts.code}>{tanakhProjectId()}</span>
+                        {user === undefined ? <span style={ts.muted}>בודק חיבור…</span>
+                            : user ? <><span style={{ color: "#2e7d32", fontWeight: 600 }}>מחובר כ-{user.email}</span><button style={ts.secondaryBtn} onClick={() => void onSignOut()}>התנתקות</button></>
+                            : <><span style={{ color: "#b71c1c", fontWeight: 600 }}>לא מחובר</span><button style={ts.primaryBtn} onClick={() => setAuthOpen(true)}>התחברות</button></>}
+                    </div>
+                }
+            />
 
             {banner && (
-                <div style={{
-                    ...styles.banner,
-                    background: banner.kind === "error" ? "#fdecea" : banner.kind === "success" ? "#e8f5e9" : "#e3f2fd",
-                    color: banner.kind === "error" ? "#b71c1c" : banner.kind === "success" ? "#1b5e20" : "#0d47a1",
-                }}>
+                <div style={{ ...ts.banner, ...(banner.kind === "error" ? ts.bannerError : banner.kind === "success" ? ts.bannerSuccess : ts.bannerInfo) }}>
                     {banner.text}
                 </div>
             )}
 
-            <div style={styles.card}>
-                <h3 style={styles.cardTitle}>חיבור לפרויקט</h3>
-                <Row label="פרויקט Firebase"><code style={styles.code}>{tanakhProjectId()}</code></Row>
-                <Row label="Storage"><code style={styles.code}>{tanakhStorageBucket() || "—"}</code></Row>
-                <Row label="מצב">
-                    {user === undefined ? "בודק חיבור..." : user ? (
-                        <span style={{ color: "#2e7d32", fontWeight: 600 }}>מחובר כ-{user.email}</span>
+            {user && content && (
+                <div style={ts.workspace}>
+                    <EntryList
+                        entries={entries}
+                        categories={categories}
+                        selectedId={selectedId}
+                        dirtyId={dirty ? selectedId : null}
+                        onSelect={select}
+                        onNew={startNew}
+                        onReload={() => { if (confirmDiscard()) { setDraft(null); setSelectedId(null); void reload(); } }}
+                        loading={loading}
+                    />
+                    {draft ? (
+                        <EntryEditor
+                            draft={draft}
+                            isNew={isNew}
+                            dirty={dirty}
+                            busy={busy}
+                            categories={categories}
+                            allEntries={entries}
+                            issues={issues}
+                            onChange={setDraft}
+                            onSave={() => void onSave()}
+                            onDelete={() => void onDelete()}
+                            onRevert={() => original && setDraft(structuredClone(original))}
+                            onMarkTranslation={s => void onMarkTranslation(s)}
+                        />
                     ) : (
-                        <span style={{ color: "#b71c1c", fontWeight: 600 }}>לא מחובר</span>
+                        <div style={{ ...ts.card, alignItems: "center", justifyContent: "center", minHeight: 240, color: "#777" }}>
+                            {entries.length ? "בחרו ערך מהרשימה, או לחצו + ערך" : "המסד ריק. התוכן הקיים נטען בשלב 3; אפשר כבר ליצור ערך ראשון עם + ערך."}
+                        </div>
                     )}
-                </Row>
-                <Row label="ערכים ב-Firestore">
-                    {user ? (entryCount === null ? "טוען..." : entryCount.toLocaleString("he-IL")) : "—"}
-                </Row>
-                <div style={styles.actions}>
-                    {user ? (
-                        <button style={styles.secondaryBtn} onClick={() => void onSignOut()}>התנתק מפרויקט התנ"ך</button>
-                    ) : user === null ? (
-                        <button style={styles.primaryBtn} onClick={() => setAuthOpen(true)}>התחבר</button>
-                    ) : null}
-                </div>
-            </div>
-
-            {user && entryCount === 0 && (
-                <div style={{ ...styles.banner, background: "#e3f2fd", color: "#0d47a1" }}>
-                    החיבור עובד. המסד עדיין ריק – התוכן הקיים נטען בשלב 3 (העברת הנתונים).
                 </div>
             )}
+            {user && !content && !loading && !banner && <div style={{ ...ts.banner, ...ts.bannerInfo }}>טוען…</div>}
+            {user && loading && !content && <div style={{ ...ts.banner, ...ts.bannerInfo }}>טוען את הערכים…</div>}
 
             <ProdAuthModal
                 open={authOpen}
@@ -154,41 +282,14 @@ export function TanakhView() {
     );
 }
 
-function Header() {
+function Header({ right }: { right?: React.ReactNode }) {
     return (
-        <div style={styles.header}>
+        <div style={ts.header}>
             <div>
-                <h2 style={styles.title}>התנ"ך למטייל</h2>
-                <p style={styles.subtitle}>
-                    ניהול תוכן המדריך: ערכים, מיקומים, תמונות ותרגומים. פרויקט Firebase נפרד מהתפילה.
-                </p>
+                <h2 style={ts.title}>התנ"ך למטייל</h2>
+                <p style={ts.subtitle}>ניהול תוכן המדריך: ערכים, מיקומים, תמונות ותרגומים. כל שמירה היא טיוטה עד לפרסום.</p>
             </div>
+            {right}
         </div>
     );
 }
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-        <div style={styles.row}>
-            <span style={styles.rowLabel}>{label}</span>
-            <span>{children}</span>
-        </div>
-    );
-}
-
-const styles: Record<string, React.CSSProperties> = {
-    page: { direction: "rtl", padding: "20px 24px 60px", maxWidth: 900, margin: "0 auto", fontFamily: "inherit" },
-    header: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap", marginBottom: 12 },
-    title: { margin: 0, fontSize: 20, fontWeight: 700 },
-    subtitle: { margin: "4px 0 0", fontSize: 13, color: "#666" },
-    banner: { borderRadius: 6, padding: "10px 14px", fontSize: 14, marginBottom: 12, lineHeight: 1.6 },
-    list: { margin: "6px 0", paddingInlineStart: 22 },
-    card: { border: "1px solid #e0e0e0", borderRadius: 8, padding: "12px 16px", background: "#fff", display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
-    cardTitle: { margin: 0, fontSize: 16, fontWeight: 700 },
-    row: { display: "flex", gap: 12, fontSize: 14, alignItems: "baseline" },
-    rowLabel: { minWidth: 150, color: "#555", fontWeight: 600 },
-    actions: { display: "flex", gap: 10, marginTop: 4 },
-    code: { fontSize: 12, background: "#f0f0f0", borderRadius: 4, padding: "1px 6px", direction: "ltr", unicodeBidi: "isolate" },
-    primaryBtn: { padding: "8px 18px", borderRadius: 6, border: "none", background: "#1565c0", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14 },
-    secondaryBtn: { border: "1px solid #ccc", background: "#fff", borderRadius: 5, padding: "6px 12px", fontSize: 13, cursor: "pointer", color: "#555" },
-};

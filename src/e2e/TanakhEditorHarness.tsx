@@ -26,7 +26,15 @@ function sample(): Entry[] {
     shiloh.region = { he: "השומרון" };
     shiloh.page = 300;
     shiloh.location = { lat: 32.0556, lng: 35.2897, conf: 1 };
-    shiloh.images = [{ kind: "baked", src: "e0203_1_1", caption: { he: "התל" } }];
+    shiloh.images = [
+        { kind: "baked", src: "e0203_1_1", caption: { he: "התל" } },
+        { kind: "baked", src: "e0203_1_2", caption: { he: "מבט מהמשכן", en: "View from the Tabernacle" } },
+    ];
+    shiloh.anchors = [
+        { book: "yehoshua", ch: 18, v: 1, w: "שילה" },
+        { book: "shmuel-a", ch: 1, v: 3 },
+        { book: "shoftim", ch: 21, v: 19 },
+    ];
     shiloh.review = ['ערך קשור לא נמצא: "משכן"', 'ציטוט לא זוהה כפסוק: "מקום המשכן"'];
     shiloh.i18n.en = { status: "stale", updatedAt: 1700000000000, updatedBy: "translator@korenpub.com" };
     shiloh.updatedAt = 1700000000000;

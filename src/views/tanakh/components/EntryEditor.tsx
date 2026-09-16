@@ -1,12 +1,12 @@
 /**
- * EntryEditor – טופס העריכה של ערך אחד (שלב 4, חלק א').
+ * EntryEditor – טופס העריכה של ערך אחד.
  *
  * הטופס עובד על עותק מקומי של הערך (draft) ומדווח למעלה על שינויים. השמירה,
  * המחיקה והאימות מגיעים מלמעלה (TanakhView), כדי שהרשימה תתעדכן.
  *
- * שדות בחלק א': כותרת ושמות נוספים (עברית/אנגלית), גוף הערך עם תצוגה מקדימה,
- * פסוקי פתיחה, מראי מקום, ערכים קשורים, הפניה, אזור, עמוד, הערות פנימיות,
- * הערות לבדיקה, מצב תרגום. מיקום, תמונות וקישורים מהפסוקים – בחלק ב'.
+ * שדות: כותרת ושמות נוספים (עברית/אנגלית), גוף הערך עם תצוגה מקדימה, פסוקי
+ * פתיחה, מראי מקום, ערכים קשורים, הפניה, מיקום על מפה, תמונות, קישורים
+ * מהפסוקים, אזור, עמוד, הערות פנימיות, הערות לבדיקה, מצב תרגום.
  */
 
 import React, { useMemo, useState } from "react";
@@ -17,6 +17,9 @@ import type { ValidationIssue } from "../model/validate";
 import { hasTranslation } from "../model/entryOps";
 import { matchesQuery } from "../utils/search";
 import { BodyPreview } from "./BodyPreview";
+import { AnchorEditor } from "./AnchorEditor";
+import { ImageList } from "./ImageList";
+import { MapPicker } from "./MapPicker";
 import { AMBER, BLUE, GREEN, RED, ts } from "./tanakhStyles";
 
 export interface EntryEditorProps {
@@ -73,7 +76,12 @@ export function EntryEditor(p: EntryEditorProps) {
             {/* ── לבדיקה ───────────────────────────────────────────────── */}
             {draft.review.length > 0 && (
                 <div style={{ ...ts.banner, ...ts.bannerWarn, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <b>לבדיקה ({draft.review.length})</b>
+                    <div style={{ ...ts.row, justifyContent: "space-between" }}>
+                        <b>לבדיקה ({draft.review.length})</b>
+                        {draft.review.length > 1 && (
+                            <button style={ts.smallBtn} onClick={() => set({ review: [] })}>טופל להכול</button>
+                        )}
+                    </div>
                     {draft.review.map((r, i) => (
                         <div key={i} style={{ ...ts.row, justifyContent: "space-between" }}>
                             <span>{r}</span>
@@ -151,6 +159,27 @@ export function EntryEditor(p: EntryEditorProps) {
                 )}
                 <Issues list={errorsFor("see")} />
             </section>
+
+            {/* ── מיקום ────────────────────────────────────────────────── */}
+            <section style={ts.section}>
+                <div style={{ ...ts.row, justifyContent: "space-between" }}>
+                    <h4 style={ts.sectionTitle}>מיקום</h4>
+                    {!draft.location && <span style={ts.muted}>אין מיקום – לחיצה על המפה תוסיף אחד</span>}
+                </div>
+                <MapPicker
+                    entryId={draft.id}
+                    value={draft.location}
+                    label={draft.title.he || draft.id}
+                    onChange={location => set({ location })}
+                />
+                <Issues list={errorsFor("location")} />
+            </section>
+
+            {/* ── תמונות ───────────────────────────────────────────────── */}
+            <ImageList images={draft.images} onChange={images => set({ images })} />
+
+            {/* ── קישורים מהפסוקים ─────────────────────────────────────── */}
+            <AnchorEditor anchors={draft.anchors} onChange={anchors => set({ anchors })} />
 
             {/* ── אזור, עמוד, הערות ────────────────────────────────────── */}
             <section style={ts.section}>

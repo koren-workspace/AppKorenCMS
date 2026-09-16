@@ -7,6 +7,7 @@ import React, { useMemo, useState } from "react";
 import type { Category, Entry } from "../model/types";
 import { hasTranslation } from "../model/entryOps";
 import { filterEntries, QUICK_FILTER_LABELS, sortEntries, type ListFilters, type QuickFilter } from "../utils/search";
+import { AnchorsIcon, HiddenIcon, ImagesIcon, LocationIcon, ReviewIcon } from "./StatusIcons";
 import { ts } from "./tanakhStyles";
 
 export interface EntryListProps {
@@ -22,6 +23,9 @@ export interface EntryListProps {
 }
 
 const PAGE = 300;
+
+/** תוויות רמת הביטחון של מיקום, לריחוף על סמל הפין */
+const LOCATION_CONF: Record<number, string> = { 1: "מאומת", 2: "ביטחון גבוה", 3: "ביטחון בינוני" };
 
 export function EntryList({ entries, categories, selectedId, dirtyId, onSelect, onNew, onReload, loading }: EntryListProps) {
     const [filters, setFilters] = useState<ListFilters>({ query: "", cat: "all", quick: null });
@@ -85,12 +89,13 @@ export function EntryList({ entries, categories, selectedId, dirtyId, onSelect, 
                                 {e.title.he || <span style={{ color: "#999" }}>(ללא כותרת)</span>}
                                 {e.see && <span style={ts.muted}> ← הפניה</span>}
                             </span>
-                            <span style={{ display: "flex", gap: 3, fontSize: 12, flexShrink: 0 }}>
+                            <span style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 12, flexShrink: 0 }}>
                                 {dirtyId === e.id && <span title="שינויים שלא נשמרו" style={{ color: "#e65100" }}>●</span>}
-                                {e.review.length > 0 && <span title={`לבדיקה (${e.review.length})`} style={{ color: "#e65100" }}>!</span>}
-                                {!e.visible && <span title="מוסתר" style={{ color: "#999" }}>👁</span>}
-                                {e.location && <span title="יש מיקום" style={{ color: "#2e7d32" }}>📍</span>}
-                                {e.images.length > 0 && <span title={`${e.images.length} תמונות`} style={{ color: "#555" }}>🖼</span>}
+                                {e.review.length > 0 && <ReviewIcon count={e.review.length} />}
+                                {!e.visible && <HiddenIcon />}
+                                {e.location && <LocationIcon title={`יש מיקום (${LOCATION_CONF[e.location.conf] ?? "?"})`} />}
+                                {e.images.length > 0 && <ImagesIcon count={e.images.length} />}
+                                {e.anchors.length > 0 && <AnchorsIcon count={e.anchors.length} />}
                                 {hasTranslation(e, "en") && <span title={`אנגלית: ${e.i18n.en?.status ?? "קיים"}`} style={{ color: e.i18n.en?.status === "stale" ? "#e65100" : "#1565c0", fontWeight: 700 }}>EN</span>}
                             </span>
                         </li>

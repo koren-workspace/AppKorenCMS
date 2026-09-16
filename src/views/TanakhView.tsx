@@ -19,12 +19,13 @@ import { isTanakhConfigured, missingTanakhEnvVars, tanakhProjectId } from "../fi
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { setChangeLogUser } from "./toc-translations/services/changeLogService";
 import { onTanakhAuthChanged, signInToTanakh, signOutOfTanakh } from "./tanakh/services/tanakhAuthService";
-import { deleteEntry, loadContent, saveEntry, seedCategories, type TanakhContent } from "./tanakh/services/entriesService";
-import { emptyEntry, type Entry } from "./tanakh/model/types";
+import { deleteEntry, loadContent, saveCategory, saveEntry, seedCategories, type TanakhContent } from "./tanakh/services/entriesService";
+import { emptyEntry, type Category, type Entry } from "./tanakh/model/types";
 import { entriesEqual, nextEntryId, setTranslationStatus } from "./tanakh/model/entryOps";
 import { validateEntry } from "./tanakh/model/validate";
 import { EntryList } from "./tanakh/components/EntryList";
 import { EntryEditor } from "./tanakh/components/EntryEditor";
+import { CategoryManager } from "./tanakh/components/CategoryManager";
 import { ts } from "./tanakh/components/tanakhStyles";
 
 type Banner = { kind: "info" | "success" | "error"; text: string } | null;
@@ -44,6 +45,7 @@ export function TanakhView() {
     const [loading, setLoading] = useState(false);
     const [busy, setBusy] = useState(false);
 
+    const [categoriesOpen, setCategoriesOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [draft, setDraft] = useState<Entry | null>(null);
     const [isNew, setIsNew] = useState(false);
@@ -182,6 +184,22 @@ export function TanakhView() {
         }
     }
 
+    async function onSaveCategory(category: Category) {
+        if (busy) return;
+        setBusy(true);
+        try {
+            // לפני ההעברה הקטגוריות מוצגות מהקוד; שמירה ראשונה זורעת את כולן
+            if (content && !content.categoriesFromDb) await seedCategories();
+            await saveCategory(category);
+            setContent(c => (c ? { ...c, categoriesFromDb: true, categories: c.categories.map(x => (x.key === category.key ? category : x)).sort((a, b) => a.order - b.order) } : c));
+            setBanner({ kind: "success", text: `הקטגוריה "${category.name.he}" נשמרה.` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `שמירת הקטגוריה נכשלה: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
+    }
+
     async function onSignOut() {
         if (!confirmDiscard()) return;
         await signOutOfTanakh();
@@ -213,6 +231,11 @@ export function TanakhView() {
                 right={
                     <div style={{ ...ts.row, fontSize: 13 }}>
                         <span style={ts.code}>{tanakhProjectId()}</span>
+                        {user && content && (
+                            <button style={ts.secondaryBtn} onClick={() => setCategoriesOpen(v => !v)}>
+                                {categoriesOpen ? "חזרה לערכים" : "קטגוריות"}
+                            </button>
+                        )}
                         {user === undefined ? <span style={ts.muted}>בודק חיבור…</span>
                             : user ? <><span style={{ color: "#2e7d32", fontWeight: 600 }}>מחובר כ-{user.email}</span><button style={ts.secondaryBtn} onClick={() => void onSignOut()}>התנתקות</button></>
                             : <><span style={{ color: "#b71c1c", fontWeight: 600 }}>לא מחובר</span><button style={ts.primaryBtn} onClick={() => setAuthOpen(true)}>התחברות</button></>}
@@ -226,7 +249,17 @@ export function TanakhView() {
                 </div>
             )}
 
-            {user && content && (
+            {user && content && categoriesOpen && (
+                <CategoryManager
+                    categories={categories}
+                    entries={entries}
+                    busy={busy}
+                    onSave={c => void onSaveCategory(c)}
+                    onClose={() => setCategoriesOpen(false)}
+                />
+            )}
+
+            {user && content && !categoriesOpen && (
                 <div style={ts.workspace}>
                     <EntryList
                         entries={entries}

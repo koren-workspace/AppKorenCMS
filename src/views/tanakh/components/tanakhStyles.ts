@@ -45,4 +45,6 @@ export const ts: Record<string, React.CSSProperties> = {
     listRow: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 6, cursor: "pointer", fontSize: 14, borderWidth: 1, borderStyle: "solid", borderColor: "transparent" },
     listRowActive: { background: "#e3f2fd", borderColor: "#90caf9" },
     muted: { color: "#777", fontSize: 12 },
+    /** נמרח על כפתור מושבת: inline styles לא מקבלים :disabled מה-CSS */
+    btnDisabled: { opacity: 0.45, cursor: "not-allowed" },
 };

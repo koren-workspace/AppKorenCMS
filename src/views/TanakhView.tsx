@@ -26,6 +26,9 @@ import { validateEntry } from "./tanakh/model/validate";
 import { EntryList } from "./tanakh/components/EntryList";
 import { EntryEditor } from "./tanakh/components/EntryEditor";
 import { CategoryManager } from "./tanakh/components/CategoryManager";
+import { PublishPanel } from "./tanakh/components/PublishPanel";
+import { isStorageEnabled } from "./tanakh/services/publishService";
+import type { ContentPack, PublishResult } from "./tanakh/model/publish";
 import { ts } from "./tanakh/components/tanakhStyles";
 
 type Banner = { kind: "info" | "success" | "error"; text: string } | null;
@@ -46,6 +49,7 @@ export function TanakhView() {
     const [busy, setBusy] = useState(false);
 
     const [categoriesOpen, setCategoriesOpen] = useState(false);
+    const [publishOpen, setPublishOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [draft, setDraft] = useState<Entry | null>(null);
     const [isNew, setIsNew] = useState(false);
@@ -200,6 +204,17 @@ export function TanakhView() {
         }
     }
 
+    /**
+     * הפרסום בפועל מעלה את הקובץ ל-Storage, שעדיין לא הופעל בפרויקט. עד אז
+     * הכפתור מושבת במסך, וזו רשת ביטחון למקרה שמישהו יפעיל את דגל הסביבה
+     * לפני שההעלאה קיימת – עדיף הודעה ברורה מאשר מסמך פרסום בלי קובץ.
+     */
+    async function onPublishPack(_pack: ContentPack, _result: PublishResult) {
+        setBanner(isStorageEnabled()
+            ? { kind: "error", text: "העלאת הקובץ ל-Storage עוד לא מומשה. בינתיים אפשר להוריד את הקובץ." }
+            : { kind: "info", text: "Firebase Storage עדיין לא הופעל בפרויקט (מצריך תוכנית Blaze). בינתיים אפשר להוריד את הקובץ ולבדוק אותו." });
+    }
+
     async function onSignOut() {
         if (!confirmDiscard()) return;
         await signOutOfTanakh();
@@ -232,9 +247,14 @@ export function TanakhView() {
                     <div style={{ ...ts.row, fontSize: 13 }}>
                         <span style={ts.code}>{tanakhProjectId()}</span>
                         {user && content && (
-                            <button style={ts.secondaryBtn} onClick={() => setCategoriesOpen(v => !v)}>
-                                {categoriesOpen ? "חזרה לערכים" : "קטגוריות"}
-                            </button>
+                            <>
+                                <button style={ts.secondaryBtn} onClick={() => { setPublishOpen(false); setCategoriesOpen(v => !v); }}>
+                                    {categoriesOpen ? "חזרה לערכים" : "קטגוריות"}
+                                </button>
+                                <button style={ts.secondaryBtn} onClick={() => { setCategoriesOpen(false); setPublishOpen(v => !v); }}>
+                                    {publishOpen ? "חזרה לערכים" : "פרסום"}
+                                </button>
+                            </>
                         )}
                         {user === undefined ? <span style={ts.muted}>בודק חיבור…</span>
                             : user ? <><span style={{ color: "#2e7d32", fontWeight: 600 }}>מחובר כ-{user.email}</span><button style={ts.secondaryBtn} onClick={() => void onSignOut()}>התנתקות</button></>
@@ -259,7 +279,17 @@ export function TanakhView() {
                 />
             )}
 
-            {user && content && !categoriesOpen && (
+            {user && content && publishOpen && (
+                <PublishPanel
+                    entries={entries}
+                    categories={categories}
+                    busy={busy}
+                    onPublish={onPublishPack}
+                    onClose={() => setPublishOpen(false)}
+                />
+            )}
+
+            {user && content && !categoriesOpen && !publishOpen && (
                 <div style={ts.workspace}>
                     <EntryList
                         entries={entries}

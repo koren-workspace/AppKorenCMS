@@ -84,7 +84,7 @@ export function ImageList({ images, storageEnabled = false, onChange }: ImageLis
             )}
 
             <div style={{ ...ts.row, gap: 8 }}>
-                <button style={ts.secondaryBtn} disabled={!storageEnabled} title={storageEnabled ? "" : "דורש Firebase Storage"}>
+                <button style={{ ...ts.secondaryBtn, ...(storageEnabled ? {} : ts.btnDisabled) }} disabled={!storageEnabled} title={storageEnabled ? "" : "דורש Firebase Storage"}>
                     העלאת תמונה
                 </button>
                 {!storageEnabled && (

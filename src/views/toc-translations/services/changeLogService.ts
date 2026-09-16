@@ -96,7 +96,8 @@ export type ChangeLogAction =
     | "publish_app_copy"    // פרסום טקסטים של האפליקציה לפרוד
     | "save_tanakh_entry"   // התנ"ך למטייל: שמירת ערך (יצירה או עדכון)
     | "delete_tanakh_entry" // התנ"ך למטייל: מחיקת ערך
-    | "save_tanakh_category"; // התנ"ך למטייל: שמירת קטגוריה
+    | "save_tanakh_category" // התנ"ך למטייל: שמירת קטגוריה
+    | "publish_tanakh_content"; // התנ"ך למטייל: פרסום קובץ התוכן לאפליקציה
 
 /** הקשר – איפה בוצעה הפעולה */
 export type ChangeLogContext = {
@@ -236,7 +237,7 @@ export type ChangeLogEntry = {
         copyChanges?: Array<{ key: string; changes: FieldChange[] }>;
         /** publish_app_copy: המפתחות שפורסמו לפרוד */
         publishedCopyKeys?: string[];
-        /** save_tanakh_entry / delete_tanakh_entry / save_tanakh_category */
+        /** save_tanakh_entry / delete_tanakh_entry / save_tanakh_category / publish_tanakh_content */
         tanakh?: { entryId?: string; categoryKey?: string; title?: string; summary: string };
     };
     /** האם נשמר ל-Firestore */

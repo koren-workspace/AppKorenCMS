@@ -86,6 +86,9 @@ const COLUMN_TOKENS: Record<SheetColumn, string[]> = {
     notes: ["הערות", "Notes"],
 };
 
+/** אורך סביר לתא כותרת; מעבר לזה הכותרת בלעה שורות נתונים (ראו sheetCsvUrl) */
+const MAX_HEADER_LEN = 60;
+
 export function columnIndex(headers: string[]): Record<SheetColumn, number> {
     const out = {} as Record<SheetColumn, number>;
     for (const [key, tokens] of Object.entries(COLUMN_TOKENS) as [SheetColumn, string[]][]) {
@@ -190,6 +193,15 @@ export function parseSheetRows(rows: string[][], options: SheetParseOptions = {}
     if (rows.length < 2) throw new Error("הגיליון ריק");
     const col = columnIndex(rows[0]);
     if (col.id < 0 || col.title < 0) throw new Error("כותרות הגיליון לא זוהו (חסר id או כותרת)");
+    // כותרת שבלעה שורות נתונים עדיין "מכילה" את שם העמודה, ולכן היא עוברת את
+    // הבדיקה שלמעלה ומייצרת גיליון שגוי בשקט. אורך חריג הוא הסימן.
+    const collapsed = rows[0].find(h => h.length > MAX_HEADER_LEN);
+    if (collapsed) {
+        throw new Error(
+            `שורת הכותרות של הגיליון בלעה שורות נתונים ("${collapsed.slice(0, 40)}…") – ` +
+                "הייצוא זיהה יותר משורת כותרת אחת. ודאו ש-headers=1 בכתובת ההורדה.",
+        );
+    }
 
     const out: SheetRow[] = [];
     const skipped: number[] = [];
@@ -268,9 +280,16 @@ export function parseSheetRows(rows: string[][], options: SheetParseOptions = {}
     return { rows: out, skipped };
 }
 
-/** כתובת ייצוא ה-CSV של טאב בגיליון משותף "לכל מי שיש לו את הקישור" */
+/**
+ * כתובת ייצוא ה-CSV של טאב בגיליון משותף "לכל מי שיש לו את הקישור".
+ *
+ * `headers=1` הוא חובה, לא קישוט: בלעדיו gviz *מנחש* כמה שורות הן כותרת,
+ * לפי טיפוסי העמודות. כל עוד lat/lng הן מספרים הניחוש יוצא 1, אבל אם מישהו
+ * מקליד קואורדינטה כטקסט כל העמודות הופכות למחרוזות, gviz מחליט שמאות שורות
+ * הן כותרת אחת ארוכה, ומחזיר גיליון מקוטע בלי שום שגיאה.
+ */
 export function sheetCsvUrl(sheetId: string, tab: string): string {
-    return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+    return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}&headers=1`;
 }
 
 /** הגיליון של המדריך (אותו מזהה כמו GUIDE_SHEET_ID באפליקציה) */

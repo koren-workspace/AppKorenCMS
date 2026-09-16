@@ -5,9 +5,10 @@ import { sourceHashOf } from "./hash";
 import { formatVerseRef, toHebrewNumeral } from "./hebnum";
 
 describe("nextEntryId", () => {
-    it("ממשיך את הרצף המספרי, מתעלם ממזהים אחרים", () => {
-        expect(nextEntryId(["e0001", "e0728", "x012", "e0216.1"])).toBe("e0729");
-        expect(nextEntryId([])).toBe("e0001");
+    it("מתחיל מ-e1000 (הטווח שמתחת שמור לתוכן המקורי), ומתעלם ממזהים אחרים", () => {
+        expect(nextEntryId([])).toBe("e1000");
+        expect(nextEntryId(["e0001", "e0728", "x012", "e0216.1"])).toBe("e1000");
+        expect(nextEntryId(["e0001", "e1000", "e1003"])).toBe("e1004");
     });
 });
 

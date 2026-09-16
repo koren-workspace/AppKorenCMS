@@ -125,6 +125,8 @@ export interface Entry {
     anchors: Anchor[];
     /** false = מוסתר באפליקציה (טיוטה) */
     visible: boolean;
+    /** הערות פנימיות לעורכים (עמודת "הערות" בגיליון). לא מתפרסם. */
+    notes?: string;
     /** מצב תרגום לכל שפת יעד */
     i18n: Partial<Record<TargetLang, TranslationState>>;
     /**

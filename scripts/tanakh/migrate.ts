@@ -45,6 +45,7 @@ import {
     type LegacyEntry,
     type LegacyLocation,
 } from "../../src/views/tanakh/model/fromLegacy";
+import { applyAnchorFixes } from "../../src/views/tanakh/model/anchorFixes";
 import { QuoteResolver, type TanakhBookText } from "../../src/views/tanakh/model/quoteResolver";
 import { validateEntry } from "../../src/views/tanakh/model/validate";
 import { LEGACY_CATEGORIES } from "../../src/views/tanakh/model/categories";
@@ -123,7 +124,8 @@ const anchorMap: LegacyAnchorMap = readJson("anchors.json");
 const bakedLocations = new Map<string, LegacyLocation>((readJson("locations.json") as LegacyLocation[]).map(l => [l.id, l]));
 const bakedEntries = readJson("entries.json") as LegacyEntry[];
 const bakedIds = new Set<string>(bakedEntries.map(e => e.id));
-const anchorsById = anchorsByEntry(anchorMap);
+const anchorFixes = applyAnchorFixes(anchorMap);
+const anchorsById = anchorsByEntry(anchorFixes.map);
 
 // ── 3. הגיליון → ערכים; הקצאת מזהים לשורות בלי מזהה ───────────────────────
 
@@ -162,6 +164,7 @@ log(`שורות תקינות: ${parsed.rows.length} (מהן ${assigned.length} �
 const books: TanakhBookText[] = TANAKH_BOOKS.map(b => readJson(`tanakh/${b.id}.json`));
 const resolver = new QuoteResolver(books);
 log(`טקסט התנ"ך נטען: ${books.length} ספרים · קישורים מהפסוקים: ${[...anchorsById.values()].reduce((n, a) => n + a.length, 0)}`);
+log(`תיקוני עוגנים: ${anchorFixes.applied.length} בוצעו` + (anchorFixes.missing.length ? ` · ${anchorFixes.missing.length} לא נמצאו (ראו דוח)` : ""));
 
 // ── 4. המרה ───────────────────────────────────────────────────────────────
 
@@ -226,6 +229,19 @@ for (const e of entries) {
 const notInSheet = [...bakedIds].filter(id => !ctx.entryIds.has(id));
 const newInSheet = entries.filter(e => !bakedIds.has(e.id)).map(e => e.id);
 
+const bookHe = new Map(TANAKH_BOOKS.map(b => [b.id, b.he]));
+const fixLine = (f: (typeof anchorFixes.applied)[number]) => {
+    const at = `${bookHe.get(f.book) ?? f.book} ${f.ch}:${f.v}`;
+    const to = f.to ? `→ ${f.to.entry ?? f.from}${f.to.ch || f.to.v ? ` ${f.to.ch ?? f.ch}:${f.to.v ?? f.v}` : ""}` : "→ ירד";
+    return `  ${at} (${f.from}) ${to}  ${f.why}`;
+};
+const anchorFixLines = [
+    "",
+    `תיקוני עוגנים: ${anchorFixes.applied.length} בוצעו${anchorFixes.missing.length ? `, ${anchorFixes.missing.length} לא נמצאו` : ""}`,
+    ...anchorFixes.applied.map(fixLine),
+    ...(anchorFixes.missing.length ? ["", "תיקונים שלא נמצא להם עוגן (ייתכן ש-anchors.json השתנה):", ...anchorFixes.missing.map(fixLine)] : []),
+];
+
 const assignedLines = assigned.length
     ? ["", `מזהים שהוקצו לשורות בלי מזהה (להעתיק לעמודת id בגיליון):`, ...assigned.map(a => `  שורה ${a.rowNumber}: ${a.id}  ${a.title}${a.reused ? "  (מזהה קיים באפליקציה)" : ""}`)]
     : [];
@@ -239,7 +255,7 @@ const head = [
 log();
 head.forEach(l => log(l));
 if (reportFile) {
-    writeFileSync(resolve(reportFile), [...head, ...assignedLines, "", "פירוט לפי ערך:", ...report, ""].join("\n"));
+    writeFileSync(resolve(reportFile), [...head, ...anchorFixLines, ...assignedLines, "", "פירוט לפי ערך:", ...report, ""].join("\n"));
     log(`\nהדוח המלא נכתב ל-${reportFile}`);
 } else {
     log(`\n(להדפסת הפירוט לפי ערך: --report out.txt)`);

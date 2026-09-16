@@ -7,9 +7,16 @@ import { sourceHashOf } from "./hash";
 import type { Entry, TargetLang } from "./types";
 import { TARGET_LANGS } from "./types";
 
-/** המזהה הבא ברצף e0001, e0002… – גדול מכל מזהה מספרי קיים */
+/**
+ * הטווח e0001–e0999 שמור לתוכן המקורי (הספר והגיליון, כולל מזהים שההעברה
+ * מקצה). ערכים שנוצרים ב-CMS מתחילים מ-e1000, כדי שערך שנוצר לפני ההעברה
+ * לא יתפוס מזהה של ערך אמיתי.
+ */
+export const CMS_ID_FLOOR = 1000;
+
+/** המזהה הבא לערך חדש ב-CMS: גדול מכל מזהה מספרי קיים, ולא פחות מ-e1000 */
 export function nextEntryId(existingIds: Iterable<string>): string {
-    let max = 0;
+    let max = CMS_ID_FLOOR - 1;
     for (const id of existingIds) {
         const m = id.match(/^e(\d{4,})$/);
         if (m) max = Math.max(max, Number(m[1]));

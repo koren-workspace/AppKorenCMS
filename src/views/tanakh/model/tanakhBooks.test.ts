@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidVerseRef, parseHebrewRef, tanakhBook, TANAKH_BOOKS } from "./tanakhBooks";
+import { isValidVerseRef, parseHebrewRef, refReach, tanakhBook, TANAKH_BOOKS } from "./tanakhBooks";
 
 describe("tanakhBooks", () => {
     it("39 ספרים, כל אחד עם מספר פסוקים לכל פרק", () => {
@@ -43,5 +43,32 @@ describe("parseHebrewRef", () => {
 
     it("לא זוהה ספר → אובייקט ריק", () => {
         expect(parseHebrewRef("משנה ברכות א, א")).toEqual({});
+    });
+});
+
+describe("refReach", () => {
+    it("ספר+פרק+פסוק → קישור", () => {
+        expect(refReach({ book: "yehoshua", ch: 18, v: 1 })).toBe("link");
+    });
+
+    // האפליקציה פותחת לפי ספר+פרק, ולכן הפסוק אינו חובה.
+    it("ספר+פרק בלבד → קישור", () => {
+        expect(refReach({ book: "ovadya", ch: 1 })).toBe("link");
+        expect(refReach({ book: "ezra", ch: 1 })).toBe("link");
+    });
+
+    it("פרק שאינו קיים → מחוץ לטווח, גם בלי פסוק", () => {
+        // דברי הימים א מסתיים בפרק כט; "צז" הוא שיבוש סריקה.
+        expect(refReach({ book: "divrei-hayamim-a", ch: 97 })).toBe("out-of-range");
+    });
+
+    it("פסוק שאינו קיים → מחוץ לטווח", () => {
+        expect(refReach({ book: "bereshit", ch: 1, v: 99 })).toBe("out-of-range");
+    });
+
+    it("בלי ספר או בלי פרק → טקסט", () => {
+        expect(refReach({ raw: "כיתוב תמונה" } as never)).toBe("text");
+        expect(refReach({ book: "bereshit" })).toBe("text");
+        expect(refReach({ book: "mishna", ch: 1 })).toBe("text");
     });
 });

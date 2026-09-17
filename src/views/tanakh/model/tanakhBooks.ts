@@ -36,6 +36,29 @@ export function isValidVerseRef(ref: { book: string; ch: number; v: number; v2?:
     return true;
 }
 
+/**
+ * מה יקרה למראה המקום באפליקציה:
+ *
+ * - `link`        – יהפוך לקישור. האפליקציה פותחת לפי ספר+פרק בלבד,
+ *                  והפסוק – אם יש – רק קובע לאן לגלול. לכן גם "עובדיה א"
+ *                  הוא מראה מקום תקין לגמרי.
+ * - `out-of-range` – הספר מזוהה אבל הפרק או הפסוק לא קיימים בו (טעות סריקה).
+ * - `text`        – לא זוהה כהפניה כלל; יוצג כטקסט רגיל.
+ *
+ * הפונקציה הזו היא מקור האמת היחיד לשאלה "האם זה יעבוד" – העורך
+ * והאימות שניהם קוראים ממנה, כדי שלא יאמרו שני דברים שונים על אותה שורה.
+ */
+export type RefReach = "link" | "out-of-range" | "text";
+
+export function refReach(ref: { book?: string; ch?: number; v?: number; v2?: number }): RefReach {
+    if (!ref.book || !ref.ch) return "text";
+    const book = BY_ID.get(ref.book);
+    if (!book) return "text";
+    if (!Number.isInteger(ref.ch) || ref.ch < 1 || ref.ch > book.chapters) return "out-of-range";
+    if (ref.v === undefined) return "link";
+    return isValidVerseRef({ book: ref.book, ch: ref.ch, v: ref.v, v2: ref.v2 }) ? "link" : "out-of-range";
+}
+
 // ── פירוק מראה מקום בעברית ("יהושע יח, א" / "שיר השירים ד, יב–יד") ────────
 
 const GEMATRIA: Record<string, number> = {

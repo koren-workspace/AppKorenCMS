@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanEntryRefs, looksLikeDamagedBook, NOTES_HEADER, problemOf, salvageRef, stripRefPrefix } from "./cleanRefs";
+import { cleanEntryRefs, isRefFragment, looksLikeDamagedBook, NOTES_HEADER, problemOf, salvageRef, stripRefPrefix } from "./cleanRefs";
 import { emptyEntry, type Entry, type RefItem } from "./types";
 
 const NOW = Date.UTC(2026, 8, 17);
@@ -15,7 +15,7 @@ describe("cleanEntryRefs", () => {
         const r = cleanEntryRefs(e, NOW);
         expect(r.changed).toBe(true);
         expect(r.entry.refs.map(x => x.raw)).toEqual(["יהושע יח, א"]);
-        expect(r.moved).toEqual([{ raw: "חולות בחוף ניצנים", reason: "no-book" }]);
+        expect(r.moved).toEqual([{ raw: "חולות בחוף ניצנים", reason: "caption" }]);
         expect(r.entry.notes).toContain(NOTES_HEADER);
         expect(r.entry.notes).toContain("חולות בחוף ניצנים");
         expect(r.entry.notes).toContain("2026-09-17");
@@ -124,6 +124,32 @@ describe("שם ספר שנפגם בסריקה", () => {
 
     it("כיתוב תמונה רגיל אינו נחשב פגום", () => {
         expect(looksLikeDamagedBook("חולות בחוף ניצנים")).toBe(false);
+    });
+});
+
+describe("שבר מול כיתוב תמונה", () => {
+    it("מספר הערה ואחריו פרק הוא שבר", () => {
+        expect(isRefFragment("93 י")).toBe(true);
+        expect(isRefFragment("308 מח")).toBe(true);
+        expect(isRefFragment("1094")).toBe(true);
+    });
+
+    it("אות גימטריה בודדת היא שבר", () => {
+        expect(isRefFragment("יח")).toBe(true);
+    });
+
+    it("כיתוב תמונה קצר אינו שבר", () => {
+        expect(isRefFragment("קשת בשמי הארץ")).toBe(false);
+        expect(isRefFragment("שלג בהרי נצרת")).toBe(false);
+        expect(isRefFragment("חולות בחוף ניצנים")).toBe(false);
+    });
+
+    it("הנימוק שנשמר בהערות מבחין ביניהם", () => {
+        const e = entry({ refs: [ref("93 י"), ref("חולות בחוף ניצנים")] });
+        const r = cleanEntryRefs(e, NOW);
+        expect(r.moved.map(m => m.reason)).toEqual(["fragment", "caption"]);
+        expect(r.entry.notes).toContain("שבר של מראה מקום");
+        expect(r.entry.notes).toContain("כנראה כיתוב תמונה");
     });
 });
 

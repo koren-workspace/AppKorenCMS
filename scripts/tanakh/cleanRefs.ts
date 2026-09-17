@@ -117,11 +117,15 @@ const now = Date.now();
 type Change = { entry: Entry; moved: MovedRef[]; repaired: RepairedRef[]; problems: ProblemRef[]; title: string };
 const changes: Change[] = [];
 const problemsOnly: Change[] = [];
-let movedNoBook = 0, movedRedirect = 0, repairedTotal = 0, problemsTotal = 0;
+let movedCaption = 0, movedFragment = 0, movedRedirect = 0, repairedTotal = 0, problemsTotal = 0;
 
 for (const entry of entries) {
     const r = cleanEntryRefs(entry, now);
-    for (const m of r.moved) (m.reason === "no-book" ? movedNoBook++ : movedRedirect++);
+    for (const m of r.moved) {
+        if (m.reason === "caption") movedCaption++;
+        else if (m.reason === "fragment") movedFragment++;
+        else movedRedirect++;
+    }
     repairedTotal += r.repaired.length;
     problemsTotal += r.problems.length;
     const change: Change = { entry: r.entry, moved: r.moved, repaired: r.repaired, problems: r.problems, title: entry.title?.he ?? entry.id };
@@ -132,7 +136,7 @@ for (const entry of entries) {
 const head = [
     `ערכים שישתנו: ${changes.length} מתוך ${entries.length}`,
     `שורות שיתוקנו והופכות להפניה לחיצה: ${repairedTotal}`,
-    `שורות שיעברו להערות: ${movedNoBook + movedRedirect} (${movedNoBook} בלי שם ספר · ${movedRedirect} מערכי הפניה)`,
+    `שורות שיעברו להערות: ${movedCaption + movedFragment + movedRedirect} (${movedCaption} כיתובי תמונות · ${movedFragment} שברים · ${movedRedirect} מערכי הפניה)`,
     `נשארות לבדיקה ידנית: ${problemsTotal} שורות, ב-${changes.filter(c => c.problems.length).length + problemsOnly.length} ערכים`,
 ];
 head.forEach(l => log(l));

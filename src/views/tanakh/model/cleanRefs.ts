@@ -31,10 +31,11 @@
 import { isValidVerseRef, parseHebrewRef, tanakhBook, TANAKH_BOOKS } from "./tanakhBooks";
 import type { Entry, RefItem } from "./types";
 
-export type MoveReason = "no-book" | "redirect";
+export type MoveReason = "caption" | "fragment" | "redirect";
 
 export const MOVE_REASON_LABELS: Record<MoveReason, string> = {
-    "no-book": "לא זוהה שם ספר – כנראה כיתוב תמונה",
+    caption: "אין בשורה שם ספר – כנראה כיתוב תמונה",
+    fragment: "שבר של מראה מקום – חסר שם הספר",
     redirect: "ערך הפניה לא אמור להחזיק מראי מקום",
 };
 
@@ -123,6 +124,17 @@ function withinOneEdit(a: string, b: string): boolean {
 const BOOK_NAMES = TANAKH_BOOKS.map(b => b.he);
 
 /**
+ * שבר של מראה מקום ולא כיתוב תמונה: מספר הערת שוליים ואחריו פרק
+ * ("93 י", "308 מח"), או אות גימטריה בודדת ("יח") ששם הספר שלה נשאר בשורה
+ * הקודמת בעמוד. חשוב להבחין – הנימוק הזה נשמר בהערות הערך לתמיד.
+ */
+export function isRefFragment(raw: string): boolean {
+    if (/^\s*\d/.test(raw.trim())) return true;
+    const tokens = stripRefPrefix(raw).split(/[\s,–—-]+/).filter(Boolean);
+    return tokens.length > 0 && tokens.length <= 2 && tokens.every(t => /^[א-ת]{1,4}$/.test(t));
+}
+
+/**
  * שורה שנראית כהפניה ששם הספר בה נפגם בסריקה ("יהשע", "חזקאל", "ירמיה").
  * שמות ספרי התנ"ך קצרים, ולכן המבחן מחזיר גם כיתובי תמונה בודדים
  * ("דבורים" רחוקה אות אחת מ"דברים") – וזה הכיוון הבטוח: שורה כזו פשוט
@@ -170,7 +182,7 @@ export function cleanEntryRefs(entry: Entry, now: number = Date.now()): CleanRes
         if (fixed) { repaired.push({ from: r.raw, to: fixed.raw }); kept.push(fixed); continue; }
         // בספק – משאירים. העברת מראה מקום אמיתי גרועה מהשארת כיתוב תמונה.
         if (looksLikeDamagedBook(r.raw)) { kept.push(r); continue; }
-        moved.push({ raw: r.raw, reason: "no-book" });
+        moved.push({ raw: r.raw, reason: isRefFragment(r.raw) ? "fragment" : "caption" });
     }
 
     const problems: ProblemRef[] = [];

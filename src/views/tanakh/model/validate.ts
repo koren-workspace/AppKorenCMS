@@ -6,7 +6,7 @@
  */
 
 import type { Entry, Localized } from "./types";
-import { isValidVerseRef, tanakhBook } from "./tanakhBooks";
+import { isValidVerseRef, refReach, tanakhBook } from "./tanakhBooks";
 
 export type IssueLevel = "error" | "warning";
 
@@ -60,7 +60,7 @@ export function validateEntry(entry: Entry, ctx: ValidationContext = {}): Valida
     entry.refs.forEach((r, i) => {
         if (!r.raw?.trim()) err(`refs[${i}]`, "מראה מקום ריק");
         else if (!r.book) warn(`refs[${i}]`, `מראה מקום לא זוהה כהפניה לתנ"ך: ${r.raw}`);
-        else if (r.ch && r.v && !isValidVerseRef({ book: r.book, ch: r.ch, v: r.v, v2: r.v2 })) {
+        else if (refReach(r) === "out-of-range") {
             warn(`refs[${i}]`, `מראה מקום מחוץ לטווח: ${r.raw}`);
         }
     });

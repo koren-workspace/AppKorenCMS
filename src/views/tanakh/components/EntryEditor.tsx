@@ -11,7 +11,7 @@
 
 import React, { useMemo, useState } from "react";
 import type { Category, Entry, RefItem, VerseRef } from "../model/types";
-import { isValidVerseRef, parseHebrewRef, TANAKH_BOOKS } from "../model/tanakhBooks";
+import { isValidVerseRef, parseHebrewRef, refReach, TANAKH_BOOKS } from "../model/tanakhBooks";
 import { formatVerseRef, toHebrewNumeral } from "../model/hebnum";
 import type { ValidationIssue } from "../model/validate";
 import { hasTranslation } from "../model/entryOps";
@@ -336,12 +336,20 @@ function RefsSection({ refs, onChange }: { refs: RefItem[]; onChange: (r: RefIte
         onChange(next);
         setLocal(null);
     }
-    const resolved = refs.filter(r => r.book && r.ch && r.v && isValidVerseRef({ book: r.book, ch: r.ch, v: r.v, v2: r.v2 })).length;
+    // ספירה לפי מה שהאפליקציה תעשה בפועל, לא לפי שלמות השורה.
+    const reach = refs.map(r => refReach(r));
+    const linked = reach.filter(x => x === "link").length;
+    const outOfRange = reach.filter(x => x === "out-of-range").length;
+    const plain = reach.filter(x => x === "text").length;
     return (
         <section style={ts.section}>
             <div style={{ ...ts.row, justifyContent: "space-between" }}>
                 <h4 style={ts.sectionTitle}>מראי מקום</h4>
-                <span style={ts.muted}>{refs.length} · מזוהים כהפניה לתנ"ך: <b style={{ color: GREEN }}>{resolved}</b> · לא מזוהים: <b style={{ color: refs.length - resolved ? AMBER : undefined }}>{refs.length - resolved}</b></span>
+                <span style={ts.muted}>
+                    {refs.length} · יהפכו לקישור: <b style={{ color: GREEN }}>{linked}</b>
+                    {outOfRange > 0 && <> · מחוץ לטווח: <b style={{ color: AMBER }}>{outOfRange}</b></>}
+                    {plain > 0 && <> · לא מזוהים: <b style={{ color: RED }}>{plain}</b></>}
+                </span>
             </div>
             <p style={ts.hint}>מראה מקום בכל שורה. מה שמזוהה כהפניה לתנ"ך יהפוך לקישור באפליקציה; השאר מוצג כטקסט. כיתוב תמונה או משפט חופשי כאן הוא כנראה טעות מההעברה.</p>
             <textarea
@@ -354,8 +362,12 @@ function RefsSection({ refs, onChange }: { refs: RefItem[]; onChange: (r: RefIte
             {refs.length > 0 && (
                 <div style={{ ...ts.row, gap: 4 }}>
                     {refs.map((r, i) => {
-                        const ok = r.book && r.ch && r.v && isValidVerseRef({ book: r.book, ch: r.ch, v: r.v, v2: r.v2 });
-                        return <span key={i} style={{ ...ts.badge, background: ok ? "#e8f5e9" : "#f5f5f5", color: ok ? GREEN : "#777" }} title={ok ? "מזוהה" : "לא מזוהה"}>{r.raw}</span>;
+                        const look = {
+                            link: { background: "#e8f5e9", color: GREEN, title: "יהפוך לקישור באפליקציה" },
+                            "out-of-range": { background: "#fff8e1", color: AMBER, title: "הספר מזוהה, אבל הפרק או הפסוק לא קיימים בו" },
+                            text: { background: "#ffebee", color: RED, title: "לא זוהה כהפניה – יוצג כטקסט רגיל" },
+                        }[reach[i]];
+                        return <span key={i} style={{ ...ts.badge, background: look.background, color: look.color }} title={look.title}>{r.raw}</span>;
                     })}
                 </div>
             )}

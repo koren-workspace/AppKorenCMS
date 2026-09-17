@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanEntryRefs, NOTES_HEADER, problemOf } from "./cleanRefs";
+import { cleanEntryRefs, looksLikeDamagedBook, NOTES_HEADER, problemOf, salvageRef, stripRefPrefix } from "./cleanRefs";
 import { emptyEntry, type Entry, type RefItem } from "./types";
 
 const NOW = Date.UTC(2026, 8, 17);
@@ -80,6 +80,50 @@ describe("cleanEntryRefs", () => {
         const r = cleanEntryRefs(e, NOW);
         expect(r.problems).toEqual([{ raw: "מלכים א לה, יז", kind: "out-of-range" }]);
         expect(r.changed).toBe(false);   // דיווח בלבד, בלי שינוי
+    });
+});
+
+describe("שחזור שורה שהקידומת הסתירה בה את שם הספר", () => {
+    it("מספר הערת שוליים בהתחלה", () => {
+        expect(stripRefPrefix("534 יחזקאל מז, טז")).toBe("יחזקאל מז, טז");
+        expect(salvageRef("534 יחזקאל מז, טז")).toEqual({ raw: "יחזקאל מז, טז", book: "yechezkel", ch: 47, v: 16 });
+    });
+
+    it("סימון הערה באותיות ומקף", () => {
+        expect(salvageRef("כ- מלכים ב׳ ג, ט")).toEqual({ raw: "מלכים ב׳ ג, ט", book: "melakhim-b", ch: 3, v: 9 });
+    });
+
+    it("כיתוב תמונה לא משוחזר", () => {
+        expect(salvageRef("חולות בחוף ניצנים")).toBeNull();
+    });
+
+    it("שורה בלי קידומת כלל – אין מה לשחזר", () => {
+        expect(salvageRef("יהושע יח, א")).toBeNull();
+    });
+
+    it("הערך מתוקן במקום, לא מועבר להערות", () => {
+        const e = entry({ refs: [ref("כ- מלכים ב׳ ג, ט")] });
+        const r = cleanEntryRefs(e, NOW);
+        expect(r.changed).toBe(true);
+        expect(r.moved).toEqual([]);
+        expect(r.repaired).toEqual([{ from: "כ- מלכים ב׳ ג, ט", to: "מלכים ב׳ ג, ט" }]);
+        expect(r.entry.refs[0]).toMatchObject({ book: "melakhim-b", ch: 3, v: 9 });
+        expect(r.entry.notes).toBeUndefined();
+    });
+});
+
+describe("שם ספר שנפגם בסריקה", () => {
+    it("מזוהה ולא מועבר", () => {
+        expect(looksLikeDamagedBook("884 יהשע יח, כו")).toBe(true);
+        const e = entry({ refs: [ref("884 יהשע יח, כו")] });
+        const r = cleanEntryRefs(e, NOW);
+        expect(r.changed).toBe(false);
+        expect(r.entry.refs).toHaveLength(1);
+        expect(r.problems).toEqual([{ raw: "884 יהשע יח, כו", kind: "damaged-book" }]);
+    });
+
+    it("כיתוב תמונה רגיל אינו נחשב פגום", () => {
+        expect(looksLikeDamagedBook("חולות בחוף ניצנים")).toBe(false);
     });
 });
 

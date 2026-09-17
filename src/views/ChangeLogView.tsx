@@ -50,6 +50,7 @@ const ACTION_LABELS: Record<ChangeLogAction, string> = {
     save_tanakh_entry: "התנ\"ך למטייל: שמירת ערך",
     delete_tanakh_entry: "התנ\"ך למטייל: מחיקת ערך",
     save_tanakh_category: "התנ\"ך למטייל: שמירת קטגוריה",
+    publish_tanakh_content: "התנ\"ך למטייל: פרסום קובץ התוכן",
 };
 
 function actionLabel(action: ChangeLogAction): string {

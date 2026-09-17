@@ -6,6 +6,7 @@
 import React, { useMemo, useState } from "react";
 import { EntryList } from "../views/tanakh/components/EntryList";
 import { EntryEditor } from "../views/tanakh/components/EntryEditor";
+import { PublishPanel } from "../views/tanakh/components/PublishPanel";
 import { ts } from "../views/tanakh/components/tanakhStyles";
 import { LEGACY_CATEGORIES } from "../views/tanakh/model/categories";
 import { emptyEntry, type Entry } from "../views/tanakh/model/types";
@@ -71,6 +72,7 @@ export function TanakhEditorHarness() {
     const [draft, setDraft] = useState<Entry | null>(() => structuredClone(sample()[0]));
     const [isNew, setIsNew] = useState(false);
     const [saved, setSaved] = useState<string[]>([]);
+    const [publishOpen, setPublishOpen] = useState(false);
     const categories = useMemo(() => [...LEGACY_CATEGORIES], []);
 
     const original = useMemo(() => entries.find(e => e.id === selectedId) ?? null, [entries, selectedId]);
@@ -94,7 +96,17 @@ export function TanakhEditorHarness() {
 
     return (
         <div style={ts.page} data-testid="tanakh-harness">
-            <div style={ts.header}><h2 style={ts.title}>התנ"ך למטייל – סביבת בדיקה</h2><span style={ts.muted} data-testid="saved-count">נשמרו: {saved.length}</span></div>
+            <div style={ts.header}><h2 style={ts.title}>התנ"ך למטייל – סביבת בדיקה</h2><span style={ts.muted} data-testid="saved-count">נשמרו: {saved.length}</span>
+                <button style={ts.secondaryBtn} onClick={() => setPublishOpen(v => !v)}>{publishOpen ? "חזרה לערכים" : "פרסום"}</button></div>
+            {publishOpen ? (
+                <PublishPanel
+                    entries={entries}
+                    categories={categories}
+                    busy={false}
+                    onPublish={async () => undefined}
+                    onClose={() => setPublishOpen(false)}
+                />
+            ) : (
             <div style={ts.workspace}>
                 <EntryList
                     entries={entries}
@@ -122,6 +134,7 @@ export function TanakhEditorHarness() {
                     />
                 )}
             </div>
+            )}
         </div>
     );
 }

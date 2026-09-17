@@ -1,10 +1,15 @@
 /**
  * cleanRefs – ניקוי מראי מקום שההעברה הביאה מהספר הסרוק.
  *
- * מטפל אוטומטית רק בשני דפוסים שאפשר לזהות בוודאות (ראו
- * src/views/tanakh/model/cleanRefs.ts): שורה שאין בה שום שם ספר – כמעט תמיד
- * כיתוב תמונה שנחת בעמודה הלא נכונה – ומראי מקום שיושבים על ערך הפניה.
- * שום שורה לא נמחקת: היא עוברת לשדה ההערות הפנימיות, שאינו מתפרסם.
+ * שלוש פעולות, כולן ודאיות (ראו src/views/tanakh/model/cleanRefs.ts):
+ *
+ *   תיקון  – שורה שקידומת הסתירה בה את שם הספר ("534 יחזקאל מז, טז",
+ *            "כ- מלכים ב׳ ג, ט") מתוקנת במקום והופכת להפניה לחיצה.
+ *   העברה  – שורה שאין בה שום שם ספר (כיתוב תמונה שנחת בעמודה הלא נכונה)
+ *            ומראי מקום שיושבים על ערך הפניה ריק.
+ *   דיווח  – כל השאר, כולל שם ספר שנפגם בסריקה. בספק, לא נוגעים.
+ *
+ * שום שורה לא נמחקת: מה שמועבר עובר לשדה ההערות הפנימיות, שאינו מתפרסם.
  *
  * כל השאר – פרק או פסוק מחוץ לטווח, ושברים כמו "308 מח" – רק מדווח. תיקון
  * שלהם דורש להבין על מה הערך מדבר, וניחוש גרוע מלהשאיר שבור.
@@ -30,7 +35,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { cleanEntryRefs, MOVE_REASON_LABELS, PROBLEM_LABELS, type MovedRef, type ProblemRef } from "../../src/views/tanakh/model/cleanRefs";
+import { cleanEntryRefs, MOVE_REASON_LABELS, PROBLEM_LABELS, type MovedRef, type ProblemRef, type RepairedRef } from "../../src/views/tanakh/model/cleanRefs";
 import { prepareEntryForSave } from "../../src/views/tanakh/model/entryOps";
 import { ENTRIES_COLLECTION, type Entry } from "../../src/views/tanakh/model/types";
 
@@ -109,31 +114,41 @@ log();
 // ── ניקוי ─────────────────────────────────────────────────────────────────
 
 const now = Date.now();
-type Change = { entry: Entry; moved: MovedRef[]; problems: ProblemRef[]; title: string };
+type Change = { entry: Entry; moved: MovedRef[]; repaired: RepairedRef[]; problems: ProblemRef[]; title: string };
 const changes: Change[] = [];
 const problemsOnly: Change[] = [];
-let movedNoBook = 0, movedRedirect = 0, problemsTotal = 0;
+let movedNoBook = 0, movedRedirect = 0, repairedTotal = 0, problemsTotal = 0;
 
 for (const entry of entries) {
     const r = cleanEntryRefs(entry, now);
     for (const m of r.moved) (m.reason === "no-book" ? movedNoBook++ : movedRedirect++);
+    repairedTotal += r.repaired.length;
     problemsTotal += r.problems.length;
-    const change: Change = { entry: r.entry, moved: r.moved, problems: r.problems, title: entry.title?.he ?? entry.id };
+    const change: Change = { entry: r.entry, moved: r.moved, repaired: r.repaired, problems: r.problems, title: entry.title?.he ?? entry.id };
     if (r.changed) changes.push(change);
     else if (r.problems.length) problemsOnly.push(change);
 }
 
 const head = [
     `ערכים שישתנו: ${changes.length} מתוך ${entries.length}`,
+    `שורות שיתוקנו והופכות להפניה לחיצה: ${repairedTotal}`,
     `שורות שיעברו להערות: ${movedNoBook + movedRedirect} (${movedNoBook} בלי שם ספר · ${movedRedirect} מערכי הפניה)`,
     `נשארות לבדיקה ידנית: ${problemsTotal} שורות, ב-${changes.filter(c => c.problems.length).length + problemsOnly.length} ערכים`,
 ];
 head.forEach(l => log(l));
 
 const report: string[] = [];
-if (changes.length) {
+const repairs = changes.filter(c => c.repaired.length);
+if (repairs.length) {
+    report.push("", "── מה יתוקן במקום ──────────────────────────────────────");
+    for (const c of repairs) {
+        report.push(`\n${c.entry.id} · ${c.title}`);
+        for (const r of c.repaired) report.push(`  ✓ ${r.from}   →   ${r.to}`);
+    }
+}
+if (changes.some(c => c.moved.length)) {
     report.push("", "── מה יעבור להערות ─────────────────────────────────────");
-    for (const c of changes) {
+    for (const c of changes.filter(x => x.moved.length)) {
         report.push(`\n${c.entry.id} · ${c.title}`);
         for (const m of c.moved) report.push(`  ← ${m.raw}   (${MOVE_REASON_LABELS[m.reason]})`);
     }

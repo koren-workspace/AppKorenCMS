@@ -18,7 +18,8 @@
  * שזה שלב שממתין ולא יכולת חסרה.
  */
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { findImages, MIN_QUERY, type LibraryImage } from "../model/imageLibrary";
 import type { EntryImage, Localized } from "../model/types";
 import { ts } from "./tanakhStyles";
 
@@ -46,12 +47,50 @@ function Thumb({ img }: { img: EntryImage }) {
 
 export interface ImageListProps {
     images: EntryImage[];
+    /** כל התמונות שכבר קיימות במערכת, לצירוף תמונה שנתלתה על הערך הלא נכון */
+    library?: LibraryImage[];
     /** האם Firebase Storage מוגדר (כרגע תמיד false – ראו docs/tanakh-lametayel.md) */
     storageEnabled?: boolean;
     onChange: (next: EntryImage[]) => void;
 }
 
-export function ImageList({ images, storageEnabled = false, onChange }: ImageListProps) {
+function ImagePicker({ library, current, onPick }: { library: LibraryImage[]; current: EntryImage[]; onPick: (img: EntryImage) => void }) {
+    const [q, setQ] = useState("");
+    const matches = useMemo(() => findImages(library, q, current), [q, library, current]);
+
+    return (
+        <div style={{ width: "100%", border: "1px solid #eee", borderRadius: 6, padding: 8, marginTop: 8 }}>
+            <input
+                id="tlm-image-picker"
+                style={ts.input}
+                placeholder="חיפוש לפי כיתוב, שם ערך או מזהה תמונה"
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                autoFocus
+            />
+            {q.trim().length >= MIN_QUERY && !matches.length && <p style={ts.muted}>אין תמונה מתאימה</p>}
+            {matches.map(row => (
+                <div
+                    key={row.img.src}
+                    style={{ ...ts.listRow, alignItems: "center", gap: 8 }}
+                    onClick={() => onPick(row.img)}
+                    title="צירוף לערך הזה"
+                >
+                    <Thumb img={row.img} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div>{row.img.caption?.he || <span style={ts.muted}>בלי כיתוב</span>}</div>
+                        <div style={ts.muted}>
+                            <span style={ts.code}>{row.img.src}</span> · כרגע ב{row.entryTitle}
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+export function ImageList({ images, library = [], storageEnabled = false, onChange }: ImageListProps) {
+    const [picking, setPicking] = useState(false);
     function patch(i: number, next: Partial<EntryImage>) {
         onChange(images.map((img, j) => (j === i ? { ...img, ...next } : img)));
     }
@@ -118,6 +157,11 @@ export function ImageList({ images, storageEnabled = false, onChange }: ImageLis
                 <button style={{ ...ts.secondaryBtn, ...(storageEnabled ? {} : ts.btnDisabled) }} disabled={!storageEnabled} title={storageEnabled ? "" : "דורש Firebase Storage"}>
                     העלאת תמונה
                 </button>
+                {library.length > 0 && (
+                    <button style={ts.secondaryBtn} onClick={() => setPicking(v => !v)}>
+                        {picking ? "ביטול" : "צירוף תמונה קיימת"}
+                    </button>
+                )}
                 {!storageEnabled && (
                     <span style={ts.muted}>
                         העלאה תיפתח כשיופעל Firebase Storage בפרויקט (מצריך תוכנית Blaze). עד אז אפשר
@@ -126,6 +170,18 @@ export function ImageList({ images, storageEnabled = false, onChange }: ImageLis
                     </span>
                 )}
             </div>
+
+            {picking && (
+                <ImagePicker
+                    library={library}
+                    current={images}
+                    onPick={img => {
+                        // הכיתוב נוסע עם התמונה: הוא נכתב עבורה, לא עבור הערך שהחזיק אותה
+                        onChange([...images, { ...img }]);
+                        setPicking(false);
+                    }}
+                />
+            )}
         </section>
     );
 }

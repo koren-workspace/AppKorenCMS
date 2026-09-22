@@ -11,6 +11,7 @@
 
 import React, { useMemo, useState } from "react";
 import type { Category, Entry, RefItem, VerseRef } from "../model/types";
+import { buildImageLibrary } from "../model/imageLibrary";
 import { isValidVerseRef, parseHebrewRef, refReach, TANAKH_BOOKS } from "../model/tanakhBooks";
 import { formatVerseRef, toHebrewNumeral } from "../model/hebnum";
 import type { ValidationIssue } from "../model/validate";
@@ -44,6 +45,7 @@ export function EntryEditor(p: EntryEditorProps) {
     const errorsFor = (field: string) => issues.filter(i => i.field === field || i.field.startsWith(field + "["));
     const hasError = issues.some(i => i.level === "error");
     const byId = useMemo(() => new Map(p.allEntries.map(e => [e.id, e])), [p.allEntries]);
+    const imageLibrary = useMemo(() => buildImageLibrary(p.allEntries), [p.allEntries]);
 
     return (
         <div style={{ ...ts.card, gap: 14 }}>
@@ -176,7 +178,7 @@ export function EntryEditor(p: EntryEditorProps) {
             </section>
 
             {/* ── תמונות ───────────────────────────────────────────────── */}
-            <ImageList images={draft.images} onChange={images => set({ images })} />
+            <ImageList images={draft.images} library={imageLibrary} onChange={images => set({ images })} />
 
             {/* ── קישורים מהפסוקים ─────────────────────────────────────── */}
             <AnchorEditor anchors={draft.anchors} onChange={anchors => set({ anchors })} />

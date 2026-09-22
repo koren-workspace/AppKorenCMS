@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyEntry, type Entry } from "../model/types";
-import { filterEntries, matchesQuery, matchesQuickFilter, searchKey, skeletonKey, sortEntries } from "./search";
+import { filterEntries, matchesQuery, matchesQuickFilter, queryRank, rankEntries, searchKey, skeletonKey, sortEntries } from "./search";
 
 function make(id: string, he: string, cat = "places", extra: Partial<Entry> = {}): Entry {
     const e = emptyEntry(id, cat, 1);
@@ -57,5 +57,35 @@ describe("quick filters and sorting", () => {
     it("sortEntries לפי סדר קטגוריה ואז כותרת", () => {
         const order = new Map([["places", 3], ["land", 0]]);
         expect(sortEntries([d, c, b, a], order).map(e => e.id)).toEqual(["e1", "e2", "e3", "e4"]);
+    });
+});
+
+describe("queryRank / rankEntries", () => {
+    const shor = make("e0483", "שׁוּר");
+    const tashur = make("e0092", "תַּאְשׁוּר");
+    const bakar = make("e0107", "בָּקָר, עֵגֶל, פָּר, שׁוֹר");
+    const nesher = make("e0146", "נֶשֶׁר");
+    const sharon = make("e0498", "שָׁרוֹן");
+    const telShilo = make("e0632", "תל שילה");
+    const shilo = make("e0486", "שִׁלֹה");
+    it("התאמה מדויקת ראשונה, אחריה תחילת שם, מילה, הכלה, ולבסוף כתיב מלא/חסר", () => {
+        expect(queryRank(shor, "שור")).toBe(0);
+        expect(queryRank(tashur, "שור")).toBe(3);
+        expect(queryRank(bakar, "שור")).toBe(2);
+        expect(queryRank(nesher, "שור")).toBe(5);
+        expect(queryRank(sharon, "שור")).toBe(5);
+        expect(queryRank(telShilo, "שילה")).toBe(2);
+        expect(queryRank(shilo, "שילה")).toBe(4); // כתיב חסר בכותרת, מלא בשאילתה
+        expect(queryRank(shilo, "שלה")).toBe(0);
+        expect(queryRank(shilo, "ירושלים")).toBeNull();
+    });
+    it("rankEntries: הטובים קודם, ובתוך אותו דירוג בסדר המקורי; total לפני החיתוך", () => {
+        const all = [tashur, bakar, nesher, sharon, shor];
+        const { matches, total } = rankEntries(all, "שור", 3);
+        expect(matches.map(e => e.id)).toEqual(["e0483", "e0107", "e0092"]);
+        expect(total).toBe(5);
+    });
+    it("שאילתה ריקה: הכול בדירוג 0", () => {
+        expect(rankEntries([shor, nesher], "", 10).matches.map(e => e.id)).toEqual(["e0483", "e0146"]);
     });
 });

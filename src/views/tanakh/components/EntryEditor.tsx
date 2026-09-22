@@ -16,7 +16,7 @@ import { isValidVerseRef, parseHebrewRef, refReach, TANAKH_BOOKS } from "../mode
 import { formatVerseRef, toHebrewNumeral } from "../model/hebnum";
 import type { ValidationIssue } from "../model/validate";
 import { hasTranslation } from "../model/entryOps";
-import { matchesQuery } from "../utils/search";
+import { rankEntries } from "../utils/search";
 import { BodyPreview } from "./BodyPreview";
 import { AnchorEditor } from "./AnchorEditor";
 import { ImageList } from "./ImageList";
@@ -377,12 +377,16 @@ function RefsSection({ refs, onChange }: { refs: RefItem[]; onChange: (r: RefIte
     );
 }
 
+/** כמה תוצאות מציג חלון הבחירה. מעבר לזה מופיעה שורת "ועוד N". */
+const PICKER_LIMIT = 12;
+
 /** חיפוש ערך לפי כותרת ובחירה – לערכים קשורים ולהפניה */
 function EntryPicker({ id, entries, exclude, placeholder, onPick }: { id: string; entries: Entry[]; exclude: Set<string>; placeholder: string; onPick: (id: string) => void }) {
     const [q, setQ] = useState("");
-    const matches = useMemo(() => {
-        if (q.trim().length < 2) return [];
-        return entries.filter(e => !exclude.has(e.id) && !e.see && matchesQuery(e, q)).slice(0, 8);
+    const { matches, total } = useMemo(() => {
+        if (q.trim().length < 2) return { matches: [], total: 0 };
+        // הטובים ביותר קודם: התאמה מדויקת לפני התאמה חלקית לפני כתיב מלא/חסר
+        return rankEntries(entries.filter(e => !exclude.has(e.id) && !e.see), q, PICKER_LIMIT);
     }, [q, entries, exclude]);
     return (
         <div style={{ position: "relative" }}>
@@ -395,6 +399,9 @@ function EntryPicker({ id, entries, exclude, placeholder, onPick }: { id: string
                             <span style={ts.muted}>{e.id}</span>
                         </li>
                     ))}
+                    {total > matches.length && (
+                        <li style={{ ...ts.listRow, ...ts.muted, cursor: "default" }}>ועוד {total - matches.length} התאמות – להקליד עוד אות כדי לצמצם</li>
+                    )}
                 </ul>
             )}
             {q.trim().length >= 2 && !matches.length && <p style={ts.muted}>אין ערך מתאים</p>}

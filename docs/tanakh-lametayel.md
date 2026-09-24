@@ -475,16 +475,42 @@ SEED_EMAIL=... SEED_PASSWORD=... npx vite-node scripts/tanakh/repairRefs.ts --wr
 
 תצוגה מקדימה אינה מגובה – היא ממילא זמנית.
 
-**CORS.** ההחזרה היא הפעולה היחידה שקוראת קובץ מהאחסון אל הדפדפן, ולכן
-היחידה שעלולה להיחסם במדיניות CORS של הדלי. העלאה, רשימת הגרסאות והצגת
-תמונות אינן מושפעות. אם ההחזרה נכשלת, זו הגדרה חד-פעמית:
+**CORS – נדרש פעם אחת, והתבצע 2026-09.** ההחזרה היא הפעולה היחידה שקוראת
+קובץ מהאחסון אל הדפדפן, ולכן היחידה שהדפדפן חוסם בלי הגדרת CORS על הדלי.
+העלאה, פרסום, רשימת הגרסאות והצגת תמונות אינן מושפעות (תג `<img>` אינו כפוף
+ל-CORS). הסימן: `No 'Access-Control-Allow-Origin' header` בקונסולת הדפדפן.
+
+אין לזה ממשק בקונסולה. מ-Cloud Shell (אייקון `>_` בקונסולת Google Cloud,
+בפרויקט `koren-tanakh-lametayel`):
 
 ```bash
-# cors.json
-[{ "origin": ["https://<הדומיין-של-ה-CMS>"], "method": ["GET"], "maxAgeSeconds": 3600 }]
+cat > cors.json <<'EOF'
+[
+  {
+    "origin": ["*"],
+    "method": ["GET"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]
+EOF
 
 gcloud storage buckets update gs://koren-tanakh-lametayel.firebasestorage.app --cors-file=cors.json
+
+# אימות
+gcloud storage buckets describe gs://koren-tanakh-lametayel.firebasestorage.app \
+  --format="default(cors_config)"
 ```
+
+`origin: ["*"]` אינו מרחיב הרשאות: CORS קובע מאילו אתרים הדפדפן מרשה לקרוא
+את התשובה, ואילו מי מורשה בכלל נקבע בכללי האבטחה. שם רק `published/` ו-
+`media/` פתוחים לקריאה, בדיוק מפני שהאפליקציה בטלפון ניגשת אליהם בלי
+התחברות; התוכן הזה ציבורי ממילא. היתרון על פני רשימת דומיינים מפורשת הוא
+שההחזרה עובדת גם מפריסות התצוגה המקדימה של Vercel, שכתובתן משתנה בכל פריסה
+(GCS משווה מקור כמחרוזת מלאה ואינו תומך ב-`https://*.vercel.app`).
+
+הדפדפן שומר תשובת CORS שלילית במטמון, ולכן אחרי השינוי צריך רענון מלא, ולפעמים
+המתנה של דקה.
 
 ### מה שלב 8 צריך לעשות
 

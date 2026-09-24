@@ -18,7 +18,7 @@ import type { User } from "firebase/auth";
 import { isTanakhConfigured, missingTanakhEnvVars, tanakhProjectId } from "../firebase_config";
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { setChangeLogUser } from "./toc-translations/services/changeLogService";
-import { onTanakhAuthChanged, signInToTanakh, signOutOfTanakh } from "./tanakh/services/tanakhAuthService";
+import { onTanakhAuthChanged, sendTanakhPasswordReset, signInToTanakh, signOutOfTanakh } from "./tanakh/services/tanakhAuthService";
 import { deleteEntry, loadContent, saveCategory, saveEntry, seedCategories, type TanakhContent } from "./tanakh/services/entriesService";
 import { emptyEntry, type Category, type Entry } from "./tanakh/model/types";
 import { entriesEqual, nextEntryId, setTranslationStatus } from "./tanakh/model/entryOps";
@@ -272,6 +272,17 @@ export function TanakhView() {
         setBanner({ kind: "info", text: "התנתקתם מפרויקט התנ\"ך. הכניסה ל-CMS עצמו לא השתנתה." });
     }
 
+    async function onChangePassword() {
+        const email = user?.email;
+        if (!email) return;
+        try {
+            await sendTanakhPasswordReset(email);
+            setBanner({ kind: "info", text: `נשלח מייל ל-${email} עם קישור לקביעת סיסמה חדשה בפרויקט התנ"ך. אם הוא לא מגיע תוך כמה דקות, כדאי לבדוק בספאם.` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `שליחת המייל נכשלה: ${err?.message ?? err}` });
+        }
+    }
+
     // ── תצוגה ─────────────────────────────────────────────────────────────
 
     if (!configured) {
@@ -308,7 +319,7 @@ export function TanakhView() {
                             </>
                         )}
                         {user === undefined ? <span style={ts.muted}>בודק חיבור…</span>
-                            : user ? <><span style={{ color: "#2e7d32", fontWeight: 600 }}>מחובר כ-{user.email}</span><button style={ts.secondaryBtn} onClick={() => void onSignOut()}>התנתקות</button></>
+                            : user ? <><span style={{ color: "#2e7d32", fontWeight: 600 }}>מחובר כ-{user.email}</span><button style={ts.secondaryBtn} onClick={() => void onChangePassword()}>שינוי סיסמה</button><button style={ts.secondaryBtn} onClick={() => void onSignOut()}>התנתקות</button></>
                             : <><span style={{ color: "#b71c1c", fontWeight: 600 }}>לא מחובר</span><button style={ts.primaryBtn} onClick={() => setAuthOpen(true)}>התחברות</button></>}
                     </div>
                 }
@@ -385,6 +396,7 @@ export function TanakhView() {
                 onSuccess={() => { setAuthOpen(false); setBanner(null); }}
                 onClose={() => setAuthOpen(false)}
                 authenticate={signInToTanakh}
+                resetPassword={sendTanakhPasswordReset}
                 title="כניסה לפרויקט התנ״ך למטייל"
                 subtitle={<>
                     התנ"ך למטייל יושב בפרויקט Firebase נפרד. הזינו את הסיסמה שלכם בפרויקט הזה

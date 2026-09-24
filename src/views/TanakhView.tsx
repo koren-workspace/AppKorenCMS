@@ -27,8 +27,8 @@ import { EntryList } from "./tanakh/components/EntryList";
 import { EntryEditor } from "./tanakh/components/EntryEditor";
 import { CategoryManager } from "./tanakh/components/CategoryManager";
 import { PublishPanel } from "./tanakh/components/PublishPanel";
-import { isStorageEnabled } from "./tanakh/services/publishService";
-import type { ContentPack, PublishResult } from "./tanakh/model/publish";
+import { isStorageEnabled, loadPublishMeta, restoreArchivedVersion, savePublishMeta, uploadPack } from "./tanakh/services/publishService";
+import { packFileName, type ContentPack, type PublishResult } from "./tanakh/model/publish";
 import { ts } from "./tanakh/components/tanakhStyles";
 
 type Banner = { kind: "info" | "success" | "error"; text: string } | null;
@@ -205,14 +205,65 @@ export function TanakhView() {
     }
 
     /**
-     * הפרסום בפועל מעלה את הקובץ ל-Storage, שעדיין לא הופעל בפרויקט. עד אז
-     * הכפתור מושבת במסך, וזו רשת ביטחון למקרה שמישהו יפעיל את דגל הסביבה
-     * לפני שההעלאה קיימת – עדיף הודעה ברורה מאשר מסמך פרסום בלי קובץ.
+     * פרסום: העלאת הקובץ לערוץ, ובערוץ החי גם שמירת עותק הגרסה ועדכון
+     * `meta/publish`. תצוגה מקדימה לא משנה את מספר הגרסה החי, ולכן רק
+     * מעדכנת את חותמת הזמן שלה.
      */
-    async function onPublishPack(_pack: ContentPack, _result: PublishResult) {
-        setBanner(isStorageEnabled()
-            ? { kind: "error", text: "העלאת הקובץ ל-Storage עוד לא מומשה. בינתיים אפשר להוריד את הקובץ." }
-            : { kind: "info", text: "Firebase Storage עדיין לא הופעל בפרויקט (מצריך תוכנית Blaze). בינתיים אפשר להוריד את הקובץ ולבדוק אותו." });
+    async function onPublishPack(pack: ContentPack, result: PublishResult, preview: boolean) {
+        if (!isStorageEnabled()) {
+            setBanner({ kind: "error", text: "דלי ה-Storage אינו מוגדר במשתני הסביבה, ולכן אי אפשר להעלות. בינתיים אפשר להוריד את הקובץ." });
+            return;
+        }
+        setBusy(true);
+        try {
+            const uploaded = await uploadPack(pack, preview, packFileName(preview));
+            const previous = await loadPublishMeta();
+            if (preview) {
+                await savePublishMeta(
+                    { ...(previous ?? { version: 0, publishedAt: 0, entryCount: 0 }), previewAt: Date.now() },
+                    `הועלתה תצוגה מקדימה (${result.included} ערכים)`,
+                );
+                setBanner({ kind: "success", text: `קובץ התצוגה המקדימה הועלה (${result.included} ערכים). הערוץ החי לא השתנה.` });
+            } else {
+                await savePublishMeta({
+                    version: pack.version,
+                    publishedAt: Date.now(),
+                    publishedBy: currentUserEmail || undefined,
+                    entryCount: result.included,
+                    ...(previous?.previewAt ? { previewAt: previous.previewAt } : {}),
+                });
+                setBanner({ kind: "success", text: `פורסמה גרסה ${pack.version} (${result.included} ערכים). נשמר עותק ב-${uploaded.archivePath}.` });
+            }
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `ההעלאה נכשלה: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    /** החזרת גרסה שמורה לערוץ החי */
+    async function onRestoreVersion(path: string, version: number) {
+        if (!window.confirm(`להחזיר את גרסה ${version} לערוץ החי? מה שמפורסם כעת יוחלף. עותקי הגרסאות נשמרים, ולכן אפשר יהיה לחזור.`)) return;
+        setBusy(true);
+        try {
+            const pack = await restoreArchivedVersion(path, packFileName(false));
+            const previous = await loadPublishMeta();
+            await savePublishMeta(
+                {
+                    version: pack.version,
+                    publishedAt: Date.now(),
+                    publishedBy: currentUserEmail || undefined,
+                    entryCount: pack.entries?.length ?? 0,
+                    ...(previous?.previewAt ? { previewAt: previous.previewAt } : {}),
+                },
+                `הוחזרה גרסה ${version} לערוץ החי`,
+            );
+            setBanner({ kind: "success", text: `גרסה ${version} הוחזרה לערוץ החי.` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `ההחזרה נכשלה: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
     }
 
     async function onSignOut() {
@@ -285,6 +336,7 @@ export function TanakhView() {
                     categories={categories}
                     busy={busy}
                     onPublish={onPublishPack}
+                    onRestore={onRestoreVersion}
                     onClose={() => setPublishOpen(false)}
                 />
             )}
@@ -315,6 +367,7 @@ export function TanakhView() {
                             onDelete={() => void onDelete()}
                             onRevert={() => original && setDraft(structuredClone(original))}
                             onMarkTranslation={s => void onMarkTranslation(s)}
+                            onNotice={(kind, text) => setBanner({ kind, text })}
                         />
                     ) : (
                         <div style={{ ...ts.card, alignItems: "center", justifyContent: "center", minHeight: 240, color: "#777" }}>

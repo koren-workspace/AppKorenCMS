@@ -5,30 +5,34 @@
  * אימות בערך שאמור להיכנס חוסמת; אזהרות (הפניה לערך מוסתר, ערך קשור שנעלם)
  * מוצגות ולא חוסמות – הן לגיטימיות בזמן עבודה.
  *
- * העלאה ל-Storage עדיין מושבתת (מצריך Blaze). עד אז ההורדה למחשב היא היעד,
- * והיא מספיקה כדי לוודא שהקובץ נכון.
+ * כל גרסה חיה נשמרת באחסון, ולכן אפשר להחזיר גרסה קודמת לערוץ החי אם פרסום
+ * יצא שגוי. ההורדה למחשב נשארה, לבדיקת הקובץ בלי לפרסם.
  */
 
 import React, { useEffect, useMemo, useState } from "react";
 import type { Category, Entry, PublishMeta } from "../model/types";
 import { buildContentPack, packFileName, type ContentPack, type PublishResult } from "../model/publish";
 import { validateEntry } from "../model/validate";
-import { downloadPack, formatBytes, isStorageEnabled, loadPublishMeta, packSize } from "../services/publishService";
+import { downloadPack, formatBytes, isStorageEnabled, listArchivedVersions, loadPublishMeta, packSize, type ArchivedVersion } from "../services/publishService";
 import { ts, GREEN, RED } from "./tanakhStyles";
 
 export interface PublishPanelProps {
     entries: Entry[];
     categories: Category[];
     busy: boolean;
-    /** שמירת מסמך הפרסום; מוחזר מלמעלה כדי שהבאנר והמצב יתעדכנו */
-    onPublish: (pack: ContentPack, result: PublishResult) => Promise<void>;
+    /** ההעלאה עצמה; מגיעה מלמעלה כדי שהבאנר והמצב יתעדכנו */
+    onPublish: (pack: ContentPack, result: PublishResult, preview: boolean) => Promise<void>;
+    /** החזרת גרסה שמורה לערוץ החי */
+    onRestore: (path: string, version: number) => Promise<void>;
     onClose: () => void;
 }
 
-export function PublishPanel({ entries, categories, busy, onPublish, onClose }: PublishPanelProps) {
+export function PublishPanel({ entries, categories, busy, onPublish, onRestore, onClose }: PublishPanelProps) {
     const [preview, setPreview] = useState(false);
     const [meta, setMeta] = useState<PublishMeta | null | undefined>(undefined);
     const [built, setBuilt] = useState<{ pack: ContentPack; result: PublishResult; size: number } | null>(null);
+    const [archive, setArchive] = useState<ArchivedVersion[]>([]);
+    const [showArchive, setShowArchive] = useState(false);
 
     useEffect(() => {
         // getTanakhFirestore עלול לזרוק סינכרונית (סביבה בלי הגדרות), ולכן try
@@ -39,7 +43,17 @@ export function PublishPanel({ entries, categories, busy, onPublish, onClose }: 
                 setMeta(null);
             }
         })();
-    }, []);
+    }, [busy]);
+
+    // רשימת הגרסאות נטענת רק כשפותחים אותה, ומתרעננת אחרי פרסום
+    useEffect(() => {
+        if (!showArchive || busy) return;
+        let alive = true;
+        listArchivedVersions()
+            .then(list => { if (alive) setArchive(list); })
+            .catch(() => { if (alive) setArchive([]); });
+        return () => { alive = false; };
+    }, [showArchive, busy]);
 
     // איזה ערכים ייכנסו, וכמה מהם לא תקינים
     const candidates = useMemo(() => entries.filter(e => preview || e.visible), [entries, preview]);
@@ -158,17 +172,57 @@ export function PublishPanel({ entries, categories, busy, onPublish, onClose }: 
                             style={{ ...ts.successBtn, ...(busy || !storage ? ts.btnDisabled : {}) }}
                             disabled={busy || !storage}
                             title={storage ? "" : "דורש Firebase Storage"}
-                            onClick={() => void onPublish(built.pack, built.result)}
+                            onClick={() => void onPublish(built.pack, built.result, preview)}
                         >
                             {preview ? "העלאת תצוגה מקדימה" : "פרסום לאפליקציה"}
                         </button>
                         {!storage && (
                             <span style={ts.muted}>
-                                ההעלאה תיפתח כשיופעל Firebase Storage בפרויקט (מצריך תוכנית Blaze).
-                                עד אז אפשר להוריד את הקובץ ולבדוק אותו.
+                                דלי ה-Storage אינו מוגדר במשתני הסביבה, ולכן אי אפשר להעלות.
+                                אפשר להוריד את הקובץ ולבדוק אותו.
                             </span>
                         )}
                     </div>
+                    {!preview && (
+                        <p style={ts.hint}>
+                            הפרסום שומר עותק בלתי משתנה של הגרסה באחסון, כך שאפשר להחזיר אותה אם משהו יצא שגוי.
+                        </p>
+                    )}
+                </section>
+            )}
+
+            {/* ── גרסאות שמורות ─────────────────────────────────────────── */}
+            {storage && (
+                <section style={ts.section}>
+                    <div style={{ ...ts.row, justifyContent: "space-between" }}>
+                        <h4 style={ts.sectionTitle}>גרסאות שמורות</h4>
+                        <button style={ts.secondaryBtn} onClick={() => setShowArchive(v => !v)}>
+                            {showArchive ? "הסתרה" : "הצגה"}
+                        </button>
+                    </div>
+                    {showArchive && (
+                        archive.length === 0 ? (
+                            <span style={ts.muted}>אין עדיין גרסאות שמורות. הפרסום הבא ישמור את הראשונה.</span>
+                        ) : (
+                            <ul style={{ ...ts.list, gap: 4 }}>
+                                {archive.map(v => (
+                                    <li key={v.path} style={{ ...ts.listRow, cursor: "default", justifyContent: "space-between" }}>
+                                        <span>
+                                            גרסה <b>{v.version}</b>
+                                            {meta && v.version === meta.version && <span style={{ ...ts.badge, background: "#e8f5e9", color: GREEN, marginInlineStart: 8 }}>חי כעת</span>}
+                                        </span>
+                                        <button
+                                            style={{ ...ts.smallBtn, ...(busy || (meta ? v.version === meta.version : false) ? ts.btnDisabled : {}) }}
+                                            disabled={busy || (meta ? v.version === meta.version : false)}
+                                            onClick={() => void onRestore(v.path, v.version)}
+                                        >
+                                            החזרה לערוץ החי
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )
+                    )}
                 </section>
             )}
         </div>

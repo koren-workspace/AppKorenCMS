@@ -13,14 +13,19 @@
  * תמונה ממוזערת שחסרה (למשל תמונה ארוזה שנוספה והסקריפט עוד לא הורץ)
  * מחזירה את התצוגה למזהה בלבד, כמו קודם, ולא לריבוע שבור.
  *
- * העלאת תמונות חדשות דורשת Firebase Storage, שעדיין לא הופעל בפרויקט (מצריך
- * תוכנית Blaze). הכפתור מוצג מושבת עם הסבר, במקום להיעלם – כדי שיהיה ברור
- * שזה שלב שממתין ולא יכולת חסרה.
+ * העלאה של תמונה חדשה מקטינה וממירה ל-WebP בדפדפן (utils/imageFile.ts)
+ * ואז מעלה ל-Storage. הכפתור מושבת רק אם הפרויקט לא מוגדר.
+ *
+ * הסרת תמונה מנתקת אותה מהערך בלבד ואינה מוחקת את הקובץ: כך "ביטול
+ * שינויים" לא משאיר ערך שמצביע לקובץ שנמחק, ותמונה שנתלתה בטעות על הערך
+ * הלא נכון נשארת זמינה לצירוף מ"תמונה קיימת".
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { findImages, MIN_QUERY, type LibraryImage } from "../model/imageLibrary";
 import type { EntryImage, Localized } from "../model/types";
+import { formatBytes, uploadEntryImage } from "../services/mediaService";
+import { ACCEPTED_TYPES } from "../utils/imageFile";
 import { ts } from "./tanakhStyles";
 
 /** התמונות הממוזערות ש- `npm run cms-thumbs` כותב אל public/ של ה-CMS */
@@ -46,12 +51,17 @@ function Thumb({ img }: { img: EntryImage }) {
 }
 
 export interface ImageListProps {
+    /** מזהה הערך – תיקיית היעד של ההעלאה */
+    entryId: string;
     images: EntryImage[];
     /** כל התמונות שכבר קיימות במערכת, לצירוף תמונה שנתלתה על הערך הלא נכון */
     library?: LibraryImage[];
-    /** האם Firebase Storage מוגדר (כרגע תמיד false – ראו docs/tanakh-lametayel.md) */
+    /** האם Firebase Storage זמין (ראו publishService.isStorageEnabled) */
     storageEnabled?: boolean;
+    disabled?: boolean;
     onChange: (next: EntryImage[]) => void;
+    /** הודעה למשתמש על תוצאת ההעלאה */
+    onNotice?: (kind: "success" | "error", text: string) => void;
 }
 
 function ImagePicker({ library, current, onPick }: { library: LibraryImage[]; current: EntryImage[]; onPick: (img: EntryImage) => void }) {
@@ -89,8 +99,35 @@ function ImagePicker({ library, current, onPick }: { library: LibraryImage[]; cu
     );
 }
 
-export function ImageList({ images, library = [], storageEnabled = false, onChange }: ImageListProps) {
+export function ImageList({ entryId, images, library = [], storageEnabled = false, disabled, onChange, onNotice }: ImageListProps) {
     const [picking, setPicking] = useState(false);
+    const [uploading, setUploading] = useState(0);
+    const fileRef = useRef<HTMLInputElement | null>(null);
+
+    async function upload(files: FileList | File[]) {
+        const list = Array.from(files).filter(f => f.type.startsWith("image/"));
+        if (!list.length) {
+            onNotice?.("error", "לא נבחרו קובצי תמונה.");
+            return;
+        }
+        setUploading(n => n + list.length);
+        const added: EntryImage[] = [];
+        for (const file of list) {
+            try {
+                const { image, prepared } = await uploadEntryImage(entryId, file);
+                added.push(image);
+                onNotice?.("success", prepared.original
+                    ? `הועלה ${file.name} (${formatBytes(prepared.sourceBytes)}).`
+                    : `הועלה ${file.name}: הוקטן ל-${prepared.width}×${prepared.height} (${formatBytes(prepared.sourceBytes)} ← ${formatBytes(prepared.blob.size)}).`);
+            } catch (err: any) {
+                onNotice?.("error", `העלאת ${file.name} נכשלה: ${err?.message ?? err}`);
+            } finally {
+                setUploading(n => n - 1);
+            }
+        }
+        // התמונות נוספות לטיוטה; הן ייכנסו לערך רק בשמירה
+        if (added.length) onChange([...images, ...added]);
+    }
     function patch(i: number, next: Partial<EntryImage>) {
         onChange(images.map((img, j) => (j === i ? { ...img, ...next } : img)));
     }
@@ -115,7 +152,7 @@ export function ImageList({ images, library = [], storageEnabled = false, onChan
         <section style={ts.section}>
             <div style={{ ...ts.row, justifyContent: "space-between" }}>
                 <h4 style={ts.sectionTitle}>תמונות</h4>
-                <span style={ts.muted}>{images.length}</span>
+                <span style={ts.muted}>{images.length}{uploading ? ` · מעלה ${uploading}…` : ""}</span>
             </div>
 
             {images.length ? (
@@ -154,19 +191,39 @@ export function ImageList({ images, library = [], storageEnabled = false, onChan
             )}
 
             <div style={{ ...ts.row, gap: 8 }}>
-                <button style={{ ...ts.secondaryBtn, ...(storageEnabled ? {} : ts.btnDisabled) }} disabled={!storageEnabled} title={storageEnabled ? "" : "דורש Firebase Storage"}>
-                    העלאת תמונה
+                <button
+                    style={{ ...ts.secondaryBtn, ...(storageEnabled && !disabled && !uploading ? {} : ts.btnDisabled) }}
+                    disabled={!storageEnabled || disabled || uploading > 0}
+                    title={storageEnabled ? "" : "דורש Firebase Storage"}
+                    onClick={() => fileRef.current?.click()}
+                >
+                    {uploading ? "מעלה…" : "העלאת תמונה"}
                 </button>
+                <input
+                    ref={fileRef}
+                    id="tlm-image-upload"
+                    type="file"
+                    accept={ACCEPTED_TYPES.join(",")}
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={e => {
+                        if (e.target.files?.length) void upload(e.target.files);
+                        e.target.value = "";
+                    }}
+                />
                 {library.length > 0 && (
                     <button style={ts.secondaryBtn} onClick={() => setPicking(v => !v)}>
                         {picking ? "ביטול" : "צירוף תמונה קיימת"}
                     </button>
                 )}
-                {!storageEnabled && (
+                {storageEnabled ? (
                     <span style={ts.muted}>
-                        העלאה תיפתח כשיופעל Firebase Storage בפרויקט (מצריך תוכנית Blaze). עד אז אפשר
-                        לערוך כיתובים, לשנות סדר ולהסיר תמונות; הקבצים עצמם יושבים בריפו של האפליקציה,
-                        והתצוגה המקדימה כאן מגיעה מעותק מוקטן שלהם.
+                        התמונה מוקטנת ומומרת ל-WebP בדפדפן לפני ההעלאה. היא נוספת לטיוטה, ונכנסת לערך
+                        בלחיצה על "שמירה".
+                    </span>
+                ) : (
+                    <span style={ts.muted}>
+                        העלאה דורשת שהדלי של Firebase Storage יהיה מוגדר במשתני הסביבה של הפרויקט.
                     </span>
                 )}
             </div>

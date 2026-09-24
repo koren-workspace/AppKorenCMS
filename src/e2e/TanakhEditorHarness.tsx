@@ -104,6 +104,7 @@ export function TanakhEditorHarness() {
                     categories={categories}
                     busy={false}
                     onPublish={async () => undefined}
+                    onRestore={async () => undefined}
                     onClose={() => setPublishOpen(false)}
                 />
             ) : (

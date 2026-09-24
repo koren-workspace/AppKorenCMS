@@ -20,6 +20,7 @@ import { rankEntries } from "../utils/search";
 import { BodyPreview } from "./BodyPreview";
 import { AnchorEditor } from "./AnchorEditor";
 import { ImageList } from "./ImageList";
+import { isStorageEnabled } from "../services/publishService";
 import { MapPicker } from "./MapPicker";
 import { AMBER, BLUE, GREEN, RED, ts } from "./tanakhStyles";
 
@@ -37,6 +38,8 @@ export interface EntryEditorProps {
     onDelete: () => void;
     onRevert: () => void;
     onMarkTranslation: (status: "reviewed" | "approved") => void;
+    /** הודעה למשתמש מתוך חלקי הטופס (למשל תוצאת העלאת תמונה) */
+    onNotice?: (kind: "success" | "error", text: string) => void;
 }
 
 export function EntryEditor(p: EntryEditorProps) {
@@ -178,7 +181,15 @@ export function EntryEditor(p: EntryEditorProps) {
             </section>
 
             {/* ── תמונות ───────────────────────────────────────────────── */}
-            <ImageList images={draft.images} library={imageLibrary} onChange={images => set({ images })} />
+            <ImageList
+                entryId={draft.id}
+                images={draft.images}
+                library={imageLibrary}
+                storageEnabled={isStorageEnabled()}
+                disabled={p.busy}
+                onChange={images => set({ images })}
+                onNotice={p.onNotice}
+            />
 
             {/* ── קישורים מהפסוקים ─────────────────────────────────────── */}
             <AnchorEditor anchors={draft.anchors} onChange={anchors => set({ anchors })} />

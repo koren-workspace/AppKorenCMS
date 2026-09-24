@@ -22,6 +22,8 @@ export type ProdAuthModalProps = {
     subtitle?: React.ReactNode;
     /** שם הסביבה בהודעת "משתמש לא קיים" (ברירת מחדל: "בפרוד") */
     envLabel?: string;
+    /** כשמוגדר – מוצג קישור "שכחתי סיסמה" ששולח מייל לקביעת סיסמה חדשה */
+    resetPassword?: (email: string) => Promise<void>;
 };
 
 export function ProdAuthModal({
@@ -33,21 +35,42 @@ export function ProdAuthModal({
     title,
     subtitle,
     envLabel = "בפרוד",
+    resetPassword,
 }: ProdAuthModalProps) {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [resetNote, setResetNote] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (open) {
             setPassword("");
             setError(null);
+            setResetNote(null);
             setTimeout(() => inputRef.current?.focus(), 50);
         }
     }, [open]);
 
     if (!open) return null;
+
+    async function handleReset() {
+        if (!resetPassword) return;
+        setError(null);
+        setResetNote(null);
+        setLoading(true);
+        try {
+            await resetPassword(email);
+            setResetNote(`נשלח מייל ל-${email} עם קישור לקביעת סיסמה חדשה. אם הוא לא מגיע תוך כמה דקות, כדאי לבדוק בספאם.`);
+        } catch (err: any) {
+            const code: string = err?.code ?? "";
+            setError(code.includes("too-many-requests")
+                ? "יותר מדי בקשות. נסה שוב מאוחר יותר."
+                : `שליחת המייל נכשלה: ${err?.message ?? code}`);
+        } finally {
+            setLoading(false);
+        }
+    }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -112,7 +135,14 @@ export function ProdAuthModal({
                         />
                     </label>
 
+                    {resetPassword && (
+                        <button type="button" style={styles.linkBtn} onClick={() => void handleReset()} disabled={loading}>
+                            שכחתי סיסמה / שינוי סיסמה
+                        </button>
+                    )}
+
                     {error && <p style={styles.error}>{error}</p>}
+                    {resetNote && <p style={styles.note}>{resetNote}</p>}
 
                     <div style={styles.buttons}>
                         <button
@@ -193,6 +223,23 @@ const styles: Record<string, React.CSSProperties> = {
         margin: 0,
         color: "#d32f2f",
         fontSize: 13,
+    },
+    note: {
+        margin: 0,
+        color: "#2e7d32",
+        fontSize: 13,
+        lineHeight: 1.5,
+    },
+    linkBtn: {
+        alignSelf: "flex-start",
+        margin: "-6px 0 0",
+        padding: 0,
+        border: "none",
+        background: "none",
+        color: "#1565c0",
+        fontSize: 13,
+        cursor: "pointer",
+        textDecoration: "underline",
     },
     buttons: {
         display: "flex",

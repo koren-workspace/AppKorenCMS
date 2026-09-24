@@ -4,9 +4,9 @@
  * הטופס עובד על עותק מקומי של הערך (draft) ומדווח למעלה על שינויים. השמירה,
  * המחיקה והאימות מגיעים מלמעלה (TanakhView), כדי שהרשימה תתעדכן.
  *
- * שדות בחלק א': כותרת ושמות נוספים (עברית/אנגלית), גוף הערך עם תצוגה מקדימה,
- * פסוקי פתיחה, מראי מקום, ערכים קשורים, הפניה, אזור, עמוד, הערות פנימיות,
- * הערות לבדיקה, מצב תרגום. מיקום, תמונות וקישורים מהפסוקים – בחלק ב'.
+ * שדות: כותרת ושמות נוספים (עברית/אנגלית), גוף הערך עם תצוגה מקדימה,
+ * פסוקי פתיחה, מראי מקום, ערכים קשורים, הפניה, מיקום על המפה, תמונות,
+ * קישורים מהפסוקים, אזור, עמוד, הערות פנימיות, הערות לבדיקה, מצב תרגום.
  */
 
 import React, { useMemo, useState } from "react";
@@ -16,7 +16,10 @@ import { formatVerseRef, toHebrewNumeral } from "../model/hebnum";
 import type { ValidationIssue } from "../model/validate";
 import { hasTranslation } from "../model/entryOps";
 import { matchesQuery } from "../utils/search";
+import { AnchorsSection } from "./AnchorsSection";
 import { BodyPreview } from "./BodyPreview";
+import { ImagesSection } from "./ImagesSection";
+import { LocationSection } from "./LocationSection";
 import { AMBER, BLUE, GREEN, RED, ts } from "./tanakhStyles";
 
 export interface EntryEditorProps {
@@ -33,12 +36,18 @@ export interface EntryEditorProps {
     onDelete: () => void;
     onRevert: () => void;
     onMarkTranslation: (status: "reviewed" | "approved") => void;
+    /** הודעה למשתמש מתוך חלקי הטופס (למשל תוצאת העלאת תמונה) */
+    onNotice?: (kind: "success" | "error", text: string) => void;
 }
+
+/** שדות שיש להם הצגת בעיות משלהם בתוך הטופס */
+const SECTION_FIELDS = ["title", "body", "see", "location", "cat", "page", "xrefs", "quotes", "refs", "images", "anchors"];
 
 export function EntryEditor(p: EntryEditorProps) {
     const { draft, categories, issues } = p;
     const set = (patch: Partial<Entry>) => p.onChange({ ...draft, ...patch });
-    const errorsFor = (field: string) => issues.filter(i => i.field === field || i.field.startsWith(field + "["));
+    // "location" תופס גם את "location.conf", "quotes" גם את "quotes[2]"
+    const errorsFor = (field: string) => issues.filter(i => i.field === field || i.field.startsWith(field + "[") || i.field.startsWith(field + "."));
     const hasError = issues.some(i => i.level === "error");
     const byId = useMemo(() => new Map(p.allEntries.map(e => [e.id, e])), [p.allEntries]);
 
@@ -68,7 +77,8 @@ export function EntryEditor(p: EntryEditorProps) {
                 </div>
             </div>
             {!draft.visible && <div style={{ ...ts.banner, ...ts.bannerWarn }}>הערך מוסתר: לא ייכנס לקובץ התוכן בפרסום.</div>}
-            <IssueList issues={issues.filter(i => !i.field.includes("[") && !["title.he", "body.he", "see", "location", "cat"].includes(i.field))} />
+            {/* בעיות שאין להן שדה משלהן בטופס; השאר מוצגות ליד השדה עצמו */}
+            <IssueList issues={issues.filter(i => !i.field.includes("[") && !SECTION_FIELDS.some(f => i.field === f || i.field.startsWith(f + ".")))} />
 
             {/* ── לבדיקה ───────────────────────────────────────────────── */}
             {draft.review.length > 0 && (
@@ -151,6 +161,33 @@ export function EntryEditor(p: EntryEditorProps) {
                 )}
                 <Issues list={errorsFor("see")} />
             </section>
+
+            {/* ── מיקום ────────────────────────────────────────────────── */}
+            <LocationSection
+                draft={draft}
+                allEntries={p.allEntries}
+                onChange={location => set({ location })}
+                issues={errorsFor("location")}
+                disabled={p.busy}
+            />
+
+            {/* ── תמונות ───────────────────────────────────────────────── */}
+            <ImagesSection
+                entryId={draft.id}
+                images={draft.images}
+                onChange={images => set({ images })}
+                issues={errorsFor("images")}
+                disabled={p.busy}
+                onNotice={p.onNotice}
+            />
+
+            {/* ── קישורים מהפסוקים ─────────────────────────────────────── */}
+            <AnchorsSection
+                anchors={draft.anchors}
+                onChange={anchors => set({ anchors })}
+                issues={errorsFor("anchors")}
+                disabled={p.busy}
+            />
 
             {/* ── אזור, עמוד, הערות ────────────────────────────────────── */}
             <section style={ts.section}>

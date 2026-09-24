@@ -6,9 +6,10 @@
 import React, { useMemo, useState } from "react";
 import { EntryList } from "../views/tanakh/components/EntryList";
 import { EntryEditor } from "../views/tanakh/components/EntryEditor";
+import { CategoriesModal } from "../views/tanakh/components/CategoriesModal";
 import { ts } from "../views/tanakh/components/tanakhStyles";
 import { LEGACY_CATEGORIES } from "../views/tanakh/model/categories";
-import { emptyEntry, type Entry } from "../views/tanakh/model/types";
+import { emptyEntry, type Category, type Entry } from "../views/tanakh/model/types";
 import { entriesEqual, nextEntryId, prepareEntryForSave, setTranslationStatus } from "../views/tanakh/model/entryOps";
 import { validateEntry } from "../views/tanakh/model/validate";
 
@@ -27,6 +28,11 @@ function sample(): Entry[] {
     shiloh.page = 300;
     shiloh.location = { lat: 32.0556, lng: 35.2897, conf: 1 };
     shiloh.images = [{ kind: "baked", src: "e0203_1_1", caption: { he: "התל" } }];
+    shiloh.anchors = [
+        { book: "yehoshua", ch: 18, v: 1, w: "שלה" },
+        { book: "shmuel-a", ch: 1, v: 3 },
+        { book: "shoftim", ch: 21, v: 19 },
+    ];
     shiloh.review = ['ערך קשור לא נמצא: "משכן"', 'ציטוט לא זוהה כפסוק: "מקום המשכן"'];
     shiloh.i18n.en = { status: "stale", updatedAt: 1700000000000, updatedBy: "translator@korenpub.com" };
     shiloh.updatedAt = 1700000000000;
@@ -63,7 +69,10 @@ export function TanakhEditorHarness() {
     const [draft, setDraft] = useState<Entry | null>(() => structuredClone(sample()[0]));
     const [isNew, setIsNew] = useState(false);
     const [saved, setSaved] = useState<string[]>([]);
-    const categories = useMemo(() => [...LEGACY_CATEGORIES], []);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [catsOpen, setCatsOpen] = useState(false);
+    const [cats, setCats] = useState<Category[]>(() => [...LEGACY_CATEGORIES]);
+    const categories = cats;
 
     const original = useMemo(() => entries.find(e => e.id === selectedId) ?? null, [entries, selectedId]);
     const dirty = Boolean(draft && (isNew || (original && !entriesEqual(draft, original))));
@@ -87,6 +96,7 @@ export function TanakhEditorHarness() {
     return (
         <div style={ts.page} data-testid="tanakh-harness">
             <div style={ts.header}><h2 style={ts.title}>התנ"ך למטייל – סביבת בדיקה</h2><span style={ts.muted} data-testid="saved-count">נשמרו: {saved.length}</span></div>
+            {notice && <div style={{ ...ts.banner, ...ts.bannerInfo }} data-testid="notice">{notice}</div>}
             <div style={ts.workspace}>
                 <EntryList
                     entries={entries}
@@ -96,6 +106,7 @@ export function TanakhEditorHarness() {
                     onSelect={select}
                     onNew={() => { const id = nextEntryId(entries.map(e => e.id)); setSelectedId(id); setDraft(emptyEntry(id, "places")); setIsNew(true); }}
                     onReload={() => undefined}
+                    onManageCategories={() => setCatsOpen(true)}
                 />
                 {draft && (
                     <EntryEditor
@@ -111,9 +122,17 @@ export function TanakhEditorHarness() {
                         onDelete={() => { setEntries(es => es.filter(e => e.id !== draft.id)); setDraft(null); setSelectedId(null); }}
                         onRevert={() => original && setDraft(structuredClone(original))}
                         onMarkTranslation={s => save(setTranslationStatus(draft, "en", s, "harness@test"))}
+                        onNotice={(kind, text) => setNotice(`${kind}: ${text}`)}
                     />
                 )}
             </div>
+            <CategoriesModal
+                open={catsOpen}
+                categories={categories}
+                entries={entries}
+                onSave={c => setCats(list => [...list.filter(x => x.key !== c.key), c].sort((a, b) => a.order - b.order))}
+                onClose={() => setCatsOpen(false)}
+            />
         </div>
     );
 }

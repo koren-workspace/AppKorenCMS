@@ -19,12 +19,13 @@ import { isTanakhConfigured, missingTanakhEnvVars, tanakhProjectId } from "../fi
 import { ProdAuthModal } from "./toc-translations/components/ProdAuthModal";
 import { setChangeLogUser } from "./toc-translations/services/changeLogService";
 import { onTanakhAuthChanged, signInToTanakh, signOutOfTanakh } from "./tanakh/services/tanakhAuthService";
-import { deleteEntry, loadContent, saveEntry, seedCategories, type TanakhContent } from "./tanakh/services/entriesService";
-import { emptyEntry, type Entry } from "./tanakh/model/types";
+import { deleteEntry, loadContent, saveCategory, saveEntry, seedCategories, type TanakhContent } from "./tanakh/services/entriesService";
+import { emptyEntry, type Category, type Entry } from "./tanakh/model/types";
 import { entriesEqual, nextEntryId, setTranslationStatus } from "./tanakh/model/entryOps";
 import { validateEntry } from "./tanakh/model/validate";
 import { EntryList } from "./tanakh/components/EntryList";
 import { EntryEditor } from "./tanakh/components/EntryEditor";
+import { CategoriesModal } from "./tanakh/components/CategoriesModal";
 import { ts } from "./tanakh/components/tanakhStyles";
 
 type Banner = { kind: "info" | "success" | "error"; text: string } | null;
@@ -47,6 +48,7 @@ export function TanakhView() {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [draft, setDraft] = useState<Entry | null>(null);
     const [isNew, setIsNew] = useState(false);
+    const [categoriesOpen, setCategoriesOpen] = useState(false);
 
     useEffect(() => {
         setChangeLogUser({ email: currentUserEmail, uid: currentUserUid });
@@ -182,6 +184,25 @@ export function TanakhView() {
         }
     }
 
+    async function onSaveCategory(category: Category) {
+        setBusy(true);
+        try {
+            // מסד ריק: הקטגוריות המובנות עדיין לא נכתבו, והעריכה תיצור מסמך בודד
+            if (content && !content.categoriesFromDb) await seedCategories();
+            await saveCategory(category);
+            setContent(c => {
+                if (!c) return c;
+                const others = c.categories.filter(x => x.key !== category.key);
+                return { ...c, categories: [...others, category].sort((a, b) => a.order - b.order), categoriesFromDb: true };
+            });
+            setBanner({ kind: "success", text: `הקטגוריה "${category.name.he}" נשמרה.` });
+        } catch (err: any) {
+            setBanner({ kind: "error", text: `שמירת הקטגוריה נכשלה: ${err?.message ?? err}` });
+        } finally {
+            setBusy(false);
+        }
+    }
+
     async function onSignOut() {
         if (!confirmDiscard()) return;
         await signOutOfTanakh();
@@ -236,6 +257,7 @@ export function TanakhView() {
                         onSelect={select}
                         onNew={startNew}
                         onReload={() => { if (confirmDiscard()) { setDraft(null); setSelectedId(null); void reload(); } }}
+                        onManageCategories={() => setCategoriesOpen(true)}
                         loading={loading}
                     />
                     {draft ? (
@@ -252,6 +274,7 @@ export function TanakhView() {
                             onDelete={() => void onDelete()}
                             onRevert={() => original && setDraft(structuredClone(original))}
                             onMarkTranslation={s => void onMarkTranslation(s)}
+                            onNotice={(kind, text) => setBanner({ kind, text })}
                         />
                     ) : (
                         <div style={{ ...ts.card, alignItems: "center", justifyContent: "center", minHeight: 240, color: "#777" }}>
@@ -262,6 +285,15 @@ export function TanakhView() {
             )}
             {user && !content && !loading && !banner && <div style={{ ...ts.banner, ...ts.bannerInfo }}>טוען…</div>}
             {user && loading && !content && <div style={{ ...ts.banner, ...ts.bannerInfo }}>טוען את הערכים…</div>}
+
+            <CategoriesModal
+                open={categoriesOpen}
+                categories={categories}
+                entries={entries}
+                busy={busy}
+                onSave={onSaveCategory}
+                onClose={() => setCategoriesOpen(false)}
+            />
 
             <ProdAuthModal
                 open={authOpen}

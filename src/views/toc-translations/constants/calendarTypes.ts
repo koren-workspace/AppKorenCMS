@@ -287,6 +287,15 @@ export function buildDateSetLabel(
     return { short, full };
 }
 
+/**
+ * רשומת לוח מסומנת `deleted: true` – האפליקציה לא מציגה אף פריט או מקטע
+ * שמפנה אליה (תנאי מחוק = לעולם לא מתקיים). כך הוסתרה ההושענא של ט"ז תשרי
+ * ביום א' (651) בסוכות תשפ"ז, בלי שום סימן ב-CMS.
+ */
+export function isCalendarEntryDeleted(values: Record<string, any> | null | undefined): boolean {
+    return values?.deleted === true;
+}
+
 /** המרת entity מ-Firestore ל־CalendarEntryPayload. */
 export function entityValuesToPayload(values: Record<string, any>): CalendarEntryPayload {
     return {

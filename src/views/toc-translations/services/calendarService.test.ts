@@ -12,7 +12,7 @@ vi.mock("../collections", () => ({
     calendarCollection: {},
 }));
 
-import { buildCalendarEntryValues } from "./calendarService";
+import { buildCalendarEntryValues, findMatchingDateSetId, getNextDateSetId } from "./calendarService";
 
 describe("calendarService – buildCalendarEntryValues", () => {
     it("includes required fields and timestamp", () => {
@@ -61,5 +61,30 @@ describe("calendarService – buildCalendarEntryValues", () => {
         expect(values.dates_when_we_say_prayer_abroad).toBeUndefined();
         expect(values.dates_when_we_dont_say_prayer).toBeUndefined();
         expect(values.dates_when_we_dont_say_prayer_abroad).toBeUndefined();
+    });
+});
+
+describe("calendarService – deleted calendar entries", () => {
+    const hoshana16Sunday = {
+        dates_when_we_say_prayer: [{ startDate: 16, startMonth: 7, endDate: 16, endMonth: 7 }],
+        weekdays: [1],
+    };
+
+    it("never reuses a deleted entry for a new item with the same conditions", () => {
+        const entities = [{ id: "651", values: { dateSetId: "651", ...hoshana16Sunday, deleted: true } }] as any;
+        expect(findMatchingDateSetId(entities, hoshana16Sunday)).toBeNull();
+    });
+
+    it("still matches the live entry with the same conditions", () => {
+        const entities = [
+            { id: "651", values: { dateSetId: "651", ...hoshana16Sunday, deleted: true } },
+            { id: "700", values: { dateSetId: "700", ...hoshana16Sunday } },
+        ] as any;
+        expect(findMatchingDateSetId(entities, hoshana16Sunday)).toBe("700");
+    });
+
+    it("does not hand out a deleted entry's id again", () => {
+        const entities = [{ id: "651", values: { deleted: true } }, { id: "650", values: {} }] as any;
+        expect(getNextDateSetId(entities)).toBe("652");
     });
 });

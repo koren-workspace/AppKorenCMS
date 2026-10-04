@@ -14,7 +14,7 @@
 
 import { HDate } from "@hebcal/core";
 import { Entity } from "@firecms/core";
-import { DateRange, entityValuesToPayload, CalendarEntryPayload } from "../constants/calendarTypes";
+import { DateRange, entityValuesToPayload, CalendarEntryPayload, isCalendarEntryDeleted } from "../constants/calendarTypes";
 
 const ALWAYS_DATE_SET_ID = "100";
 
@@ -201,6 +201,8 @@ export function getRelevantDateSetIds(
     for (const entity of calendarEntries) {
         const id = entity.id;
         if (!id) continue;
+        // תנאי מחוק לא מתקיים באפליקציה – גם הסינון כאן לא יציג אותו.
+        if (isCalendarEntryDeleted(entity.values)) continue;
         const payload = entityValuesToPayload(entity.values ?? {});
         if (!passesWeekday(payload, info.dayOfWeek)) continue;
         if (!passesHebrewDate(payload, info, fullFlags)) continue;

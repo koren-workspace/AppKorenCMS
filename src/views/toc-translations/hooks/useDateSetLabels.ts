@@ -5,18 +5,20 @@
 
 import { useState, useEffect, useRef } from "react";
 import { fetchAllCalendar } from "../services/calendarService";
-import { buildDateSetLabel, entityValuesToPayload } from "../constants/calendarTypes";
+import { buildDateSetLabel, entityValuesToPayload, isCalendarEntryDeleted } from "../constants/calendarTypes";
 
 type DataSource = {
     fetchCollection: (opts: any) => Promise<any[]>;
     saveEntity: (opts: any) => Promise<any>;
 };
 
-export type DateSetLabelEntry = { short: string; full: string };
+/** deleted = הרשומה מסומנת מחוקה ב-Firestore – האפליקציה לא תציג את מה שמפנה אליה. */
+export type DateSetLabelEntry = { short: string; full: string; deleted?: boolean };
 
 /**
  * מחזיר Record<dateSetId, { short, full }>.
- * short = שם קצר לbadge; full = תיאור מלא לtooltip.
+ * short = שם קצר לbadge; full = תיאור מלא לtooltip; deleted = רשומה מחוקה.
+ * מפה ריקה = עדיין לא נטען (או שגיאה) – אז אי אפשר לקבוע ש-ID "לא קיים".
  * נטען פעם אחת לפי dataSource – לא נטען מחדש אלא אם dataSource מוחלף.
  */
 export function useDateSetLabels(
@@ -34,7 +36,10 @@ export function useDateSetLabels(
                 const map: Record<string, DateSetLabelEntry> = {};
                 for (const entry of entries) {
                     const payload = entityValuesToPayload(entry.values ?? {});
-                    map[entry.id] = buildDateSetLabel(payload, entry.id);
+                    map[entry.id] = {
+                        ...buildDateSetLabel(payload, entry.id),
+                        deleted: isCalendarEntryDeleted(entry.values),
+                    };
                 }
                 setLabels(map);
             })

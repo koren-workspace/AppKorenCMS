@@ -14,6 +14,7 @@ import {
     calendarPayloadsEqual,
     entityValuesToPayload,
     formValuesToPayload,
+    isCalendarEntryDeleted,
     type DateSetIdFormValues,
 } from "../constants/calendarTypes";
 
@@ -49,7 +50,7 @@ export async function fetchCalendarEntryById(
 }
 
 /**
- * מחפש רשומה קיימת עם payload זהה (כל המאפיינים מלבד dateSetId).
+ * מחפש רשומה קיימת (שאינה מחוקה) עם payload זהה (כל המאפיינים מלבד dateSetId).
  * מחזיר את ה־dateSetId אם נמצא, אחרת null.
  */
 export function findMatchingDateSetId(
@@ -57,6 +58,9 @@ export function findMatchingDateSetId(
     payload: CalendarEntryPayload
 ): string | null {
     for (const e of calendarEntities) {
+        // לא ממחזרים תנאי מחוק: פריט חדש שיקבל אותו לא יוצג באפליקציה.
+        // (getNextDateSetId כן סופר מחוקים – מזהה מחוק לא מוקצה מחדש.)
+        if (isCalendarEntryDeleted(e.values)) continue;
         const existingPayload = entityValuesToPayload(e.values || {});
         if (calendarPayloadsEqual(payload, existingPayload)) {
             return e.id;

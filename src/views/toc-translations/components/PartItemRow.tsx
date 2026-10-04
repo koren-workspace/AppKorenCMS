@@ -13,6 +13,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import type { DateSetLabelEntry } from "../hooks/useDateSetLabels";
 import { DeleteTrashIcon } from "./DeleteTrashIcon";
+import { DateSetBadge } from "./DateSetBadge";
 import { Entity } from "@firecms/core";
 import { contentUsesRtlAlignment, getItemStyle } from "../utils/itemUtils";
 import { getTranslationDisplayLabel } from "../utils/translationDisplayLabels";
@@ -153,9 +154,6 @@ export function PartItemRow({
     const formatUpdateDate = (timestamp: unknown) =>
         timestamp ? new Date(timestamp as string | number).toLocaleDateString("he-IL") : "לא עודכן";
     const isDateRestricted = !!localVal.dateSetId && localVal.dateSetId !== "100";
-    const dateSetEntry = isDateRestricted ? (dateSetLabels[localVal.dateSetId] ?? null) : null;
-    const dateSetShort = dateSetEntry?.short ?? (isDateRestricted ? `ID ${localVal.dateSetId}` : null);
-    const dateSetFull = dateSetEntry?.full ?? dateSetShort;
     const [showProps, setShowProps] = useState(false);
     const [showEnhancementProps, setShowEnhancementProps] = useState<Record<string, boolean>>({});
     const [largeTextEditor, setLargeTextEditor] = useState<LargeTextEditorTarget | null>(null);
@@ -258,29 +256,7 @@ export function PartItemRow({
                         <div className="flex items-center gap-1.5 min-w-0 leading-none">
                             <span className="item-en-ltr text-xs shrink-0 leading-none">itemId: {curId}</span>
                             {isDateRestricted && (
-                                <div className="relative group shrink-0 normal-case tracking-normal inline-flex items-center -translate-y-px">
-                                    <span
-                                        className="inline-flex items-center px-1 py-px rounded text-[10px] font-medium leading-none bg-violet-100 border border-violet-300 text-violet-800 cursor-default select-none whitespace-nowrap"
-                                        title="מוגבל לתאריכים"
-                                    >
-                                        מוגבל לתאריכים
-                                    </span>
-                                    <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
-                                        {dateSetShort && (
-                                            <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
-                                                {dateSetShort}
-                                            </div>
-                                        )}
-                                        {dateSetFull && dateSetFull !== dateSetShort && (
-                                            <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
-                                                {dateSetFull}
-                                            </div>
-                                        )}
-                                        <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
-                                            ID: {localVal.dateSetId}
-                                        </div>
-                                    </div>
-                                </div>
+                                <DateSetBadge dateSetId={localVal.dateSetId} dateSetLabels={dateSetLabels} />
                             )}
                         </div>
                         <span className="item-en-ltr text-xs shrink-0">
@@ -605,9 +581,6 @@ export function PartItemRow({
                         const enhContentRtl = contentUsesRtlAlignment(displayVal?.content);
                         const enhIsSpecialDate = !!displayVal.specialDate && isBodyLikeType(enhType);
                         const enhIsDateRestricted = !!displayVal.dateSetId && displayVal.dateSetId !== "100";
-                        const enhEntry = enhIsDateRestricted ? (dateSetLabels[displayVal.dateSetId] ?? null) : null;
-                        const enhShort = enhEntry?.short ?? (enhIsDateRestricted ? `ID ${displayVal.dateSetId}` : null);
-                        const enhFull = enhEntry?.full ?? enhShort;
                         const enhIsPendingProd = pendingProdItemIds.has(enh.id);
                         return (
                             <div
@@ -666,29 +639,7 @@ export function PartItemRow({
                                                 <span className="text-xs font-bold text-red-600 bg-red-200 px-1.5 py-0.5 rounded">ימוחק בשמירה</span>
                                             )}
                                             {enhIsDateRestricted && !relatedWillBeDeleted && (
-                                                <div className="relative group inline-flex items-center">
-                                                    <span
-                                                        className="inline-flex items-center px-1 py-px rounded text-[10px] font-medium leading-none bg-violet-100 border border-violet-300 text-violet-800 cursor-default select-none whitespace-nowrap"
-                                                        title="מוגבל לתאריכים"
-                                                    >
-                                                        מוגבל לתאריכים
-                                                    </span>
-                                                    <div className="absolute bottom-full right-0 mb-1.5 z-50 invisible group-hover:visible bg-white border border-violet-300 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[340px] pointer-events-none">
-                                                        {enhShort && (
-                                                            <div className="font-bold text-violet-800 text-sm mb-1.5 text-right leading-snug">
-                                                                {enhShort}
-                                                            </div>
-                                                        )}
-                                                        {enhFull && enhFull !== enhShort && (
-                                                            <div className="text-gray-700 text-xs text-right leading-relaxed mb-1.5 whitespace-pre-wrap">
-                                                                {enhFull}
-                                                            </div>
-                                                        )}
-                                                        <div className="text-gray-400 text-xs item-en-ltr border-t border-gray-100 pt-1 mt-1">
-                                                            ID: {displayVal.dateSetId}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                <DateSetBadge dateSetId={displayVal.dateSetId} dateSetLabels={dateSetLabels} />
                                             )}
                                         </div>
                                         <div className="flex items-center justify-end gap-1 flex-wrap">

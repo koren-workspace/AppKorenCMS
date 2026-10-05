@@ -19,17 +19,20 @@ export type DateSetLabelEntry = { short: string; full: string; deleted?: boolean
  * מחזיר Record<dateSetId, { short, full }>.
  * short = שם קצר לbadge; full = תיאור מלא לtooltip; deleted = רשומה מחוקה.
  * מפה ריקה = עדיין לא נטען (או שגיאה) – אז אי אפשר לקבוע ש-ID "לא קיים".
- * נטען פעם אחת לפי dataSource – לא נטען מחדש אלא אם dataSource מוחלף.
+ * נטען פעם אחת לפי dataSource – ונטען מחדש כש-reloadKey משתנה (אחרי עדכון סט קיים).
  */
 export function useDateSetLabels(
-    dataSource: DataSource | null | undefined
+    dataSource: DataSource | null | undefined,
+    reloadKey = 0
 ): Record<string, DateSetLabelEntry> {
     const [labels, setLabels] = useState<Record<string, DateSetLabelEntry>>({});
-    const loadedForRef = useRef<DataSource | null | undefined>(undefined);
+    const loadedForRef = useRef<{ dataSource: DataSource; reloadKey: number } | null>(null);
 
     useEffect(() => {
-        if (!dataSource || loadedForRef.current === dataSource) return;
-        loadedForRef.current = dataSource;
+        if (!dataSource) return;
+        const loaded = loadedForRef.current;
+        if (loaded && loaded.dataSource === dataSource && loaded.reloadKey === reloadKey) return;
+        loadedForRef.current = { dataSource, reloadKey };
 
         fetchAllCalendar(dataSource)
             .then((entries) => {
@@ -46,7 +49,7 @@ export function useDateSetLabels(
             .catch(() => {
                 // במקרה של שגיאה – נשאיר מפה ריקה; ה-badge יציג את ה-ID הגולמי
             });
-    }, [dataSource]);
+    }, [dataSource, reloadKey]);
 
     return labels;
 }

@@ -51,6 +51,7 @@ const ACTION_LABELS: Record<ChangeLogAction, string> = {
     delete_tanakh_entry: "התנ\"ך למטייל: מחיקת ערך",
     save_tanakh_category: "התנ\"ך למטייל: שמירת קטגוריה",
     publish_tanakh_content: "התנ\"ך למטייל: פרסום קובץ התוכן",
+    update_date_set: "עדכון סט תאריכים (כל הנוסחים)",
 };
 
 function actionLabel(action: ChangeLogAction): string {
@@ -100,6 +101,11 @@ function formatSummary(entry: ChangeLogEntry): string {
         return parts.join(" · ");
     }
     if (d.tanakh) return d.tanakh.summary;
+    if (d.dateSet) {
+        const usage = `${d.dateSet.usageItems} פריטים, ${d.dateSet.usageParts} מקטעים`;
+        const failed = d.dateSet.failedSteps?.length ? ` · נכשל: ${d.dateSet.failedSteps.join(", ")}` : "";
+        return `סט ${d.dateSet.dateSetId} · ${usage}${failed}`;
+    }
     if (d.fieldChanges?.length) {
         const fields = d.fieldChanges.reduce((sum, fc) => sum + (fc.changes?.length ?? 0), 0);
         return `${fields} שינויי שדה ב-${d.fieldChanges.length} פריטים`;

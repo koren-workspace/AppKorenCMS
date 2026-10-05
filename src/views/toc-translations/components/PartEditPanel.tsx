@@ -78,6 +78,8 @@ export type PartEditPanelProps = {
     onCopyItemsToPart?: () => void;
     /** מקור נתונים לטעינת תיאורי dateSetId */
     dataSource?: { fetchCollection: (opts: any) => Promise<any[]>; saveEntity: (opts: any) => Promise<any> } | null;
+    /** עולה אחרי עדכון סט תאריכים קיים – טוען מחדש את תיאורי ה-badges */
+    calendarVersion?: number;
     /**
      * רשימת dateSetIds פעילים לתאריך הנבחר (מחושב ב-useDateFilter).
      * כשערך = null: מוצגים כל הפריטים (סינון מבוטל).
@@ -143,6 +145,7 @@ export function PartEditPanel({
     onMoveItemsToPart,
     onCopyItemsToPart,
     dataSource,
+    calendarVersion = 0,
     relevantDateSetIds = null,
     warehouseEnabled = false,
     warehouseEntries = [],
@@ -164,7 +167,7 @@ export function PartEditPanel({
         enhancementChangedIds.size > 0 ||
         pendingDeletesCount > 0 ||
         pendingEnhancementDeleteIds.size > 0;
-    const dateSetLabels = useDateSetLabels(dataSource);
+    const dateSetLabels = useDateSetLabels(dataSource, calendarVersion);
     const [searchQuery, setSearchQuery] = useState("");
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 

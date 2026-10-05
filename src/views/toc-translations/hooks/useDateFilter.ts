@@ -47,18 +47,21 @@ export type DateFilterState = {
     isLoading: boolean;
 };
 
-export function useDateFilter(dataSource: DataSource | null | undefined): DateFilterState {
+/** reloadKey – משתנה אחרי עדכון סט קיים, כדי לטעון מחדש את רשומות הלוח */
+export function useDateFilter(dataSource: DataSource | null | undefined, reloadKey = 0): DateFilterState {
     const [calendarEntries, setCalendarEntries] = useState<Entity<any>[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [filterDate, setFilterDate] = useState<Date>(() => new Date());
     const [showAll, setShowAll] = useState(false);
     const [flags, setFlags] = useState<CalendarFlags>({});
 
-    const loadedForRef = useRef<DataSource | null | undefined>(undefined);
+    const loadedForRef = useRef<{ dataSource: DataSource; reloadKey: number } | null>(null);
 
     useEffect(() => {
-        if (!dataSource || loadedForRef.current === dataSource) return;
-        loadedForRef.current = dataSource;
+        if (!dataSource) return;
+        const loaded = loadedForRef.current;
+        if (loaded && loaded.dataSource === dataSource && loaded.reloadKey === reloadKey) return;
+        loadedForRef.current = { dataSource, reloadKey };
         setIsLoading(true);
         fetchAllCalendar(dataSource)
             .then((entries) => {
@@ -71,7 +74,7 @@ export function useDateFilter(dataSource: DataSource | null | undefined): DateFi
             .finally(() => {
                 setIsLoading(false);
             });
-    }, [dataSource]);
+    }, [dataSource, reloadKey]);
 
     const hebrewLabel = useMemo(() => {
         try {

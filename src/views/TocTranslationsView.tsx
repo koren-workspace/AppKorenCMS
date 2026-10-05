@@ -96,7 +96,7 @@ export function TocTranslationsView() {
     pendingItemWritesRef.current = partEdit.addToPendingProdItems;
     ensureProdAuthRef.current = partEdit.requestProdAuth;
 
-    const dateFilter = useDateFilter(partEdit.dataSource);
+    const dateFilter = useDateFilter(partEdit.dataSource, partEdit.calendarVersion);
 
     const baseTranslationId = useMemo(() => {
         const base = nav.currentTocData?.translations?.find((t: any) =>
@@ -433,6 +433,7 @@ export function TocTranslationsView() {
                 onMoveItemsToPart={partEdit.openMoveToPartModal}
                 onCopyItemsToPart={partEdit.openCopyToPartModal}
                 dataSource={partEdit.dataSource}
+                calendarVersion={partEdit.calendarVersion}
                 relevantDateSetIds={dateFilter.relevantDateSetIds}
                 warehouseEnabled={partEdit.warehouseEnabled}
                 warehouseEntries={partEdit.warehouseEntries}
@@ -479,6 +480,8 @@ export function TocTranslationsView() {
                 onSelect={partEdit.onDateSetIdSelected}
                 title={partEdit.dateSetIdModalTitle}
                 initialDateSetId={partEdit.dateSetIdInitialForEdit}
+                onUpdatedInPlace={partEdit.onDateSetUpdatedInPlace}
+                requestProdAuth={partEdit.requestProdAuth}
             />
             <AddTranslationModal
                 open={partEdit.addTranslationOpen}

@@ -97,7 +97,8 @@ export type ChangeLogAction =
     | "save_tanakh_entry"   // התנ"ך למטייל: שמירת ערך (יצירה או עדכון)
     | "delete_tanakh_entry" // התנ"ך למטייל: מחיקת ערך
     | "save_tanakh_category" // התנ"ך למטייל: שמירת קטגוריה
-    | "publish_tanakh_content"; // התנ"ך למטייל: פרסום קובץ התוכן לאפליקציה
+    | "publish_tanakh_content" // התנ"ך למטייל: פרסום קובץ התוכן לאפליקציה
+    | "update_date_set";    // עדכון סט תאריכים קיים במקום + פרסום לכל הנוסחים
 
 /** הקשר – איפה בוצעה הפעולה */
 export type ChangeLogContext = {
@@ -239,6 +240,21 @@ export type ChangeLogEntry = {
         publishedCopyKeys?: string[];
         /** save_tanakh_entry / delete_tanakh_entry / save_tanakh_category / publish_tanakh_content */
         tanakh?: { entryId?: string; categoryKey?: string; title?: string; summary: string };
+        /**
+         * update_date_set: המסמך המלא לפני ואחרי (before = מה שצריך כדי לשחזר),
+         * היקף השימוש שהוצג למשתמש באישור, ותוצאת הפרסום לכל נוסח.
+         */
+        dateSet?: {
+            dateSetId: string;
+            before: Record<string, any>;
+            after: Record<string, any>;
+            usageItems: number;
+            usageParts: number;
+            usageTocIds: string[];
+            publishedStageNusachIds?: string[];
+            publishedProdNusachIds?: string[];
+            failedSteps?: string[];
+        };
     };
     /** האם נשמר ל-Firestore */
     savedToFirestore?: boolean;

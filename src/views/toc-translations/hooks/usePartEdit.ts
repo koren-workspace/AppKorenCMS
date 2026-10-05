@@ -1843,6 +1843,13 @@ export function usePartEdit(context: PartEditContext) {
         closeDateSetIdModal();
     };
 
+    /**
+     * גרסת הלוח – עולה אחרי עדכון סט קיים במקום, כדי שה-badges וסינון התאריך
+     * (שטוענים את הלוח פעם אחת) ייטענו מחדש. ה-dateSetId של הפריט לא משתנה.
+     */
+    const [calendarVersion, setCalendarVersion] = useState(0);
+    const onDateSetUpdatedInPlace = () => setCalendarVersion((v) => v + 1);
+
     /** פותח מודל הגדרת dateSetId להזנת שדה dateSetId בטופס הוספת תרגום */
     const openDateSetIdModalForAddTranslation = () => {
         setPendingAddKind("addTranslation");
@@ -2924,6 +2931,8 @@ export function usePartEdit(context: PartEditContext) {
         handleSavePartToProd,
         handlePublishToProd,
         requestProdAuth,
+        calendarVersion,
+        onDateSetUpdatedInPlace,
         previewPublishToProd,
         addToPendingProdItems,
         addToCalendarPending: addToPendingProdCalendar,

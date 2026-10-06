@@ -48,6 +48,14 @@ import {
     type SplitPartItemsParams,
     type MoveItemsToPartParams,
 } from "./partEditService";
+import {
+    buildWarehouseEntryFromRows,
+    filterWarehouseEntryBySelection,
+    warehouseEnhancementsToEntityMap,
+    warehouseEntrySourceItemIds,
+    warehouseSnapshotsToEntities,
+} from "../utils/itemWarehouseUtils";
+import { DEFAULT_WAREHOUSE_FIELD_SELECTION } from "../types/itemWarehouse";
 
 describe("partEditService – עדכון פריטים (savePartItems)", () => {
     const basePath = "translations/0-ashkenaz/prayers/p1/items";
@@ -1165,6 +1173,86 @@ describe("partEditService – copyItemsToPart (warehouse snapshots)", () => {
         expect(enhWrite!.data.linkedItem).toContain(newBaseId);
         expect(enhWrite!.data.itemId).toBe(result.translationIdMap["enh-1"]);
         expect(enhWrite!.data.itemId).not.toBe(newBaseId);
+    });
+
+    it("pastes a multi-item warehouse entry in order, keeping linked translations attached", async () => {
+        const dataSource = {
+            fetchCollection: vi.fn().mockImplementation(({ path, filter }: any) => {
+                if (path.includes("translations/0-dst") && filter?.partId?.[1] === "tgt-part") {
+                    return Promise.resolve([
+                        { id: "100", values: { itemId: "100", mit_id: "100", partId: "tgt-part" } },
+                    ]);
+                }
+                return Promise.resolve([]);
+            }),
+            saveEntity: vi.fn(),
+            deleteEntity: vi.fn(),
+        };
+
+        const entry = buildWarehouseEntryFromRows({
+            sourceMeta: {
+                sourceTocId: "src",
+                tocId: "src",
+                translationId: "0-src",
+                prayerId: "p-src",
+                partId: "src-part",
+                itemIds: ["30", "10", "20"],
+            },
+            baseRows: [
+                { baseEntity: { id: "b30", values: { itemId: "30", mit_id: "30", content: "ג", partId: "src-part" } } as any, baseLocalValues: {} },
+                { baseEntity: { id: "b10", values: { itemId: "10", mit_id: "10", content: "א", partId: "src-part" } } as any, baseLocalValues: {} },
+                { baseEntity: { id: "b20", values: { itemId: "20", mit_id: "20", content: "ב", partId: "src-part" } } as any, baseLocalValues: {} },
+            ],
+            relatedEnhancements: [
+                { id: "enh-20", tId: "1-src", values: { itemId: "21", mit_id: "21", linkedItem: ["20"], content: "B (EN)", partId: "src-part" } },
+            ],
+            enhancementLocalValues: {},
+        });
+        const filtered = filterWarehouseEntryBySelection(entry, DEFAULT_WAREHOUSE_FIELD_SELECTION);
+
+        const result = await copyItemsToPart(dataSource as any, {
+            sourceTranslationId: filtered.sourceMeta.translationId,
+            sourcePrayerId: filtered.sourceMeta.prayerId,
+            sourcePartId: filtered.sourceMeta.partId,
+            sourceItemIds: warehouseEntrySourceItemIds(filtered),
+            targetTranslationId: "0-dst",
+            targetTocId: "dst",
+            targetPrayerId: "p-dst",
+            targetPartId: "tgt-part",
+            insertAfterItemId: "100",
+            copyLinkedTranslations: true,
+            sourceTranslations: [
+                ...makeTranslations("0-src", "p-src", "src-part", "source"),
+                ...makeTranslations("1-src", "p-src", "src-part", "Source EN"),
+            ],
+            targetTranslations: [
+                ...makeTranslations("0-dst", "p-dst", "tgt-part", "target"),
+                ...makeTranslations("1-dst", "p-dst", "tgt-part", "Target EN"),
+            ],
+            sourceTocId: "src",
+            sourceEntities: warehouseSnapshotsToEntities(filtered.baseItems),
+            sourceEnhancementsByTranslationId: warehouseEnhancementsToEntityMap(
+                filtered.enhancementsByTranslationId
+            ),
+        });
+
+        const [id10, id20, id30] = ["10", "20", "30"].map((id) => result.baseIdMap[id]);
+        expect(id10 && id20 && id30).toBeTruthy();
+        expect(Number(id10)).toBeGreaterThan(100);
+        expect(Number(id20)).toBeGreaterThan(Number(id10));
+        expect(Number(id30)).toBeGreaterThan(Number(id20));
+
+        const baseWrites = firestoreBatchWrites.filter(
+            (w) => w.ref.path === "translations/0-dst/prayers/p-dst/items"
+        );
+        expect(baseWrites.map((w) => w.data.content)).toEqual(["א", "ב", "ג"]);
+
+        const enhWrites = firestoreBatchWrites.filter(
+            (w) => w.ref.path === "translations/1-dst/prayers/p-dst/items"
+        );
+        expect(enhWrites).toHaveLength(1);
+        expect(enhWrites[0].data.linkedItem).toEqual([id20]);
+        expect(result.createdCount).toBe(4);
     });
 
     it("skips linked translations when copyLinkedTranslations is false", async () => {

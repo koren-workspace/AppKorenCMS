@@ -92,6 +92,8 @@ export type PartEditPanelProps = {
     warehouseSelectedEntryId?: string | null;
     onWarehouseSelectEntry?: (id: string) => void;
     onSaveItemToWarehouse?: (item: Entity<any>) => void;
+    /** שמירת כמה פריטי בסיס כרשומה אחת במחסן; מחזיר true אם נשמרו */
+    onSaveItemsToWarehouse?: (items: Entity<any>[]) => boolean;
     onOpenWarehousePasteAt?: (insertAfterItemId: string | null) => void;
     onPasteFromWarehouse?: (params: {
         entryId: string;
@@ -152,6 +154,7 @@ export function PartEditPanel({
     warehouseSelectedEntryId = null,
     onWarehouseSelectEntry,
     onSaveItemToWarehouse,
+    onSaveItemsToWarehouse,
     onOpenWarehousePasteAt,
     onPasteFromWarehouse,
     warehousePasteModalOpen = false,
@@ -170,6 +173,25 @@ export function PartEditPanel({
     const dateSetLabels = useDateSetLabels(dataSource, calendarVersion);
     const [searchQuery, setSearchQuery] = useState("");
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+
+    // בחירה מרובה של פריטי בסיס לשמירה במחסן כרשומה אחת
+    const multiSelectAvailable = isBaseTranslation && warehouseEnabled && !!onSaveItemsToWarehouse;
+    const [multiSelectMode, setMultiSelectMode] = useState(false);
+    const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(new Set());
+    const exitMultiSelect = () => {
+        setMultiSelectMode(false);
+        setMultiSelectedIds(new Set());
+    };
+    useEffect(() => {
+        exitMultiSelect();
+    }, [selectedGroupId, selectedTocId, isBaseTranslation]);
+    const toggleMultiSelected = (id: string) =>
+        setMultiSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
 
     /**
      * סינון פריטים מוצגים לפי relevantDateSetIds:
@@ -226,6 +248,17 @@ export function PartEditPanel({
     const activeMatchId = matchingItemIds[safeIndex] ?? null;
 
     useEffect(() => { setCurrentMatchIndex(0); }, [q]);
+
+    const selectableVisibleIds = visibleItems
+        .filter((item) => !pendingDeleteIds.has(item.id))
+        .map((item) => item.id);
+    // נשמרים לפי סדר הרשימה המלאה; פריטים שסומנו למחיקה לא נשמרים
+    const multiSelectedItems = allItems.filter(
+        (item) => multiSelectedIds.has(item.id) && !pendingDeleteIds.has(item.id)
+    );
+    const allVisibleSelected =
+        selectableVisibleIds.length > 0 &&
+        selectableVisibleIds.every((id) => multiSelectedIds.has(id));
 
     useEffect(() => {
         if (!activeMatchId) return;
@@ -302,6 +335,64 @@ export function PartEditPanel({
                                 </>
                             )}
                         </div>
+                    {multiSelectAvailable && (
+                        <div className="flex items-center gap-2 flex-wrap px-2 pb-2 text-sm" dir="rtl">
+                            {!multiSelectMode ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setMultiSelectMode(true)}
+                                    className="px-2 py-1 rounded border border-violet-200 text-violet-800 bg-white hover:bg-violet-50 text-xs font-semibold"
+                                    title="סמן כמה פריטים ושמור אותם יחד כרשומה אחת במחסן"
+                                >
+                                    בחירה מרובה למחסן
+                                </button>
+                            ) : (
+                                <div className="flex items-center gap-2 flex-wrap w-full px-2 py-1.5 rounded border border-violet-300 bg-violet-50">
+                                    <span className="font-semibold text-violet-900">
+                                        נבחרו {multiSelectedItems.length} פריטים
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setMultiSelectedIds((prev) => {
+                                                const next = new Set(prev);
+                                                if (allVisibleSelected) {
+                                                    selectableVisibleIds.forEach((id) => next.delete(id));
+                                                } else {
+                                                    selectableVisibleIds.forEach((id) => next.add(id));
+                                                }
+                                                return next;
+                                            })
+                                        }
+                                        disabled={selectableVisibleIds.length === 0}
+                                        className="px-2 py-0.5 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 text-xs disabled:opacity-50"
+                                    >
+                                        {allVisibleSelected ? "בטל הכל" : "בחר הכל"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (onSaveItemsToWarehouse?.(multiSelectedItems)) {
+                                                exitMultiSelect();
+                                            }
+                                        }}
+                                        disabled={multiSelectedItems.length === 0}
+                                        className="px-2 py-0.5 rounded bg-violet-600 text-white hover:bg-violet-700 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="שמור את הפריטים הנבחרים (עם התרגומים המקושרים) כרשומה אחת במחסן"
+                                    >
+                                        שמור {multiSelectedItems.length} במחסן
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={exitMultiSelect}
+                                        className="px-2 py-0.5 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 text-xs"
+                                    >
+                                        ביטול
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div className="overflow-auto flex-1 space-y-4 px-2 pb-10">
                         {/* הוספת פריט בתחילת הרשימה – רק בנוסח הבסיסי (0-*) */}
                         {allowAddPart && q === "" && (
@@ -365,18 +456,42 @@ export function PartEditPanel({
                             );
                             const isActive = activeMatchId === item.id;
                             const isMatch = q !== "" && matchingItemIds.includes(item.id);
+                            const showSelectBox = multiSelectAvailable && multiSelectMode;
+                            const isMultiSelected = multiSelectedIds.has(item.id);
+                            const isSelectDisabled = pendingDeleteIds.has(item.id);
+                            const highlightClass = isActive
+                                ? "rounded-lg ring-2 ring-yellow-400 ring-offset-1"
+                                : isMatch
+                                ? "rounded-lg ring-1 ring-yellow-200"
+                                : showSelectBox && isMultiSelected
+                                ? "rounded-lg ring-2 ring-violet-400"
+                                : "";
                             return (
                                 <div
                                     key={item.id}
                                     id={`part-item-${item.id}`}
                                     className={
-                                        isActive
-                                            ? "rounded-lg ring-2 ring-yellow-400 ring-offset-1"
-                                            : isMatch
-                                            ? "rounded-lg ring-1 ring-yellow-200"
-                                            : undefined
+                                        [highlightClass, showSelectBox ? "flex items-start gap-2" : ""]
+                                            .filter(Boolean)
+                                            .join(" ") || undefined
                                     }
                                 >
+                                    {showSelectBox && (
+                                        <input
+                                            type="checkbox"
+                                            className="mt-3 h-4 w-4 shrink-0 accent-violet-600 cursor-pointer disabled:cursor-not-allowed"
+                                            checked={isMultiSelected && !isSelectDisabled}
+                                            disabled={isSelectDisabled}
+                                            onChange={() => toggleMultiSelected(item.id)}
+                                            title={
+                                                isSelectDisabled
+                                                    ? "פריט שסומן למחיקה לא נשמר במחסן"
+                                                    : "סמן לשמירה במחסן"
+                                            }
+                                            aria-label={`סמן פריט ${String(val.itemId ?? "")} לשמירה במחסן`}
+                                        />
+                                    )}
+                                    <div className={showSelectBox ? "flex-1 min-w-0" : undefined}>
                                     <PartItemRow
                                         item={item}
                                         localVal={val}
@@ -437,6 +552,7 @@ export function PartEditPanel({
                                         isPendingProd={pendingProdItemIds.has(item.id)}
                                         pendingProdItemIds={pendingProdItemIds}
                                     />
+                                    </div>
                                 </div>
                             );
                         })}

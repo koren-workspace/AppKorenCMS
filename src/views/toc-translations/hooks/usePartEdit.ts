@@ -53,7 +53,7 @@ import {
     type AddWarehouseEntryResult,
 } from "../services/itemWarehouseStorage";
 import {
-    buildWarehouseEntryFromRow,
+    buildWarehouseEntryFromRows,
     filterWarehouseEntryBySelection,
     warehouseEnhancementsToEntityMap,
     warehouseEntrySourceItemIds,
@@ -2405,18 +2405,32 @@ export function usePartEdit(context: PartEditContext) {
         }
     };
 
-    const saveBaseItemToWarehouse = (item: Entity<any>) => {
-        if (!warehouseEnabled || !selectedGroupId || !selectedPrayerId || !selectedTocId) return;
-        const canonical = resolveCanonicalBaseItemForTranslation(item);
-        const baseItemId =
-            getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues);
-        if (!baseItemId) {
-            snackbar.open({
-                type: "warning",
-                message: "לא ניתן לשמור למחסן: חסר itemId תקין בפריט",
-            });
-            return;
+    const saveBaseItemToWarehouse = (item: Entity<any>) => saveBaseItemsToWarehouse([item]);
+
+    /** שומר פריט בסיס אחד או יותר (עם התרגומים המקושרים) כרשומה אחת במחסן */
+    const saveBaseItemsToWarehouse = (items: Entity<any>[]): boolean => {
+        if (!warehouseEnabled || !selectedGroupId || !selectedPrayerId || !selectedTocId) return false;
+        if (items.length === 0) return false;
+        const baseRows: Array<{ baseEntity: Entity<any>; baseItemId: string }> = [];
+        for (const item of items) {
+            const canonical = resolveCanonicalBaseItemForTranslation(item);
+            const baseItemId =
+                getEffectiveItemId(canonical) || rowItemIdForBaseOrder(canonical, localValues);
+            if (!baseItemId) {
+                snackbar.open({
+                    type: "warning",
+                    message:
+                        items.length > 1
+                            ? "לא ניתן לשמור למחסן: לאחד הפריטים הנבחרים חסר itemId תקין"
+                            : "לא ניתן לשמור למחסן: חסר itemId תקין בפריט",
+                });
+                return false;
+            }
+            if (!baseRows.some((r) => r.baseItemId === baseItemId)) {
+                baseRows.push({ baseEntity: canonical, baseItemId });
+            }
         }
+        const baseItemIdSet = new Set(baseRows.map((r) => r.baseItemId));
         const pendingEnhancementDeleteIds = new Set(
             pendingEnhancementDeletes.map((p) => p.entity.id)
         );
@@ -2427,8 +2441,8 @@ export function usePartEdit(context: PartEditContext) {
                     const link =
                         enhancementLocalValues[e.id]?.linkedItem ?? e.values?.linkedItem;
                     return Array.isArray(link)
-                        ? link.some((x: unknown) => String(x) === baseItemId)
-                        : String(link ?? "") === baseItemId;
+                        ? link.some((x: unknown) => baseItemIdSet.has(String(x)))
+                        : baseItemIdSet.has(String(link ?? ""));
                 })
                 .map((e) => ({ id: e.id, tId, values: e.values }))
         );
@@ -2438,7 +2452,7 @@ export function usePartEdit(context: PartEditContext) {
             translationId: `0-${selectedTocId}`,
             prayerId: selectedPrayerId,
             partId: selectedGroupId,
-            itemIds: [baseItemId],
+            itemIds: [...baseItemIdSet],
             tocName: currentTocData?.nusach,
             prayerName:
                 (currentPrayers ?? []).find((p: any) => p.id === selectedPrayerId)?.name ?? "",
@@ -2447,10 +2461,12 @@ export function usePartEdit(context: PartEditContext) {
                 (currentParts ?? []).find((p: any) => p.id === selectedGroupId)?.name ??
                 "",
         };
-        const entry = buildWarehouseEntryFromRow({
+        const entry = buildWarehouseEntryFromRows({
             sourceMeta,
-            baseEntity: canonical,
-            baseLocalValues: localValues[canonical.id] ?? {},
+            baseRows: baseRows.map(({ baseEntity }) => ({
+                baseEntity,
+                baseLocalValues: localValues[baseEntity.id] ?? {},
+            })),
             relatedEnhancements,
             enhancementLocalValues,
             copyLinkedTranslations: true,
@@ -2458,19 +2474,25 @@ export function usePartEdit(context: PartEditContext) {
         const { entries: next, persisted, droppedOldest }: AddWarehouseEntryResult = addWarehouseEntry(entry);
         setWarehouseEntries(next);
         setWarehouseSelectedEntryId(entry.id);
+        const savedWhat = baseRows.length > 1 ? `${baseRows.length} הפריטים` : "הפריט";
         if (!persisted) {
             snackbar.open({
                 type: "error",
-                message: "הפריט לא נשמר במחסן — אחסון הדפדפן מלא או חסום",
+                message: `${savedWhat} לא נשמר${baseRows.length > 1 ? "ו" : ""} במחסן — אחסון הדפדפן מלא או חסום`,
             });
+            return false;
         } else if (droppedOldest) {
             snackbar.open({
                 type: "warning",
-                message: "הפריט נשמר במחסן — פריט ישן נמחק כי המחסן הגיע ל-50 רשומות",
+                message: `${savedWhat} נשמר${baseRows.length > 1 ? "ו" : ""} במחסן — רשומה ישנה נמחקה כי המחסן הגיע ל-50 רשומות`,
             });
         } else {
-            snackbar.open({ type: "success", message: "הפריט נשמר במחסן" });
+            snackbar.open({
+                type: "success",
+                message: `${savedWhat} נשמר${baseRows.length > 1 ? "ו" : ""} במחסן`,
+            });
         }
+        return true;
     };
 
     const removeWarehouseItem = (id: string) => {
@@ -2974,6 +2996,7 @@ export function usePartEdit(context: PartEditContext) {
         warehouseSelectedEntryId,
         setWarehouseSelectedEntryId,
         saveBaseItemToWarehouse,
+        saveBaseItemsToWarehouse,
         removeWarehouseItem,
         clearWarehouse,
         warehousePanelOpen,

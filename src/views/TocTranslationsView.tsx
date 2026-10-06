@@ -440,6 +440,7 @@ export function TocTranslationsView() {
                 warehouseSelectedEntryId={partEdit.warehouseSelectedEntryId}
                 onWarehouseSelectEntry={partEdit.setWarehouseSelectedEntryId}
                 onSaveItemToWarehouse={partEdit.saveBaseItemToWarehouse}
+                onSaveItemsToWarehouse={partEdit.saveBaseItemsToWarehouse}
                 onOpenWarehousePasteAt={partEdit.openWarehousePasteModal}
                 onPasteFromWarehouse={partEdit.pasteFromWarehouse}
                 warehousePasteModalOpen={partEdit.warehousePasteModalOpen}

@@ -75,9 +75,11 @@ export function WarehousePasteModal({
         const q = searchQuery.trim().toLowerCase();
         if (!q) return true;
         const label = String(entry.label ?? "").toLowerCase();
-        const content = String(entry.baseItems[0]?.values?.content ?? "").toLowerCase();
-        const type = String(entry.baseItems[0]?.values?.type ?? "").toLowerCase();
-        return label.includes(q) || content.includes(q) || type.includes(q);
+        return entry.baseItems.some((b) => {
+            const content = String(b.values?.content ?? "").toLowerCase();
+            const type = String(b.values?.type ?? "").toLowerCase();
+            return label.includes(q) || content.includes(q) || type.includes(q);
+        });
     });
 
     const insertAfterItemId = (() => {
@@ -149,7 +151,9 @@ export function WarehousePasteModal({
                                     >
                                         <div className="font-semibold line-clamp-2">{entry.label}</div>
                                         <div className="text-xs text-gray-500 mt-1">
-                                            {entry.baseItems[0]?.values?.type ?? "body"}
+                                            {entry.baseItems.length > 1
+                                                ? `${entry.baseItems.length} פריטים`
+                                                : entry.baseItems[0]?.values?.type ?? "body"}
                                             {enhCount > 0 ? ` · +${enhCount} תרגומים` : ""}
                                         </div>
                                     </button>
@@ -160,7 +164,9 @@ export function WarehousePasteModal({
                             <div className="mt-2 rounded border border-violet-200 bg-white p-2 text-xs text-gray-700">
                                 <div className="font-semibold text-violet-900">{selectedEntry.label}</div>
                                 <div className="mt-1">
-                                    סוג: {String(selectedEntry.baseItems[0]?.values?.type ?? "body")}
+                                    {selectedEntry.baseItems.length > 1
+                                        ? `${selectedEntry.baseItems.length} פריטים – יוכנסו ברצף ובאותו סדר`
+                                        : `סוג: ${String(selectedEntry.baseItems[0]?.values?.type ?? "body")}`}
                                 </div>
                                 <div className="mt-0.5 line-clamp-2">
                                     {String(selectedEntry.baseItems[0]?.values?.content ?? "").trim().slice(0, 120)}

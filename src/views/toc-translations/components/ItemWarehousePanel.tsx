@@ -82,7 +82,7 @@ export function ItemWarehousePanel({
                 )}
                 {entries.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-4 px-1">
-                        אין פריטים במחסן. לחץ «שמור במחסן» על פריט בסיס כדי לשמור תבנית מלאה.
+                        אין פריטים במחסן. לחץ «למחסן» על פריט בסיס, או «בחירה מרובה למחסן» כדי לשמור כמה פריטים יחד.
                     </p>
                 ) : (
                     entries.map((entry) => {
@@ -122,7 +122,9 @@ export function ItemWarehousePanel({
                                 </div>
                                 <div className="text-xs text-gray-500 space-y-0.5">
                                     <div>
-                                        סוג: {entry.baseItems[0]?.values?.type ?? "body"}
+                                        {entry.baseItems.length > 1
+                                            ? `${entry.baseItems.length} פריטים`
+                                            : `סוג: ${entry.baseItems[0]?.values?.type ?? "body"}`}
                                     </div>
                                     {entry.sourceMeta.partName && (
                                         <div className="truncate">

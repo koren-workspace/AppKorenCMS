@@ -88,26 +88,59 @@ export type BuildWarehouseEntryParams = {
 
 /** בונה רשומת מחסן מפריט שורה נוכחי + תרגומים מקושרים */
 export function buildWarehouseEntryFromRow(params: BuildWarehouseEntryParams): WarehouseEntry {
+    const { baseEntity, baseLocalValues, ...rest } = params;
+    return buildWarehouseEntryFromRows({
+        ...rest,
+        baseRows: [{ baseEntity, baseLocalValues }],
+    });
+}
+
+export type BuildWarehouseEntryFromRowsParams = Omit<
+    BuildWarehouseEntryParams,
+    "baseEntity" | "baseLocalValues"
+> & {
+    /** שורות בסיס לשמירה כרשומה אחת (נשמרות לפי סדר itemId) */
+    baseRows: Array<{ baseEntity: Entity<any>; baseLocalValues: Record<string, any> }>;
+};
+
+/** בונה רשומת מחסן אחת מכמה שורות בסיס + התרגומים המקושרים שלהן */
+export function buildWarehouseEntryFromRows(
+    params: BuildWarehouseEntryFromRowsParams
+): WarehouseEntry {
     const {
         label: labelOverride,
         copyLinkedTranslations = true,
         sourceMeta,
-        baseEntity,
-        baseLocalValues,
+        baseRows,
         relatedEnhancements,
         enhancementLocalValues,
     } = params;
 
-    const mergedBase = { ...baseEntity.values, ...baseLocalValues };
-    const contentPreview = String(mergedBase.content ?? "").trim().slice(0, 60);
-    const itemId = idNorm(mergedBase.itemId);
+    const baseItems: WarehouseItemSnapshot[] = baseRows
+        .map(({ baseEntity, baseLocalValues }) => ({
+            entityId: baseEntity.id,
+            values: { ...baseEntity.values, ...baseLocalValues },
+        }))
+        .sort((a, b) =>
+            idNorm(a.values.itemId).localeCompare(idNorm(b.values.itemId), undefined, {
+                numeric: true,
+            })
+        );
+
+    const first = baseItems[0]?.values ?? {};
+    const contentPreview = String(first.content ?? "").trim().slice(0, 60);
+    const itemId = idNorm(first.itemId);
+    const defaultLabel = contentPreview || (itemId ? `itemId ${itemId}` : "פריט");
     const label =
         labelOverride?.trim() ||
-        contentPreview ||
-        (itemId ? `itemId ${itemId}` : "פריט");
+        (baseItems.length > 1 ? `${baseItems.length} פריטים: ${defaultLabel}` : defaultLabel);
 
+    // תרגום המקושר לכמה פריטים נבחרים נשמר פעם אחת בלבד – אחרת יועתק פעמיים
     const enhancementsByTranslationId: Record<string, WarehouseItemSnapshot[]> = {};
+    const seenEnhancementIds = new Set<string>();
     for (const enh of relatedEnhancements) {
+        if (seenEnhancementIds.has(enh.id)) continue;
+        seenEnhancementIds.add(enh.id);
         const merged = { ...enh.values, ...enhancementLocalValues[enh.id] };
         if (!enhancementsByTranslationId[enh.tId]) {
             enhancementsByTranslationId[enh.tId] = [];
@@ -129,12 +162,7 @@ export function buildWarehouseEntryFromRow(params: BuildWarehouseEntryParams): W
             sourceTocId: sourceMeta.sourceTocId || sourceMeta.tocId,
             tocId: sourceMeta.tocId || sourceMeta.sourceTocId,
         },
-        baseItems: [
-            {
-                entityId: baseEntity.id,
-                values: { ...mergedBase },
-            },
-        ],
+        baseItems,
         enhancementsByTranslationId,
     };
 }

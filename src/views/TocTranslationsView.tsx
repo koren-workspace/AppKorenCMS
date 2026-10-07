@@ -17,7 +17,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthController } from "@firecms/core";
 import { setChangeLogUser } from "./toc-translations/services/changeLogService";
 import { PrayerNavigationColumns } from "./toc-translations/components/PrayerNavigationColumns";
-import { PartEditPanel } from "./toc-translations/components/PartEditPanel";
+import { PartEditPanel, type PartFocusRequest } from "./toc-translations/components/PartEditPanel";
+import { GlobalSearchModal } from "./toc-translations/components/GlobalSearchModal";
+import {
+    invalidateGlobalSearchCache,
+    type SearchHit,
+} from "./toc-translations/services/globalSearchService";
 import { AddTranslationModal } from "./toc-translations/components/AddTranslationModal";
 import { DateSetIdConfigModal } from "./toc-translations/components/DateSetIdConfigModal";
 import { AddItemModal } from "./toc-translations/components/AddItemModal";
@@ -265,6 +270,58 @@ export function TocTranslationsView() {
         };
     }
 
+    // —— חיפוש מורחב: פתיחה, וקפיצה לתוצאה ——
+    const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+    const [pendingJump, setPendingJump] = useState<{ hit: SearchHit; query: string } | null>(null);
+    const [partFocusRequest, setPartFocusRequest] = useState<PartFocusRequest | null>(null);
+
+    const openGlobalSearch = () => {
+        // התפילה שנערכה עכשיו – לטעון מחדש, כדי שהחיפוש יראה את השינויים האחרונים
+        const tid = nav.currentTranslationData?.translationId;
+        if (tid && nav.selectedPrayerId) invalidateGlobalSearchCache(tid, nav.selectedPrayerId);
+        setGlobalSearchOpen(true);
+    };
+
+    const openSearchHit = (hit: SearchHit, query: string) => {
+        const toc = nav.tocItems.find((t) => t.id === hit.tocId);
+        const translationIndex = ((toc?.values?.translations ?? []) as any[]).findIndex(
+            (t: any) => t?.translationId === hit.translationId
+        );
+        if (!toc || translationIndex < 0) {
+            window.alert("המיקום של הפריט לא נמצא במבנה הנוסח (ייתכן שהשתנה). רעננו את החיפוש.");
+            return;
+        }
+        if (
+            hasUnsaved &&
+            !window.confirm("יש שינויים שלא נשמרו. לעבור בכל זאת?\n(השינויים יאבדו)")
+        )
+            return;
+        setGlobalSearchOpen(false);
+        nav.selectLocation({
+            tocId: hit.tocId,
+            translationIndex,
+            categoryId: hit.categoryId,
+            prayerId: hit.prayerId,
+        });
+        setPendingJump({ hit, query });
+    };
+
+    // אחרי שהניווט התעדכן (ואזור העריכה התאפס) – טוענים את המקטע ומסמנים את הפריט
+    useEffect(() => {
+        if (!pendingJump) return;
+        const { hit, query } = pendingJump;
+        if (
+            nav.selectedTocId !== hit.tocId ||
+            nav.currentTranslationData?.translationId !== hit.translationId ||
+            nav.selectedPrayerId !== hit.prayerId
+        )
+            return;
+        setPendingJump(null);
+        setPartFocusRequest({ docId: hit.docId, query, nonce: Date.now() });
+        void partEdit.fetchItemsWithEnhancements(hit.partId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingJump, nav.selectedTocId, nav.currentTranslationData, nav.selectedPrayerId]);
+
     const hasTranslationSelection =
         !!nav.selectedTocId && nav.selectedTranslationIndex != null;
 
@@ -321,6 +378,15 @@ export function TocTranslationsView() {
                 onSaveTocToProd={
                     partEdit.isProdFeatureEnabled ? nav.handleSaveTocToProd : undefined
                 }
+                onOpenGlobalSearch={openGlobalSearch}
+            />
+            <GlobalSearchModal
+                open={globalSearchOpen}
+                onClose={() => setGlobalSearchOpen(false)}
+                tocItems={nav.tocItems}
+                currentTocId={nav.selectedTocId}
+                currentTranslationId={nav.currentTranslationData?.translationId ?? null}
+                onOpenHit={openSearchHit}
             />
             <div className="flex flex-1 min-h-0 gap-1">
             {/* עמודה 1–2: בחירת נוסח (TOC) ותרגום */}
@@ -449,6 +515,7 @@ export function TocTranslationsView() {
                 pendingProdItemIds={partEdit.pendingProdItemIds}
                 onSavePartToProd={partEdit.isProdFeatureEnabled ? partEdit.handleSavePartToProd : undefined}
                 pendingProdCount={partEdit.pendingProdCount}
+                focusRequest={partFocusRequest}
             />
             {partEdit.warehouseEnabled && (
                 <ItemWarehousePanel

@@ -9,13 +9,16 @@
  * כל הנתונים והפעולות מגיעים ב-props (controlled) – ה-state נמצא ב-usePartEdit.
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Entity } from "@firecms/core";
 import { PartEditToolbar } from "./PartEditToolbar";
 import { PartItemRow } from "./PartItemRow";
 import { WarehousePasteModal } from "./WarehousePasteModal";
 import type { WarehouseEntry, WarehouseFieldSelection } from "../types/itemWarehouse";
 import { useDateSetLabels, type DateSetLabelEntry } from "../hooks/useDateSetLabels";
+
+/** בקשה לסמן פריט אחרי ניווט מחיפוש מורחב (nonce – כדי שלחיצה חוזרת על אותה תוצאה תפעל שוב) */
+export type PartFocusRequest = { docId: string; query: string; nonce: number };
 
 export type PartEditPanelProps = {
     selectedGroupId: string | null;
@@ -104,6 +107,8 @@ export type PartEditPanelProps = {
     pendingProdItemIds?: Set<string>;
     onSavePartToProd?: () => void;
     pendingProdCount?: number;
+    /** סימון פריט שנבחר בחיפוש המורחב */
+    focusRequest?: PartFocusRequest | null;
     warehousePasteModalOpen?: boolean;
     warehouseFixedInsertAfterItemId?: string | null | undefined;
     onCloseWarehousePasteModal?: () => void;
@@ -163,6 +168,7 @@ export function PartEditPanel({
     pendingProdItemIds = new Set(),
     onSavePartToProd,
     pendingProdCount = 0,
+    focusRequest = null,
 }: PartEditPanelProps) {
     const pendingDeleteIds = new Set(pendingDeletes.map((p) => p.entity.id));
     const hasAnyChanges =
@@ -248,6 +254,49 @@ export function PartEditPanel({
     const activeMatchId = matchingItemIds[safeIndex] ?? null;
 
     useEffect(() => { setCurrentMatchIndex(0); }, [q]);
+
+    /*
+     * חיפוש מורחב: אחרי שהמקטע נטען – ממלאים את חיפוש המקטע באותה שאילתה (כך שגם
+     * שאר ההתאמות במקטע מסומנות) והופכים את הפריט שנבחר להתאמה הפעילה.
+     * חייב לבוא אחרי האיפוס של currentMatchIndex למעלה (אותו commit, סדר הצהרה).
+     */
+    const [pendingFocusDocId, setPendingFocusDocId] = useState<string | null>(null);
+    const [flashItemId, setFlashItemId] = useState<string | null>(null);
+    const [focusNotice, setFocusNotice] = useState<string | null>(null);
+    const handledFocusNonceRef = useRef<number | null>(null);
+    useEffect(() => {
+        if (!focusRequest || loading) return;
+        if (handledFocusNonceRef.current === focusRequest.nonce) return;
+        if (!allItems.some((item) => item.id === focusRequest.docId)) return;
+        handledFocusNonceRef.current = focusRequest.nonce;
+        setSearchQuery(focusRequest.query);
+        setPendingFocusDocId(focusRequest.docId);
+        setFocusNotice(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focusRequest?.nonce, loading, allItems]);
+    useEffect(() => {
+        if (!pendingFocusDocId) return;
+        setPendingFocusDocId(null);
+        const idx = matchingItemIds.indexOf(pendingFocusDocId);
+        if (idx >= 0) {
+            setCurrentMatchIndex(idx);
+            return;
+        }
+        // ההתאמה בשדה שחיפוש המקטע לא בודק (למשל מקורות), או שהפריט מוסתר בסינון התאריך
+        if (visibleItems.some((item) => item.id === pendingFocusDocId)) {
+            setFlashItemId(pendingFocusDocId);
+            document
+                .getElementById(`part-item-${pendingFocusDocId}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        } else {
+            setFocusNotice("הפריט שנבחר בחיפוש מוסתר בגלל סינון התאריך – לחצו \"הצג הכל ללא סינון\" כדי לראות אותו.");
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingFocusDocId, matchingItemIds.join("|")]);
+    useEffect(() => {
+        setFlashItemId(null);
+        setFocusNotice(null);
+    }, [selectedGroupId]);
 
     const selectableVisibleIds = visibleItems
         .filter((item) => !pendingDeleteIds.has(item.id))
@@ -426,6 +475,11 @@ export function PartEditPanel({
                             </button>
                         )}
                         {/* הודעה כשיש פריטים מוסתרים בסינון */}
+                        {focusNotice && (
+                            <div className="mb-2 px-3 py-2 rounded border border-amber-300 bg-amber-50 text-amber-900 text-xs shrink-0">
+                                {focusNotice}
+                            </div>
+                        )}
                         {hiddenItemsCount > 0 && (
                             <div
                                 className="text-sm text-gray-700 px-3 py-2 rounded bg-amber-50 border border-amber-200"
@@ -459,7 +513,7 @@ export function PartEditPanel({
                             const showSelectBox = multiSelectAvailable && multiSelectMode;
                             const isMultiSelected = multiSelectedIds.has(item.id);
                             const isSelectDisabled = pendingDeleteIds.has(item.id);
-                            const highlightClass = isActive
+                            const highlightClass = isActive || flashItemId === item.id
                                 ? "rounded-lg ring-2 ring-yellow-400 ring-offset-1"
                                 : isMatch
                                 ? "rounded-lg ring-1 ring-yellow-200"

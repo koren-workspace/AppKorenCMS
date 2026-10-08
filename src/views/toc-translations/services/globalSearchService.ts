@@ -19,12 +19,10 @@ import { getNusachDisplayLabel } from "../utils/nusachDisplay";
 import { getTranslationDisplayLabel, getTranslationIdPrefix } from "../utils/translationDisplayLabels";
 
 export type GlobalSearchScope = {
-    /** "current" – רק הנוסח הנבחר; "all" – כל הנוסחים */
-    nusach: "current" | "all";
-    /** "current" – רק התרגום הנבחר (ובשאר הנוסחים: התרגום מאותו סוג); "all" – כל התרגומים */
-    translation: "current" | "all";
-    currentTocId: string | null;
-    currentTranslationId: string | null;
+    /** נוסח (tocId) לחיפוש; null – כל הנוסחים */
+    tocId: string | null;
+    /** סוג תרגום (הקידומת, למשל "0" = עברית בסיס); null – כל התרגומים */
+    translationKind: string | null;
 };
 
 /** צמד תרגום/תפילה לטעינה, עם כל מה שצריך כדי להציג מיקום ולנווט אליו */
@@ -135,31 +133,53 @@ export function normalizeForSearch(text: string): string {
 
 // —— טווח החיפוש ——
 
+/** סוג התרגום – הקידומת המספרית (זהה בין הנוסחים); בלי קידומת – המזהה המלא */
+export function translationKind(translationId: string): string {
+    return getTranslationIdPrefix(translationId) ?? translationId;
+}
+
+/** האפשרויות לבחירת טווח: הנוסחים, וסוגי התרגום שקיימים בהם */
+export function listScopeOptions(tocs: { id: string; values: any }[]): {
+    nusachim: { id: string; label: string }[];
+    translationKinds: { kind: string; label: string }[];
+} {
+    const nusachim: { id: string; label: string }[] = [];
+    const kinds = new Map<string, string>();
+    for (const toc of tocs) {
+        if (isDeleted(toc.values)) continue;
+        nusachim.push({ id: toc.id, label: getNusachDisplayLabel(toc.id, toc.values?.nusach) });
+        for (const trans of toc.values?.translations ?? []) {
+            const translationId = String(trans?.translationId ?? "");
+            if (!translationId || isDeleted(trans)) continue;
+            const kind = translationKind(translationId);
+            if (!kinds.has(kind)) {
+                kinds.set(kind, getTranslationDisplayLabel(translationId, { storedLabel: trans?.label }));
+            }
+        }
+    }
+    const translationKinds = [...kinds.entries()]
+        .map(([kind, label]) => ({ kind, label }))
+        .sort((a, b) => a.kind.localeCompare(b.kind, undefined, { numeric: true }));
+    return { nusachim, translationKinds };
+}
+
 /** כל צמדי התרגום/תפילה בטווח, ללא כפילויות (מזהה תרגום ייחודי בין הנוסחים) */
 export function buildSearchTargets(
     tocs: { id: string; values: any }[],
     scope: GlobalSearchScope
 ): SearchTarget[] {
-    const currentPrefix = getTranslationIdPrefix(scope.currentTranslationId);
     const targets: SearchTarget[] = [];
     const seen = new Set<string>();
 
     for (const toc of tocs) {
         if (isDeleted(toc.values)) continue;
-        if (scope.nusach === "current" && toc.id !== scope.currentTocId) continue;
+        if (scope.tocId != null && toc.id !== scope.tocId) continue;
         const nusachLabel = getNusachDisplayLabel(toc.id, toc.values?.nusach);
 
         for (const trans of toc.values?.translations ?? []) {
             const translationId = String(trans?.translationId ?? "");
             if (!translationId || isDeleted(trans)) continue;
-            if (scope.translation === "current") {
-                const sameTranslation = translationId === scope.currentTranslationId;
-                const samePrefix =
-                    scope.nusach === "all" &&
-                    currentPrefix != null &&
-                    getTranslationIdPrefix(translationId) === currentPrefix;
-                if (!sameTranslation && !samePrefix) continue;
-            }
+            if (scope.translationKind != null && translationKind(translationId) !== scope.translationKind) continue;
             const translationLabel = getTranslationDisplayLabel(translationId, { storedLabel: trans?.label });
 
             for (const cat of trans.categories ?? []) {

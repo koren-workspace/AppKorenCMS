@@ -12,6 +12,8 @@ import { Entity } from "@firecms/core";
 import {
     buildSearchTargets,
     clearGlobalSearchCache,
+    listScopeOptions,
+    translationKind,
     countUncachedTargets,
     loadTargets,
     searchLoaded,
@@ -47,8 +49,9 @@ export function GlobalSearchModal({
     onOpenHit,
 }: GlobalSearchModalProps) {
     const [query, setQuery] = useState("");
-    const [nusachScope, setNusachScope] = useState<GlobalSearchScope["nusach"]>("current");
-    const [translationScope, setTranslationScope] = useState<GlobalSearchScope["translation"]>("current");
+    // "" = הכל. ברירת המחדל נקבעת בפתיחה הראשונה לפי הבחירה במסך (ראו למטה)
+    const [tocChoice, setTocChoice] = useState("");
+    const [kindChoice, setKindChoice] = useState("0");
     const [loaded, setLoaded] = useState<Map<string, CachedItem[]> | null>(null);
     const [loadedScopeKey, setLoadedScopeKey] = useState<string | null>(null);
     const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -58,19 +61,23 @@ export function GlobalSearchModal({
     const loadGenRef = useRef(0);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // בלי נוסח נבחר – אין "נוסח נוכחי"/"תרגום נוכחי", מחפשים בהכל
-    const hasToc = !!currentTocId;
-    const hasTranslation = hasToc && !!currentTranslationId;
-    const effectiveNusach = hasToc ? nusachScope : "all";
-    const effectiveTranslation = hasTranslation ? translationScope : "all";
+    const scopeOptions = useMemo(() => listScopeOptions(tocItems), [tocItems]);
+
+    // בפתיחה הראשונה – הטווח מתחיל מהנוסח והתרגום שנבחרו במסך (אם נבחרו).
+    // בפתיחות הבאות הבחירה נשמרת, כדי לא לאבד את התוצאות.
+    const initializedRef = useRef(false);
+    useEffect(() => {
+        if (!open || initializedRef.current) return;
+        initializedRef.current = true;
+        if (currentTocId) setTocChoice(currentTocId);
+        if (currentTranslationId) setKindChoice(translationKind(currentTranslationId));
+    }, [open, currentTocId, currentTranslationId]);
 
     const scope: GlobalSearchScope = {
-        nusach: effectiveNusach,
-        translation: effectiveTranslation,
-        currentTocId,
-        currentTranslationId,
+        tocId: tocChoice || null,
+        translationKind: kindChoice || null,
     };
-    const scopeKey = `${effectiveNusach}|${effectiveTranslation}|${currentTocId ?? ""}|${currentTranslationId ?? ""}`;
+    const scopeKey = `${tocChoice}|${kindChoice}`;
 
     const targets = useMemo(
         () => buildSearchTargets(tocItems, scope),
@@ -141,6 +148,12 @@ export function GlobalSearchModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loaded]);
 
+    // שינוי טווח אחרי שכבר חיפשו – מחפשים מחדש מיד בטווח החדש
+    useEffect(() => {
+        if (open && loaded != null && !isLoadedForScope && query.trim()) void runSearch();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scopeKey]);
+
     const countsByNusach = useMemo(() => {
         const counts = new Map<string, number>();
         hits.forEach((h) => counts.set(h.nusachLabel, (counts.get(h.nusachLabel) ?? 0) + 1));
@@ -151,18 +164,8 @@ export function GlobalSearchModal({
 
     if (!open) return null;
 
-    const radio = (
-        name: string,
-        checked: boolean,
-        onChange: () => void,
-        label: string,
-        disabled = false
-    ) => (
-        <label className={`inline-flex items-center gap-1.5 ${disabled ? "text-gray-400" : ""}`}>
-            <input type="radio" name={name} checked={checked} onChange={onChange} disabled={disabled || isLoading} />
-            {label}
-        </label>
-    );
+    const selectClass =
+        "border border-gray-300 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-50";
 
     return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" dir="rtl" onClick={onClose}>
@@ -215,22 +218,38 @@ export function GlobalSearchModal({
                     </form>
 
                     <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                        <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex items-center gap-2">
                             <span className="font-semibold text-gray-700">נוסח:</span>
-                            {radio("gs-nusach", effectiveNusach === "current", () => setNusachScope("current"), "הנוסח הנוכחי", !hasToc)}
-                            {radio("gs-nusach", effectiveNusach === "all", () => setNusachScope("all"), "כל הנוסחים")}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
+                            <select
+                                value={tocChoice}
+                                onChange={(e) => setTocChoice(e.target.value)}
+                                disabled={isLoading}
+                                className={selectClass}
+                            >
+                                <option value="">כל הנוסחים</option>
+                                {scopeOptions.nusachim.map((n) => (
+                                    <option key={n.id} value={n.id}>
+                                        {n.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="flex items-center gap-2">
                             <span className="font-semibold text-gray-700">תרגום:</span>
-                            {radio(
-                                "gs-translation",
-                                effectiveTranslation === "current",
-                                () => setTranslationScope("current"),
-                                effectiveNusach === "all" ? "התרגום הנוכחי (בכל נוסח)" : "התרגום הנוכחי",
-                                !hasTranslation
-                            )}
-                            {radio("gs-translation", effectiveTranslation === "all", () => setTranslationScope("all"), "כל התרגומים")}
-                        </div>
+                            <select
+                                value={kindChoice}
+                                onChange={(e) => setKindChoice(e.target.value)}
+                                disabled={isLoading}
+                                className={selectClass}
+                            >
+                                <option value="">כל התרגומים</option>
+                                {scopeOptions.translationKinds.map((t) => (
+                                    <option key={t.kind} value={t.kind}>
+                                        {t.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">

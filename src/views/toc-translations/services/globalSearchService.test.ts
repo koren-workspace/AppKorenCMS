@@ -5,6 +5,7 @@ vi.mock("../../../firebase_config", () => ({ getFirebaseApp: vi.fn() }));
 
 import {
     buildSearchTargets,
+    listScopeOptions,
     matchItem,
     normalizeForSearch,
     searchLoaded,
@@ -64,11 +65,9 @@ const tocs = [
     { id: "old", values: { deleted: true, translations: [{ translationId: "0-old", categories: [] }] } },
 ];
 
-const scope = (nusach: "current" | "all", translation: "current" | "all"): GlobalSearchScope => ({
-    nusach,
-    translation,
-    currentTocId: "ashkenaz",
-    currentTranslationId: "0-ashkenaz",
+const scope = (tocId: string | null, translationKind: string | null): GlobalSearchScope => ({
+    tocId,
+    translationKind,
 });
 
 const keys = (s: GlobalSearchScope) => buildSearchTargets(tocs, s).map(targetKey);
@@ -96,19 +95,19 @@ describe("stripHtml", () => {
 
 describe("buildSearchTargets", () => {
     it("current translation only: every category, skipping deleted prayers", () => {
-        expect(keys(scope("current", "current"))).toEqual(["0-ashkenaz/p1", "0-ashkenaz/p2"]);
+        expect(keys(scope("ashkenaz", "0"))).toEqual(["0-ashkenaz/p1", "0-ashkenaz/p2"]);
     });
 
     it("current nusach, all translations", () => {
-        expect(keys(scope("current", "all"))).toEqual(["0-ashkenaz/p1", "0-ashkenaz/p2", "1-ashkenaz/p1"]);
+        expect(keys(scope("ashkenaz", null))).toEqual(["0-ashkenaz/p1", "0-ashkenaz/p2", "1-ashkenaz/p1"]);
     });
 
     it("all nusachim, same translation kind (prefix)", () => {
-        expect(keys(scope("all", "current"))).toEqual(["0-ashkenaz/p1", "0-ashkenaz/p2", "0-sefard/p1"]);
+        expect(keys(scope(null, "0"))).toEqual(["0-ashkenaz/p1", "0-ashkenaz/p2", "0-sefard/p1"]);
     });
 
     it("all nusachim, all translations, skipping deleted nusachim", () => {
-        expect(keys(scope("all", "all"))).toEqual([
+        expect(keys(scope(null, null))).toEqual([
             "0-ashkenaz/p1",
             "0-ashkenaz/p2",
             "1-ashkenaz/p1",
@@ -118,9 +117,20 @@ describe("buildSearchTargets", () => {
     });
 
     it("carries location names and only live parts", () => {
-        const [t] = buildSearchTargets(tocs, scope("current", "current"));
+        const [t] = buildSearchTargets(tocs, scope("ashkenaz", "0"));
         expect(t).toMatchObject({ tocId: "ashkenaz", nusachLabel: "אשכנז", categoryId: "c1", prayerName: "שחרית" });
         expect([...t.partNames.keys()]).toEqual(["a"]);
+    });
+});
+
+describe("listScopeOptions", () => {
+    it("lists live nusachim and each translation kind once, sorted", () => {
+        const { nusachim, translationKinds } = listScopeOptions(tocs);
+        expect(nusachim.map((n) => n.id)).toEqual(["ashkenaz", "sefard"]);
+        expect(translationKinds).toEqual([
+            { kind: "0", label: "עברית (בסיס)" },
+            { kind: "1", label: "אנגלית" },
+        ]);
     });
 });
 
@@ -159,7 +169,7 @@ describe("matchItem", () => {
 
 describe("searchLoaded", () => {
     it("returns hits with full location, ignoring items of deleted parts", () => {
-        const targets = buildSearchTargets(tocs, scope("current", "current"));
+        const targets = buildSearchTargets(tocs, scope("ashkenaz", "0"));
         const loaded = new Map([
             [
                 "0-ashkenaz/p1",

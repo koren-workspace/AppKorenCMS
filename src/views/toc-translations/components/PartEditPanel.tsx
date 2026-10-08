@@ -16,6 +16,7 @@ import { PartItemRow } from "./PartItemRow";
 import { WarehousePasteModal } from "./WarehousePasteModal";
 import type { WarehouseEntry, WarehouseFieldSelection } from "../types/itemWarehouse";
 import { useDateSetLabels, type DateSetLabelEntry } from "../hooks/useDateSetLabels";
+import { normalizeForSearch, stripHtml } from "../services/globalSearchService";
 
 /** בקשה לסמן פריט אחרי ניווט מחיפוש מורחב (nonce – כדי שלחיצה חוזרת על אותה תוצאה תפעל שוב) */
 export type PartFocusRequest = { docId: string; query: string; nonce: number };
@@ -218,13 +219,10 @@ export function PartEditPanel({
     const hiddenItemsCount = allItems.length - visibleItems.length;
 
     /**
-     * מסיר ניקוד, טעמים וסימני פיסוק עבריים לפני השוואה.
-     * NFKD מפרק תווים מורכבים מראש (כגון U+FB4B = ו+דגש) לאות + ניקוד נפרדים,
-     * ואז הרג'קס מוחק את כל הניקוד (U+0591–U+05C7).
+     * אותה השוואה כמו בחיפוש המורחב: מתעלמת מניקוד, טעמים, תגיות HTML ורווחים
+     * כפולים, ומקף עברי נחשב רווח – כך ש"עץ חיים" מוצא גם "עֵץ־חַיִּים".
      */
-    const stripDiacritics = (text: string) =>
-        text.normalize("NFKD").replace(/[\u0591-\u05C7]/g, "");
-    const normalize = (text: string) => stripDiacritics(text).toLowerCase();
+    const normalize = (text: string) => normalizeForSearch(stripHtml(text));
 
     const q = normalize(searchQuery.trim());
 
@@ -234,6 +232,7 @@ export function PartEditPanel({
         if (normalize(String(val.itemId ?? "")).includes(q)) return true;
         if (normalize(val.content ?? "").includes(q)) return true;
         if (normalize(val.title ?? "").includes(q)) return true;
+        if (normalize(val.reference ?? "").includes(q)) return true;
         const curId = val.itemId;
         const relatedList = Object.values(enhancements).flatMap((list) =>
             list.filter((e) => {

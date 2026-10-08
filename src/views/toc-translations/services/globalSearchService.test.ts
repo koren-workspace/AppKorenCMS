@@ -82,6 +82,10 @@ describe("normalizeForSearch", () => {
         expect(normalizeForSearch("עַל־כֵּן")).toBe("על כן");
     });
 
+    it("finds \"עץ חיים\" in the maqaf-joined pointed text (in-part search uses this too)", () => {
+        expect(normalizeForSearch(stripHtml("כִּי <b>עֵץ־חַיִּים</b> הִיא")).includes(normalizeForSearch("עץ חיים"))).toBe(true);
+    });
+
     it("decomposes presentation forms (vav with dagesh)", () => {
         expect(normalizeForSearch("וּ")).toBe("ו");
     });

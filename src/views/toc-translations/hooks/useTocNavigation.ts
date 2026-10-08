@@ -239,6 +239,19 @@ export function useTocNavigation(options?: TocNavigationOptions) {
         setSelectedPrayerId(prayerId);
     };
 
+    /** קפיצה ישירה למיקום (למשל מתוצאת חיפוש מורחב) – כל הבחירות בבת אחת */
+    const selectLocation = (loc: {
+        tocId: string;
+        translationIndex: number;
+        categoryId: string;
+        prayerId: string;
+    }) => {
+        setSelectedTocId(loc.tocId);
+        setSelectedTranslationIndex(loc.translationIndex);
+        setSelectedCategoryId(loc.categoryId);
+        setSelectedPrayerId(loc.prayerId);
+    };
+
     /** יוצר נוסח (TOC) חדש ב-collection "toc". מקבל שם מהמשתמש; id המסמך = השם ללא רווחים (תחתיים). */
     const addToc = async (nusachName: string) => {
         const name = nusachName?.trim();
@@ -2162,6 +2175,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
         onSelectTranslation,
         onSelectCategory,
         onSelectPrayer,
+        selectLocation,
         addToc,
         updateToc,
         deleteToc,

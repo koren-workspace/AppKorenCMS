@@ -37,6 +37,8 @@ export type DateFilterBarProps = {
     /** שמירת מבנה TOC לפרוד */
     pendingProdNavCount?: number;
     onSaveTocToProd?: () => void;
+    /** פותח את החיפוש המורחב (כל הקטגוריות / כל הנוסחים) */
+    onOpenGlobalSearch?: () => void;
 };
 
 /** משווה האם שני תאריכים מתייחסים לאותו יום קלנדרי (לפי שעון מקומי) */
@@ -63,6 +65,7 @@ export function DateFilterBar({
     onPreviewPublishToProd,
     pendingProdNavCount = 0,
     onSaveTocToProd,
+    onOpenGlobalSearch,
 }: DateFilterBarProps) {
     const isToday = isSameDay(filterDate, new Date());
     const activeCount = relevantDateSetIds?.length ?? 0;
@@ -165,6 +168,20 @@ export function DateFilterBar({
             >
                 {showAll ? "✓ מוצג הכל ללא סינון" : "הצג הכל ללא סינון"}
             </button>
+
+            {onOpenGlobalSearch && (
+                <>
+                    <span className="hidden sm:inline w-px h-5 bg-gray-200 shrink-0" aria-hidden="true" />
+                    <button
+                        type="button"
+                        onClick={onOpenGlobalSearch}
+                        className="shrink-0 px-3 py-1 rounded text-sm border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                        title="חיפוש טקסט בכל הקטגוריות והתפילות, ולפי בחירה גם בכל התרגומים והנוסחים"
+                    >
+                        🔍 חיפוש מורחב
+                    </button>
+                </>
+            )}
 
             {onFinalPublish && (
                 <>

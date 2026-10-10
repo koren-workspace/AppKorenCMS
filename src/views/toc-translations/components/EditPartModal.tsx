@@ -1,7 +1,7 @@
 /**
  * EditPartModal – מודל עריכת חלק תפילה קיים
  *
- * בבסיס (0-*): שם עברית + אנגלית, dateSetIds, hazan, minyan.
+ * בבסיס (0-*): שם עברית + אנגלית, dateSetIds, hazan, minyan, standalone.
  * בתרגום (1-*, 2-*): שם בתרגום הנוכחי בלבד.
  */
 
@@ -16,6 +16,7 @@ export type EditPartInitial =
           dateSetIds: string[];
           hazan: boolean | null;
           minyan: boolean | null;
+          standalone: boolean;
       }
     | { id: string; mode: "translation"; name: string };
 
@@ -30,6 +31,7 @@ export type EditPartModalProps = {
         dateSetIds?: string[];
         hazan?: boolean | null;
         minyan?: boolean | null;
+        standalone?: boolean;
     }) => void;
     saving: boolean;
 };
@@ -47,6 +49,7 @@ export function EditPartModal({
     const [dateSetIds, setDateSetIds] = useState<string[]>(["100"]);
     const [hazan, setHazan] = useState<boolean | null>(null);
     const [minyan, setMinyan] = useState<boolean | null>(null);
+    const [standalone, setStandalone] = useState(false);
 
     useEffect(() => {
         if (!open) return;
@@ -57,6 +60,7 @@ export function EditPartModal({
                 setDateSetIds(initialPart.dateSetIds?.length ? initialPart.dateSetIds : ["100"]);
                 setHazan(initialPart.hazan ?? null);
                 setMinyan(initialPart.minyan ?? null);
+                setStandalone(initialPart.standalone);
                 setName("");
             } else {
                 setName(initialPart.name);
@@ -65,6 +69,7 @@ export function EditPartModal({
                 setDateSetIds(["100"]);
                 setHazan(null);
                 setMinyan(null);
+                setStandalone(false);
             }
         } else {
             setNameHe("");
@@ -73,6 +78,7 @@ export function EditPartModal({
             setDateSetIds(["100"]);
             setHazan(null);
             setMinyan(null);
+            setStandalone(false);
         }
     }, [open, initialPart]);
 
@@ -93,6 +99,7 @@ export function EditPartModal({
                 dateSetIds,
                 hazan,
                 minyan,
+                standalone,
             });
         } else {
             onSubmit({ name: name.trim() });
@@ -176,6 +183,21 @@ export function EditPartModal({
                                         <span className="text-sm">מניין:</span>
                                         {triState(minyan, setMinyan)}
                                     </div>
+                                </div>
+                            </div>
+
+                            <div className="border rounded p-3 space-y-1">
+                                <div className="text-sm font-semibold text-gray-600">דפדוף באפליקציה</div>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={standalone}
+                                        onChange={(e) => setStandalone(e.target.checked)}
+                                    />
+                                    חלק עצמאי – הדפדוף הרציף לא ממשיך מחלק זה לחלקים הסמוכים
+                                </label>
+                                <div className="text-xs text-gray-500">
+                                    מי שנכנס לחלק רואה רק אותו: הדפדוף נעצר בסופו ואינו חוזר לחלק הקודם (למשל כל מגילה, או כל נוסח של ברכת המזון).
                                 </div>
                             </div>
                         </>

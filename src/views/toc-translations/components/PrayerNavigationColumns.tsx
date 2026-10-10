@@ -157,6 +157,14 @@ function SortablePartItem({
                 >
                     <span className={`${NAV_LABEL_TEXT} flex items-center gap-1`}>
                         <span className="min-w-0 flex-1">{part.name}</span>
+                        {part.standalone === true && (
+                            <span
+                                className="shrink-0 text-xs"
+                                title="חלק עצמאי – הדפדוף באפליקציה לא ממשיך ממנו לחלקים הסמוכים"
+                            >
+                                ⏹
+                            </span>
+                        )}
                         {isPendingProd && <PendingProdNavBadge compact />}
                     </span>
                 </button>

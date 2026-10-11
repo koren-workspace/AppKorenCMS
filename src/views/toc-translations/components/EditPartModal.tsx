@@ -1,7 +1,7 @@
 /**
  * EditPartModal – מודל עריכת חלק תפילה קיים
  *
- * בבסיס (0-*): שם עברית + אנגלית, dateSetIds, hazan, minyan, standalone.
+ * בבסיס (0-*): שם עברית + אנגלית, dateSetIds, hazan, minyan, stopAfter.
  * בתרגום (1-*, 2-*): שם בתרגום הנוכחי בלבד.
  */
 
@@ -16,7 +16,7 @@ export type EditPartInitial =
           dateSetIds: string[];
           hazan: boolean | null;
           minyan: boolean | null;
-          standalone: boolean;
+          stopAfter: boolean;
       }
     | { id: string; mode: "translation"; name: string };
 
@@ -31,7 +31,7 @@ export type EditPartModalProps = {
         dateSetIds?: string[];
         hazan?: boolean | null;
         minyan?: boolean | null;
-        standalone?: boolean;
+        stopAfter?: boolean;
     }) => void;
     saving: boolean;
 };
@@ -49,7 +49,7 @@ export function EditPartModal({
     const [dateSetIds, setDateSetIds] = useState<string[]>(["100"]);
     const [hazan, setHazan] = useState<boolean | null>(null);
     const [minyan, setMinyan] = useState<boolean | null>(null);
-    const [standalone, setStandalone] = useState(false);
+    const [stopAfter, setStopAfter] = useState(false);
 
     useEffect(() => {
         if (!open) return;
@@ -60,7 +60,7 @@ export function EditPartModal({
                 setDateSetIds(initialPart.dateSetIds?.length ? initialPart.dateSetIds : ["100"]);
                 setHazan(initialPart.hazan ?? null);
                 setMinyan(initialPart.minyan ?? null);
-                setStandalone(initialPart.standalone);
+                setStopAfter(initialPart.stopAfter);
                 setName("");
             } else {
                 setName(initialPart.name);
@@ -69,7 +69,7 @@ export function EditPartModal({
                 setDateSetIds(["100"]);
                 setHazan(null);
                 setMinyan(null);
-                setStandalone(false);
+                setStopAfter(false);
             }
         } else {
             setNameHe("");
@@ -78,7 +78,7 @@ export function EditPartModal({
             setDateSetIds(["100"]);
             setHazan(null);
             setMinyan(null);
-            setStandalone(false);
+            setStopAfter(false);
         }
     }, [open, initialPart]);
 
@@ -99,7 +99,7 @@ export function EditPartModal({
                 dateSetIds,
                 hazan,
                 minyan,
-                standalone,
+                stopAfter,
             });
         } else {
             onSubmit({ name: name.trim() });
@@ -191,13 +191,13 @@ export function EditPartModal({
                                 <label className="flex items-center gap-2 text-sm">
                                     <input
                                         type="checkbox"
-                                        checked={standalone}
-                                        onChange={(e) => setStandalone(e.target.checked)}
+                                        checked={stopAfter}
+                                        onChange={(e) => setStopAfter(e.target.checked)}
                                     />
-                                    חלק עצמאי – הדפדוף הרציף לא ממשיך מחלק זה לחלקים הסמוכים
+                                    עצירה בסוף החלק – הדפדוף הרציף לא ממשיך מחלק זה לחלק הבא
                                 </label>
                                 <div className="text-xs text-gray-500">
-                                    מי שנכנס לחלק רואה רק אותו: הדפדוף נעצר בסופו ואינו חוזר לחלק הקודם (למשל כל מגילה, או כל נוסח של ברכת המזון).
+                                    נוצר חיתוך אחרי החלק: הדפדוף נעצר בסופו, ומהחלק הבא אי אפשר לדפדף אחורה לתוכו. כדי שחלק יעמוד לבד לגמרי, מסמנים גם את החלק שלפניו.
                                 </div>
                             </div>
                         </>

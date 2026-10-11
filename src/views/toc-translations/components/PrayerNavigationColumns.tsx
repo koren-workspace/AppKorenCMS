@@ -157,10 +157,10 @@ function SortablePartItem({
                 >
                     <span className={`${NAV_LABEL_TEXT} flex items-center gap-1`}>
                         <span className="min-w-0 flex-1">{part.name}</span>
-                        {part.standalone === true && (
+                        {part.stopAfter === true && (
                             <span
                                 className="shrink-0 text-xs"
-                                title="חלק עצמאי – הדפדוף באפליקציה לא ממשיך ממנו לחלקים הסמוכים"
+                                title="עצירה בסוף החלק – הדפדוף באפליקציה לא ממשיך ממנו לחלק הבא"
                             >
                                 ⏹
                             </span>

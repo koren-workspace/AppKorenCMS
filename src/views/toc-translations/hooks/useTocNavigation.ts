@@ -1747,7 +1747,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
 
     /**
      * מעדכן מקטע קיים.
-     * בבסיס (0-*): שם עברית/אנגלית, dateSetIds, hazan, minyan – מעדכן את כולם.
+     * בבסיס (0-*): שם עברית/אנגלית, dateSetIds, hazan, minyan, stopAfter – מעדכן את כולם.
      * בתרגום (1-*, 2-*): מעדכן רק את השם בתרגום הנוכחי.
      */
     const updatePart = async (
@@ -1759,6 +1759,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
             dateSetIds?: string[];
             hazan?: boolean | null;
             minyan?: boolean | null;
+            stopAfter?: boolean;
         }
     ): Promise<boolean> => {
         if (
@@ -1787,6 +1788,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
         let dateSetIds: string[];
         let hazan: boolean | null;
         let minyan: boolean | null;
+        let stopAfter: boolean;
         let targetTranslationId: string | null = null;
 
         if (isBase && params.nameHe != null && params.nameEn != null && params.dateSetIds != null) {
@@ -1795,6 +1797,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
             dateSetIds = params.dateSetIds;
             hazan = params.hazan ?? null;
             minyan = params.minyan ?? null;
+            stopAfter = params.stopAfter ?? false;
         } else if (!isBase && params.name != null) {
             targetTranslationId = tid;
             const currPart = getExistingPart(currentTranslationData);
@@ -1804,14 +1807,17 @@ export function useTocNavigation(options?: TocNavigationOptions) {
             dateSetIds = currPart.dateSetIds ?? ["100"];
             hazan = currPart.hazan ?? null;
             minyan = currPart.minyan ?? null;
+            stopAfter = currPart.stopAfter === true;
         } else {
             return false;
         }
 
+        // stopAfter נשמר רק כשהוא true, כדי שמקטעים רגילים לא ישתנו ב-TOC
+        const stopAfterField = stopAfter ? { stopAfter: true } : {};
         const getPartForTranslation = (translationId: string) => {
             if (targetTranslationId) {
                 return translationId === targetTranslationId
-                    ? { id: partId, name: nameHe, dateSetIds, hazan, minyan }
+                    ? { id: partId, name: nameHe, dateSetIds, hazan, minyan, ...stopAfterField }
                     : null;
             }
             return {
@@ -1820,6 +1826,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 dateSetIds,
                 hazan,
                 minyan,
+                ...stopAfterField,
             };
         };
 
@@ -2142,6 +2149,7 @@ export function useTocNavigation(options?: TocNavigationOptions) {
                 dateSetIds: basePart.dateSetIds ?? ["100"],
                 hazan: basePart.hazan ?? null,
                 minyan: basePart.minyan ?? null,
+                stopAfter: basePart.stopAfter === true,
             };
         }
         const currPart = getPart(currentTranslationData);

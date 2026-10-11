@@ -163,6 +163,7 @@ export function TocTranslationsView() {
         dateSetIds?: string[];
         hazan?: boolean | null;
         minyan?: boolean | null;
+        stopAfter?: boolean;
     }) => {
         if (!editPartId) return;
         const dateSetIds = params.dateSetIds?.length ? params.dateSetIds : ["100"];

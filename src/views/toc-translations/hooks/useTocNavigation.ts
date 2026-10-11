@@ -28,7 +28,19 @@ import {
 } from "../services/navigationService";
 import { baseColl, dbUpdateTimeCollection } from "../collections";
 import { appendChangeLog } from "../services/changeLogService";
-import { updatePartMetadataInItems, type PendingWrite } from "../services/partEditService";
+import {
+    fetchPartItems,
+    getPartsForPrayerInTranslation,
+    updatePartMetadataInItems,
+    type PendingWrite,
+} from "../services/partEditService";
+import {
+    findReorderConflicts,
+    itemIdRange,
+    partsToCheck,
+    swappedPartPairs,
+    type PartIdRange,
+} from "../utils/partOrderCheck";
 import { getProdFirestore, isProdAuthenticated } from "../services/prodAuthService";
 import {
     allocateIdWithCollision,
@@ -1912,6 +1924,77 @@ export function useTocNavigation(options?: TocNavigationOptions) {
             !currentTocData?.translations?.length
         )
             return;
+
+        // האפליקציה מסדרת פריטים לפי itemId ולא לפי סדר ה-TOC: גרירה שסותרת את סדר המזהים
+        // נראית תקינה ב-CMS אבל לא משנה כלום באפליקציה. חוסמים אותה ומפנים ל"העבר לחלק".
+        const currentTranslationId =
+            currentTocData.translations[selectedTranslationIndex]?.translationId;
+        const baseTranslationId =
+            currentTocData.translations.find((t: any) =>
+                String(t?.translationId ?? "").startsWith("0-")
+            )?.translationId ?? currentTranslationId;
+        const currentPrayerParts = getPartsForPrayerInTranslation(
+            currentTocData.translations,
+            currentTranslationId,
+            selectedPrayerId
+        );
+        const oldOrder = currentPrayerParts.map((p: any) => String(p.id));
+        const toCheck = partsToCheck(oldOrder, orderedPartIds);
+        if (toCheck.length > 0) {
+            setIsSaving(true);
+            setSavingMessage("בודק את סדר הפריטים...");
+            let conflicts;
+            try {
+                const ranges = new Map<string, PartIdRange>();
+                await Promise.all(
+                    toCheck.map(async (partId) => {
+                        const items = await fetchPartItems(
+                            dataSource,
+                            baseTranslationId,
+                            selectedPrayerId,
+                            partId
+                        );
+                        ranges.set(partId, itemIdRange(items.map((e: any) => e.values?.itemId)));
+                    })
+                );
+                conflicts = findReorderConflicts(oldOrder, orderedPartIds, ranges);
+            } catch (err) {
+                console.error(`${LOG_PREFIX} Reorder parts check failed`, err);
+                snackbar.open({ type: "error", message: "שגיאה בבדיקת סדר הפריטים – הסדר לא שונה" });
+                return;
+            } finally {
+                setIsSaving(false);
+                setSavingMessage(null);
+            }
+            if (conflicts.length > 0) {
+                const partName = (id: string) =>
+                    currentPrayerParts.find((p: any) => String(p.id) === id)?.name ?? id;
+                // המקטע שנגרר מופיע בכל זוג שהתהפך; השאר הם המקטעים שהוא עבר.
+                const counts = new Map<string, number>();
+                for (const pair of swappedPartPairs(oldOrder, orderedPartIds)) {
+                    for (const id of pair) counts.set(id, (counts.get(id) ?? 0) + 1);
+                }
+                const movedId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+                const moved = partName(movedId);
+                const crossed = [
+                    ...new Set(
+                        conflicts.flatMap((c) => [c.beforePartId, c.afterPartId])
+                    ),
+                ]
+                    .filter((id) => id !== movedId)
+                    .map(partName);
+                console.warn(`${LOG_PREFIX} Reorder parts blocked`, conflicts);
+                snackbar.open({
+                    type: "error",
+                    autoHideDuration: 20000,
+                    message:
+                        `לא ניתן לשנות את הסדר: "${moved}" לא יזוז באפליקציה ביחס ל-"${crossed.join('", "')}". ` +
+                        `האפליקציה מסדרת את הטקסט לפי מזהי הפריטים, לא לפי סדר המקטעים. ` +
+                        `כדי להזיז טקסט יש להשתמש ב"העבר לחלק".`,
+                });
+                return;
+            }
+        }
 
         const rearrange = (parts: any[]): any[] =>
             orderedPartIds

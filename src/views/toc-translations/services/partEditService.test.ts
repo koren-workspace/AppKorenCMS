@@ -1736,6 +1736,14 @@ describe("partEditService – זהות בין הכתיבה לסטייג' לעו�
         expect(cleaned.red).toBe(true);
     });
 
+    it("טקסט נפתח: הורדת ✓ נשלחת כמחיקה, ✓ נשמר כ-true", () => {
+        expect(stripDefaultFields({ content: "א", expandable: false }, "omit")).toEqual({ content: "א" });
+        const cleared = stripDefaultFields({ content: "א", expandable: false }, "firecms");
+        expect("expandable" in cleared).toBe(true);
+        expect(cleared.expandable).toBeUndefined();
+        expect(stripDefaultFields({ content: "א", expandable: true }, "firecms").expandable).toBe(true);
+    });
+
     it("שדה שלא קיים בקלט לא מסומן למחיקה", () => {
         const cleaned = stripDefaultFields({ content: "א" }, "firecms");
         expect("bold" in cleaned).toBe(false);

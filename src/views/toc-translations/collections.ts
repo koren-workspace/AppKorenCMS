@@ -26,6 +26,7 @@ export const itemsCollection = buildCollection({
         justifyBlock: { dataType: "boolean", name: "יישור בלוק" },
         noSpace: { dataType: "boolean", name: "ללא רווח" },
         block: { dataType: "boolean", name: "פיסקה" },
+        expandable: { dataType: "boolean", name: "טקסט נפתח" },
         role: { dataType: "string", name: "תפקיד" },
         reference: { dataType: "string", name: "מקורות" },
         specialSign: { dataType: "string", name: "סימן מיוחד" },

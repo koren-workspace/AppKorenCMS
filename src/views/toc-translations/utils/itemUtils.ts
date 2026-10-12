@@ -678,12 +678,14 @@ export function contentUsesRtlAlignment(text: string | undefined | null): boolea
  * מחזיר מחרוזת classNames ל־textarea של פריט (תוכן / כותרת / הוראות).
  * type: "title" | "instructions" | אחר = body
  * specialDate: כשמסומן (ורלוונטי לסוגי "גוף" בלבד) – צובע את הטקסט בבורדו, בדיוק כמו באפליקציה.
+ * expandable: טקסט תפילה נפתח (סוגי "גוף" בלבד) – פס ירוק בצד, כדי שיהיה ברור שהוא מוצג סגור באפליקציה.
  */
 export function getItemStyle(
     type: string,
     titleType?: string,
     fontTanach?: boolean,
-    specialDate?: boolean
+    specialDate?: boolean,
+    expandable?: boolean
 ): string {
     let baseStyle =
         "w-full p-4 border rounded-b-md shadow-sm outline-none transition-all whitespace-pre-wrap ";
@@ -699,5 +701,6 @@ export function getItemStyle(
     baseStyle += "leading-relaxed bg-white border-gray-200 min-h-[120px]";
     // בורדו זהה לצבע tefillaSpecial/brand באפליקציה (colors.ts: #77081B)
     if (specialDate && isBodyLikeType(type)) baseStyle += " text-[#77081B]";
+    if (expandable && isBodyLikeType(type)) baseStyle += " border-r-8 border-r-emerald-400";
     return baseStyle;
 }

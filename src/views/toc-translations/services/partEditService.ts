@@ -194,7 +194,7 @@ const NULLABLE_FILTER_FIELDS = ["cohanim", "hazan", "minyan"] as const;
 /** שדות בוליאניים אופציונליים – נשמרים רק כש-true; false/undefined = ברירת מחדל, אין לשמור */
 const BOOLEAN_ITEM_FIELDS = [
     "fontTanach", "bold", "centerAlign", "lineLine", "red",
-    "justifyBlock", "block", "noSpace", "firstInPage", "specialDate",
+    "justifyBlock", "block", "noSpace", "firstInPage", "specialDate", "expandable",
 ] as const;
 
 /** שדות מחרוזת אופציונליים – נשמרים רק כשיש ערך; ריק = ברירת מחדל, אין לשמור */

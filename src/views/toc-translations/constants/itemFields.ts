@@ -17,6 +17,8 @@ export const ITEM_FIELD_HELP: Record<string, string> = {
     red: "הצגת טקסט אדום להדגשת קטעים משתנים (רלוונטי לגוף עברית בלבד).",
     justifyBlock: "יישור בלוק מלא לשני הצדדים (רלוונטי לגוף עברית בלבד).",
     noSpace: "ללא רווח אחרי הפריט – הצגה צמודה לשורה הבאה.",
+    expandable: "טקסט תפילה נפתח: באפליקציה הפריט מוצג סגור, עם שורת כותרת (מהשדה \"כותרת הפתיחה\") ומשולש לפתיחה. בניגוד להוראות, הוא מוצג בגופן קורן כמו שאר התפילה ואינו מוסתר כשהמשתמש מכבה הערות. פריטים צמודים שמסומנים כנפתחים באותו מקטע נפתחים ונסגרים יחד, והכותרת נלקחת מהראשון שבהם (רלוונטי לגוף עברית בלבד).",
+    expandableTitle: "הטקסט שמוצג בשורה הסגורה של טקסט נפתח (למשל: וידוי). מספיק למלא בפריט הראשון בקבוצה.",
     block: "פיסקה: הפריט ממשיך ברצף עם הפריט הבא כחלק מפיסקה אחת (רלוונטי לגוף עברית בלבד).",
     firstInPage: "מסומן כראשון בעמוד – משמש לדפדוף ולשבירת עמודים.",
     specialDate: "הפריט קשור לתאריכים מיוחדים בלוח (למשל ימים מיוחדים).",
@@ -69,6 +71,7 @@ export const FIELD_LABELS: Record<string, string> = {
     justifyBlock: "יישור בלוק",
     noSpace: "ללא רווח",
     block: "פיסקה",
+    expandable: "טקסט נפתח",
     firstInPage: "ראשון בעמוד",
     specialDate: "תאריך מיוחד",
     cohanim: "כהנים",
@@ -85,7 +88,7 @@ export const FIELD_LABELS: Record<string, string> = {
 export const LOGGED_FIELDS = new Set([
     "content", "type", "titleType", "title",
     "fontTanach", "bold", "centerAlign", "lineLine", "red", "justifyBlock",
-    "noSpace", "block", "firstInPage", "specialDate",
+    "noSpace", "block", "expandable", "firstInPage", "specialDate",
     "cohanim", "hazan", "minyan", "role", "reference", "specialSign",
     "dateSetId", "mit_id",
 ]);

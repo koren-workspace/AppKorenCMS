@@ -173,7 +173,7 @@ export function PartItemRow({
                 title: `עריכת טקסט פריט ${curId ?? item.id}`,
                 value: localVal.content ?? "",
                 isRtl: mainContentRtl,
-                className: `${getItemStyle(localVal.type, undefined, undefined, !!localVal.specialDate)} ${mainContentRtl ? "" : "text-left"}`,
+                className: `${getItemStyle(localVal.type, undefined, undefined, !!localVal.specialDate, !!localVal.expandable)} ${mainContentRtl ? "" : "text-left"}`,
                 onChange: (value: string) => onContentChange(item.id, value),
                 readOnly: false,
             };
@@ -429,6 +429,26 @@ export function PartItemRow({
                                     />
                                     <span className="text-gray-600">פיסקה</span>
                                 </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.expandable}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!localVal.expandable}
+                                        onChange={(e) => onFieldChange(entityId, "expandable", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">טקסט נפתח</span>
+                                </label>
+                                {!!localVal.expandable && (
+                                    <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.expandableTitle}>
+                                        <span className="text-gray-600 w-20 shrink-0">כותרת הפתיחה</span>
+                                        <input
+                                            type="text"
+                                            value={localVal.title ?? ""}
+                                            onChange={(e) => onFieldChange(entityId, "title", e.target.value)}
+                                            className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            dir="rtl"
+                                        />
+                                    </label>
+                                )}
                             </>
                         )}
                         {showNoSpace && (
@@ -549,7 +569,7 @@ export function PartItemRow({
                 )}
                 <textarea
                     ref={contentTextareaRef}
-                    className={`${getItemStyle(localVal.type, undefined, undefined, !!localVal.specialDate)} ${mainContentRtl ? "" : "text-left"}`}
+                    className={`${getItemStyle(localVal.type, undefined, undefined, !!localVal.specialDate, !!localVal.expandable)} ${mainContentRtl ? "" : "text-left"}`}
                     value={localVal.content ?? ""}
                     onChange={(e) => onContentChange(item.id, e.target.value)}
                     dir={mainContentRtl ? "rtl" : "ltr"}

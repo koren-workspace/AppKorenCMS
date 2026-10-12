@@ -44,6 +44,7 @@ import {
     copyItemsToPart,
     updatePartMetadataInItems,
     stripDefaultFields,
+    fetchNeighborItemIdBoundsForPart,
     type DeletePartItemParams,
     type SplitPartItemsParams,
     type MoveItemsToPartParams,
@@ -1808,5 +1809,198 @@ describe("partEditService – זהות בין הכתיבה לסטייג' לעו�
         expect(result.write.data).not.toHaveProperty("title");
         expect(result.write.data).not.toHaveProperty("cohanim");
         expect(result.write.data.red).toBe(true);
+    });
+});
+
+describe("partEditService – fetchNeighborItemIdBoundsForPart (דילוג על מקטעים ריקים)", () => {
+    const translations = [
+        {
+            translationId: "0-ashkenaz",
+            categories: [
+                {
+                    prayers: [
+                        {
+                            id: "p",
+                            parts: [
+                                { id: "p1", name: "א" },
+                                { id: "p2", name: "ב" }, // ריק (רק פריט מחוק)
+                                { id: "p3", name: "ג" }, // יעד
+                                { id: "p4", name: "ד" }, // ריק
+                                { id: "p5", name: "ה" }, // ריק
+                                { id: "p6", name: "ו" },
+                                { id: "p7", name: "ז" },
+                            ],
+                        },
+                        { id: "otherPrayer", parts: [{ id: "q1", name: "תפילה אחרת" }] },
+                    ],
+                },
+            ],
+        },
+    ];
+    const itemsByPart: Record<string, any[]> = {
+        p1: [
+            { id: "a1", values: { itemId: "1000", partId: "p1" } },
+            { id: "a2", values: { itemId: "2000", partId: "p1" } },
+        ],
+        p2: [{ id: "del", values: { itemId: "2500", partId: "p2", deleted: true } }],
+        p6: [
+            { id: "f1", values: { itemId: "9000", partId: "p6" } },
+            { id: "f0", values: { itemId: "8000", partId: "p6" } },
+        ],
+        p7: [{ id: "g1", values: { itemId: "9500", partId: "p7" } }],
+        q1: [{ id: "q", values: { itemId: "5", partId: "q1" } }],
+    };
+    const makeDs = () => ({
+        fetchCollection: vi.fn().mockImplementation(({ filter }: any) =>
+            Promise.resolve(itemsByPart[filter?.partId?.[1]] ?? [])
+        ),
+        saveEntity: vi.fn(),
+        deleteEntity: vi.fn(),
+    });
+    const requestedParts = (ds: ReturnType<typeof makeDs>) =>
+        ds.fetchCollection.mock.calls.map((c: any[]) => c[0].filter.partId[1] as string);
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it("מדלג על מקטעים ריקים בשני הכיוונים ועוצר במקטע הלא-ריק הראשון", async () => {
+        const ds = makeDs();
+        const bounds = await fetchNeighborItemIdBoundsForPart(ds, {
+            translationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            partId: "p3",
+            translations,
+        });
+        expect(bounds).toEqual({ prevLastItemId: "2000", nextFirstItemId: "8000" });
+        // אחורה: p2 (ריק) → p1 (עצירה). קדימה: p4, p5 (ריקים) → p6 (עצירה). p7 לא נקרא.
+        expect([...requestedParts(ds)].sort()).toEqual(["p1", "p2", "p4", "p5", "p6"]);
+    });
+
+    it("בקצה התפילה – לא חוצה לתפילה אחרת ומחזיר גבול ריק", async () => {
+        const ds = makeDs();
+        const bounds = await fetchNeighborItemIdBoundsForPart(ds, {
+            translationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            partId: "p7",
+            translations,
+        });
+        expect(bounds).toEqual({ prevLastItemId: "9000" });
+        expect(requestedParts(ds)).not.toContain("q1");
+    });
+
+    it("מקרה רגיל – שכנים ישירים לא-ריקים: קריאה אחת לכל כיוון, תוצאה כמו קודם", async () => {
+        const ds = makeDs();
+        const bounds = await fetchNeighborItemIdBoundsForPart(ds, {
+            translationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            partId: "p6",
+            translations,
+        });
+        expect(bounds.nextFirstItemId).toBe("9500");
+        expect(bounds.prevLastItemId).toBe("2000"); // p5,p4,p3,p2 ריקים → p1
+        expect([...requestedParts(ds)].sort()).toEqual(["p1", "p2", "p3", "p4", "p5", "p7"]);
+    });
+});
+
+describe("partEditService – moveItemsToPart למקטע ריק שגם המקטע אחריו ריק", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        firestoreBatchWrites.length = 0;
+    });
+
+    const makeDs = (prevItems: any[], srcItems: any[]) => ({
+        fetchCollection: vi.fn().mockImplementation(({ filter }: any) => {
+            const pid = filter?.partId?.[1];
+            if (pid === "prev") return Promise.resolve(prevItems);
+            if (pid === "src") return Promise.resolve(srcItems);
+            return Promise.resolve([]);
+        }),
+        saveEntity: vi.fn().mockResolvedValue(undefined),
+        deleteEntity: vi.fn(),
+    });
+
+    it("המקטע הלא-ריק הבא הוא המקור: ה-IDs החדשים בין המקטע הקודם ל-IDs הישנים", async () => {
+        // שחזור הבאג מ-2026-10-11: יעד ריק, המקטע אחריו ריק, המקור רחוק למעלה.
+        const prevItems = [
+            { id: "a1", values: { itemId: "2011137001", mit_id: "2011137001", partId: "prev" } },
+            { id: "a2", values: { itemId: "2011137002", mit_id: "2011137002", partId: "prev" } },
+        ];
+        const srcItems = [
+            { id: "s1", values: { itemId: "2032317158", mit_id: "2032317158", partId: "src" } },
+            { id: "s2", values: { itemId: "2032317159", mit_id: "2032317159", partId: "src" } },
+            { id: "s3", values: { itemId: "2032317160", mit_id: "2032317160", partId: "src" } },
+        ];
+        const translations = [
+            {
+                translationId: "0-ashkenaz",
+                categories: [{ prayers: [{ id: "p", parts: [
+                    { id: "prev", name: "קודם" },
+                    { id: "tgt", name: "יעד" },
+                    { id: "nextEmpty", name: "הבא ריק" },
+                    { id: "src", name: "מקור" },
+                ] }] }],
+            },
+        ];
+
+        await moveItemsToPart(makeDs(prevItems, srcItems), {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            movedItemIds: srcItems.map((e) => e.values.itemId),
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: null,
+            translations,
+        });
+
+        const newIds = firestoreBatchWrites
+            .filter((w) => !w.data.deleted)
+            .map((w) => Number(w.data.itemId))
+            .sort((a, b) => a - b);
+        expect(newIds.length).toBe(3);
+        // idBefore = 2011137002 (המקטע הקודם), idAfter = 2032317158 (המקור, דרך הדילוג על nextEmpty)
+        for (const id of newIds) {
+            expect(id).toBeGreaterThan(2011137002);
+            expect(id).toBeLessThan(2032317158);
+        }
+    });
+
+    it("אין שום מקטע לא-ריק אחרי היעד: IDs = idBefore + צעדי MIT_ID_GAP, לעולם לא מעל ה-IDs הישנים", async () => {
+        const prevItems = [
+            { id: "a1", values: { itemId: "2011137001", mit_id: "2011137001", partId: "prev" } },
+        ];
+        // המקור לפני היעד ב-TOC אבל עם IDs רחוקים למעלה – בלי התיקון idBefore היה קופץ ל-2032317159
+        const srcItems = [
+            { id: "s1", values: { itemId: "2032317158", mit_id: "2032317158", partId: "src" } },
+            { id: "s2", values: { itemId: "2032317159", mit_id: "2032317159", partId: "src" } },
+        ];
+        const translations = [
+            {
+                translationId: "0-ashkenaz",
+                categories: [{ prayers: [{ id: "p", parts: [
+                    { id: "src", name: "מקור" },
+                    { id: "prev", name: "קודם" },
+                    { id: "tgt", name: "יעד" },
+                    { id: "nextEmpty", name: "הבא ריק" },
+                ] }] }],
+            },
+        ];
+
+        await moveItemsToPart(makeDs(prevItems, srcItems), {
+            currentTranslationId: "0-ashkenaz",
+            selectedPrayerId: "p",
+            movedItemIds: ["2032317158", "2032317159"],
+            sourcePartId: "src",
+            targetPartId: "tgt",
+            insertAfterItemId: null,
+            translations,
+        });
+
+        const newIds = firestoreBatchWrites
+            .filter((w) => !w.data.deleted)
+            .map((w) => w.data.itemId as string)
+            .sort((a, b) => Number(a) - Number(b));
+        // אין idAfter → ביסקציה: idBefore + 1000 לכל פריט בתורו
+        expect(newIds).toEqual(["2011138001", "2011139001"]);
     });
 });

@@ -320,6 +320,15 @@ function applyNextBaseLinkedCap(
     }
 }
 
+/**
+ * שלב 5: הרמת idBefore מעל IDs של extraTakenIds שנמצאים ברווח (idBefore, idAfter).
+ *
+ * חשוב: רק IDs *מיקומיים* (מחוקים במקטע, נוסחים אחרים באותו מקטע) עוברים כאן.
+ * ה-itemId הישנים של פריטים שמועברים/מועתקים ועומדים להימחק אינם אילוץ מיקום –
+ * הם מגיעים ב-collisionOnlyIds ונכנסים רק ל-takenIds (שלב 6). אחרת, כשאין idAfter
+ * (המקטעים הבאים ריקים → afterNum=∞) הם היו "ברווח" ומרימים את idBefore לטווח הישן
+ * והרחוק שלהם, והפריטים היו מקבלים IDs מעל המקטעים שאחריהם.
+ */
 function bumpIdBeforeFromExtraInGap(b: InsertBoundsState, extraTakenIds: string[] | undefined): void {
     cmsIdLog(`${ID_LOG_PREFIX}   [שלב 5: bumpIdBefore מ-extraTakenIds] extraTakenIds=${extraTakenIds?.length ? `[${extraTakenIds.length} IDs: ${extraTakenIds.length <= 20 ? extraTakenIds.join(",") : extraTakenIds.slice(0, 10).join(",") + "..."}]` : "(ריק)"}`);
     if (!extraTakenIds || extraTakenIds.length === 0) {
@@ -353,7 +362,8 @@ function bumpIdBeforeFromExtraInGap(b: InsertBoundsState, extraTakenIds: string[
 function buildTakenIdsForInsert(
     orderedItemIds: string[],
     linkedIdsPerPosition: string[][] | undefined,
-    extraTakenIds: string[] | undefined
+    extraTakenIds: string[] | undefined,
+    collisionOnlyIds: string[] | undefined
 ): Set<string> {
     const takenIds = new Set<string>();
     for (const id of orderedItemIds) if (id) takenIds.add(id);
@@ -368,8 +378,12 @@ function buildTakenIdsForInsert(
         for (const id of extraTakenIds) if (id) takenIds.add(id);
     }
     const fromExtra = takenIds.size - fromOrdered - fromLinked;
+    if (collisionOnlyIds) {
+        for (const id of collisionOnlyIds) if (id) takenIds.add(id);
+    }
+    const fromCollisionOnly = takenIds.size - fromOrdered - fromLinked - fromExtra;
     cmsIdLog(
-        `${ID_LOG_PREFIX}   takenIds: מ-orderedItemIds=${fromOrdered} מ-linkedIdsPerPosition=${fromLinked} מ-extraTakenIds=${fromExtra} סה"כ=${takenIds.size}`
+        `${ID_LOG_PREFIX}   takenIds: מ-orderedItemIds=${fromOrdered} מ-linkedIdsPerPosition=${fromLinked} מ-extraTakenIds=${fromExtra} מ-collisionOnlyIds=${fromCollisionOnly} סה"כ=${takenIds.size}`
     );
     return takenIds;
 }
@@ -470,7 +484,17 @@ export interface InsertNeighborBounds {
 
 export interface ComputeItemIdForInsertOptions {
     neighborBounds?: InsertNeighborBounds;
+    /**
+     * IDs תפוסים *מיקומיים* (מחוקים במקטע, נוסחים אחרים באותו מקטע): נכנסים ל-takenIds
+     * וגם מרימים את idBefore אם הם ברווח (שלב 5).
+     */
     extraTakenIds?: string[];
+    /**
+     * IDs שמורים *למניעת התנגשות בלבד* – נכנסים ל-takenIds אך לעולם לא משפיעים על idBefore/idAfter.
+     * שימוש: ה-itemId הישנים של פריטים שמועברים/מועתקים ועומדים להימחק (soft-delete) –
+     * מיקומם הישן אינו רלוונטי למיקום החדש, ורק אסור שה-ID החדש יתנגש בהם לפני המחיקה.
+     */
+    collisionOnlyIds?: string[];
     /**
      * IDs מקושרים (תרגומים/enhancements) לכל מיקום ברשימה.
      * linkedIdsPerPosition[i] = מערך IDs של תרגומים המקושרים ל-orderedItemIds[i].
@@ -509,7 +533,8 @@ export interface ComputeItemIdForInsertOptions {
  *
  * minIdBefore: אילוץ תחתון (למשל baseItemId של תרגום).
  * neighborBounds: fallback כשהמיקום בקצה הרשימה.
- * extraTakenIds: IDs נוספים שיתווספו ל-takenIds (deleted, pending וכו').
+ * extraTakenIds: IDs נוספים שיתווספו ל-takenIds (deleted, pending וכו') ומרימים idBefore כשהם ברווח.
+ * collisionOnlyIds: IDs שיתווספו ל-takenIds בלבד (למשל ה-IDs הישנים של פריטים מועברים) – ללא השפעה על הגבולות.
  */
 export function computeItemIdForInsert(
     orderedItemIds: string[],
@@ -519,6 +544,7 @@ export function computeItemIdForInsert(
     const {
         neighborBounds,
         extraTakenIds,
+        collisionOnlyIds,
         linkedIdsPerPosition,
         minIdBefore,
         nextBaseLinkedMinItemId,
@@ -533,6 +559,7 @@ export function computeItemIdForInsert(
     cmsIdLog(`${ID_LOG_PREFIX}     linkedIdsPerPosition: ${linkedIdsPerPosition ? `כן (${linkedIdsPerPosition.length} עמדות)` : "לא"}`);
     cmsIdLog(`${ID_LOG_PREFIX}     neighborBounds: ${neighborBounds ? JSON.stringify(neighborBounds) : "(לא סופק)"}`);
     cmsIdLog(`${ID_LOG_PREFIX}     extraTakenIds: ${extraTakenIds?.length ? `[${extraTakenIds.length} IDs${extraTakenIds.length <= 15 ? ": " + extraTakenIds.join(",") : ""}]` : "(לא סופק)"}`);
+    cmsIdLog(`${ID_LOG_PREFIX}     collisionOnlyIds: ${collisionOnlyIds?.length ? `[${collisionOnlyIds.length} IDs${collisionOnlyIds.length <= 15 ? ": " + collisionOnlyIds.join(",") : ""}]` : "(לא סופק)"}`);
     cmsIdLog(`${ID_LOG_PREFIX}     minIdBefore: ${minIdBefore ?? "(לא סופק)"}`);
     cmsIdLog(`${ID_LOG_PREFIX}     nextBaseLinkedMinItemId: ${nextBaseLinkedMinItemId ?? "(לא סופק)"}`);
 
@@ -554,7 +581,7 @@ export function computeItemIdForInsert(
     cmsIdLog(`${ID_LOG_PREFIX}   ── מצב אחרי שלב 5: idBefore=${b.idBefore ?? "(ריק)"} idAfter=${b.idAfter ?? "(ריק)"}`);
 
     cmsIdLog(`${ID_LOG_PREFIX}   [שלב 6: בניית takenIds + חישוב מספר סופי]`);
-    const takenIds = buildTakenIdsForInsert(orderedItemIds, linkedIdsPerPosition, extraTakenIds);
+    const takenIds = buildTakenIdsForInsert(orderedItemIds, linkedIdsPerPosition, extraTakenIds, collisionOnlyIds);
     const result = computeNextAvailableItemId(b.idBefore, b.idAfter, takenIds, { confirmUserWantsDecimalId });
 
     cmsIdLog(`${ID_LOG_PREFIX} ╔═══════════════════════════════════════════════════════════╗`);

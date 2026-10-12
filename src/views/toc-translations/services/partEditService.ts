@@ -444,8 +444,23 @@ export function getPartsForPrayerInTranslation(
     return [];
 }
 
+/** itemId תקין ראשון/אחרון מתוך פריטי מקטע ממוינים (undefined אם המקטע ריק). */
+function edgeItemIdOfPart(items: Entity<any>[], edge: "first" | "last"): string | undefined {
+    const ordered = edge === "first" ? items : [...items].reverse();
+    for (const e of ordered as any[]) {
+        const id = e.values?.itemId;
+        if (id != null && String(id).trim() !== "") return String(id);
+    }
+    return undefined;
+}
+
 /**
- * itemId של הפריט האחרון במקטע הקודם והראשון במקטע הבא – אותו תרגום (כמו neighborBounds בטעינת מקטע).
+ * itemId של הפריט האחרון במקטע הקודם *הלא-ריק* והראשון במקטע הבא *הלא-ריק* – אותו תרגום, אותה תפילה.
+ *
+ * מקטעים ריקים (ללא פריטים פעילים) נדלגים: הולכים לכל כיוון עד המקטע הלא-ריק הראשון
+ * ועוצרים שם (קריאה אחת ל-Firestore לכל מקטע שנבדק). לא חוצים לתפילה אחרת.
+ * בלי זה, מקטע יעד שגם המקטע אחריו ריק היה מקבל idAfter ריק – ופריטים מועברים
+ * היו עלולים לקבל IDs מעל המקטעים הבאים.
  */
 export async function fetchNeighborItemIdBoundsForPart(
     dataSource: DataSource,
@@ -459,33 +474,27 @@ export async function fetchNeighborItemIdBoundsForPart(
     const { translationId, selectedPrayerId, partId, translations } = params;
     const parts = getPartsForPrayerInTranslation(translations, translationId, selectedPrayerId);
     const partIdx = parts.findIndex((p: any) => p.id === partId);
-    const prevPartId: string | null =
-        partIdx > 0 ? (parts[partIdx - 1]?.id as string) ?? null : null;
-    const nextPartId: string | null =
-        partIdx >= 0 && partIdx < parts.length - 1
-            ? (parts[partIdx + 1]?.id as string) ?? null
-            : null;
+    if (partIdx < 0) return {};
 
-    const [prevItems, nextItems] = await Promise.all([
-        prevPartId
-            ? fetchPartItems(dataSource, translationId, selectedPrayerId, prevPartId)
-            : Promise.resolve([] as Entity<any>[]),
-        nextPartId
-            ? fetchPartItems(dataSource, translationId, selectedPrayerId, nextPartId)
-            : Promise.resolve([] as Entity<any>[]),
+    const walk = async (step: -1 | 1, edge: "first" | "last"): Promise<string | undefined> => {
+        for (let i = partIdx + step; i >= 0 && i < parts.length; i += step) {
+            const pid = parts[i]?.id as string | undefined;
+            if (!pid) continue;
+            const items = await fetchPartItems(dataSource, translationId, selectedPrayerId, pid);
+            const id = edgeItemIdOfPart(items, edge);
+            if (id != null) return id;
+        }
+        return undefined;
+    };
+
+    const [prevLastItemId, nextFirstItemId] = await Promise.all([
+        walk(-1, "last"),
+        walk(1, "first"),
     ]);
 
     const bounds: { prevLastItemId?: string; nextFirstItemId?: string } = {};
-    if (prevItems.length > 0) {
-        const last = prevItems[prevItems.length - 1] as any;
-        const id = last.values?.itemId;
-        if (id != null && String(id).trim() !== "") bounds.prevLastItemId = String(id);
-    }
-    if (nextItems.length > 0) {
-        const first = nextItems[0] as any;
-        const id = first.values?.itemId;
-        if (id != null && String(id).trim() !== "") bounds.nextFirstItemId = String(id);
-    }
+    if (prevLastItemId != null) bounds.prevLastItemId = prevLastItemId;
+    if (nextFirstItemId != null) bounds.nextFirstItemId = nextFirstItemId;
     return bounds;
 }
 
@@ -1145,7 +1154,10 @@ export async function moveItemsToPart(
         .map((e: any) => String(e.values?.itemId ?? ""))
         .filter((id) => id !== "");
 
-    const moveExtraTakenIds = [...baseDeletedItemIds, ...otherTranslationsItemIds, ...movedBaseOldItemIds];
+    // IDs מיקומיים (מחוקים ביעד + נוסחים אחרים ביעד) – משפיעים על הגבולות.
+    const moveExtraTakenIds = [...baseDeletedItemIds, ...otherTranslationsItemIds];
+    // ה-IDs הישנים של הפריטים המועברים: שמורים למניעת התנגשות בלבד (collisionOnlyIds),
+    // ולא כאילוץ מיקום – אחרת, כשאין idAfter, הם היו מרימים את idBefore לטווח הישן שלהם.
 
     // ─── ניסיון הקצאה לינארית של כל מזהי הבסיס בבת אחת (כמו copyItemsToPart) ──
     const _moveSlotBounds = computeInsertSlotBounds(baseOrderedIds, baseInsertIdx, {
@@ -1156,6 +1168,7 @@ export async function moveItemsToPart(
     const _moveTakenForLinear = new Set<string>([
         ...baseOrderedIds.filter(Boolean),
         ...moveExtraTakenIds,
+        ...movedBaseOldItemIds,
     ]);
     const preAllocatedMoveBaseIds: string[] | null =
         movedEntities.length > 1
@@ -1183,8 +1196,9 @@ export async function moveItemsToPart(
         } else {
             newBaseItemId = computeItemIdForInsert(baseOrderedIds, baseInsertIdx, {
                 neighborBounds,
-                // Reserve old moved IDs too, so new entity IDs never collide before soft-delete.
                 extraTakenIds: moveExtraTakenIds,
+                // Reserve old moved IDs too, so new entity IDs never collide before soft-delete.
+                collisionOnlyIds: movedBaseOldItemIds,
                 ...(isEmptyTargetPartForMove ? { minIdBefore: minIdBeforeForMove } : {}),
             });
         }
@@ -1333,7 +1347,6 @@ export async function moveItemsToPart(
             const translationExtraTakenIds = [
                 ...transDeletedItemIds,
                 ...baseOrderedIds,
-                ...movedTranslationOldItemIds,
             ];
 
             for (const oldBaseId of orderedOldBaseIds) {
@@ -1366,6 +1379,8 @@ export async function moveItemsToPart(
                     const newTranslationItemId = computeItemIdForInsert(translationOrderedIds, insertPos, {
                         neighborBounds: tidNeighborBounds,
                         extraTakenIds: translationExtraTakenIds,
+                        // ה-IDs הישנים של התרגומים המועברים – מניעת התנגשות בלבד, לא אילוץ מיקום
+                        collisionOnlyIds: movedTranslationOldItemIds,
                         minIdBefore: newBaseId,
                         ...(nextUpperCap != null ? { nextBaseLinkedMinItemId: nextUpperCap } : {}),
                     });
@@ -1948,7 +1963,8 @@ async function copyPreparedItemsToPart(
             const allCollectionItemIds = allEnhEntitiesInCollection
                 .map((e: any) => idNorm(e.values?.itemId))
                 .filter((id: string) => id !== "");
-            const enhExtraTakenIds = [...new Set([...targetEnhDeletedIds, ...allNewBaseIds, ...allCollectionItemIds])];
+            const enhExtraTakenIds = [...new Set([...targetEnhDeletedIds, ...allNewBaseIds])];
+            // מזהי כל הקולקשיין (מכל החלקים) – למניעת דריסה בלבד, לא אילוץ מיקום (collisionOnlyIds)
 
             for (const sourceBaseEntity of sourceEntities) {
                 const oldBaseId = idNorm(sourceBaseEntity.values?.itemId);
@@ -1986,6 +2002,7 @@ async function copyPreparedItemsToPart(
                     const newEnhItemId = computeItemIdForInsert(enhOrderedIds, insertPos, {
                         neighborBounds: targetEnhNeighborBounds,
                         extraTakenIds: enhExtraTakenIds,
+                        collisionOnlyIds: allCollectionItemIds,
                         minIdBefore: newBaseId,
                         ...(nextUpperCap != null ? { nextBaseLinkedMinItemId: nextUpperCap } : {}),
                         confirmUserWantsDecimalId,

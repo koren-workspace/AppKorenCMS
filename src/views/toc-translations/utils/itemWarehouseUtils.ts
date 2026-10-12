@@ -20,6 +20,7 @@ const STYLE_FIELDS = [
     "justifyBlock",
     "noSpace",
     "block",
+    "expandable",
     "firstInPage",
     "specialDate",
 ] as const;

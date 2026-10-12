@@ -32,6 +32,7 @@ export type AddItemFormValues = {
     justifyBlock: boolean;
     noSpace: boolean;
     block: boolean;
+    expandable: boolean;
     firstInPage: boolean;
     specialDate: boolean;
     cohanim: boolean | null;
@@ -56,6 +57,7 @@ export const defaultAddItemForm = (isInstruction: boolean): AddItemFormValues =>
     justifyBlock: false,
     noSpace: false,
     block: false,
+    expandable: false,
     firstInPage: false,
     specialDate: false,
     cohanim: null,
@@ -226,6 +228,26 @@ export function AddItemModal({
                                     />
                                     <span className="text-gray-600">פיסקה</span>
                                 </label>
+                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.expandable}>
+                                    <input
+                                        type="checkbox"
+                                        checked={form.expandable}
+                                        onChange={(e) => setField("expandable", e.target.checked)}
+                                    />
+                                    <span className="text-gray-600">טקסט נפתח</span>
+                                </label>
+                                {form.expandable && (
+                                    <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.expandableTitle}>
+                                        <span className="text-gray-600 w-20 shrink-0">כותרת הפתיחה</span>
+                                        <input
+                                            type="text"
+                                            value={form.title}
+                                            onChange={(e) => setField("title", e.target.value)}
+                                            className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                            dir="rtl"
+                                        />
+                                    </label>
+                                )}
                             </>
                         )}
                         {showNoSpace && (

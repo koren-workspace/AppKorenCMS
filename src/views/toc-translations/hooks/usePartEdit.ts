@@ -1729,6 +1729,7 @@ export function usePartEdit(context: PartEditContext) {
             if (form.justifyBlock === true) newItemValues.justifyBlock = true;
             if (form.noSpace === true) newItemValues.noSpace = true;
             if (form.block === true) newItemValues.block = true;
+            if (form.expandable === true) newItemValues.expandable = true;
             if (form.firstInPage === true) newItemValues.firstInPage = true;
             if (form.specialDate === true) newItemValues.specialDate = true;
             if (form.cohanim != null) newItemValues.cohanim = form.cohanim;

@@ -18,6 +18,8 @@ describe("isDefaultValue", () => {
     it("בוליאני: false הוא ברירת מחדל, true אינו", () => {
         expect(isDefaultValue("noSpace", false)).toBe(true);
         expect(isDefaultValue("noSpace", true)).toBe(false);
+        expect(isDefaultValue("expandable", false)).toBe(true);
+        expect(isDefaultValue("expandable", true)).toBe(false);
     });
 
     it("מחרוזת אופציונלית: ריק ורווחים בלבד הם ברירת מחדל", () => {

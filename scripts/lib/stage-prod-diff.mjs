@@ -12,7 +12,7 @@
 export const NULLABLE_FIELDS = new Set(["cohanim", "hazan", "minyan"]);
 export const BOOLEAN_FIELDS = new Set([
     "fontTanach", "bold", "centerAlign", "lineLine", "red",
-    "justifyBlock", "block", "noSpace", "firstInPage", "specialDate",
+    "justifyBlock", "block", "noSpace", "firstInPage", "specialDate", "expandable",
 ]);
 export const OPTIONAL_STRING_FIELDS = new Set([
     "titleType", "title", "role", "reference", "specialSign",

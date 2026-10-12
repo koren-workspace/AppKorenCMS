@@ -35,6 +35,11 @@ describe("buildUpdatedCalendarDoc", () => {
         expect(next.dateSetId).toBe("205");
         expect(next.timestamp).toBe(99);
     });
+
+    it("marks the set as edited in the CMS with the same timestamp", () => {
+        const next = buildUpdatedCalendarDoc({ ...existing, cmsEditedAt: 5 }, "205", { abroad: true }, 99);
+        expect(next.cmsEditedAt).toBe(99);
+    });
 });
 
 describe("whyCannotUpdate", () => {

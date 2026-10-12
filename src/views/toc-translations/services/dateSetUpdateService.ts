@@ -13,6 +13,9 @@
  *        - set בלי merge: שדה שהוסר בטופס נמחק גם במסמך (האפליקציה מחליפה
  *          את כל הכלל, syncStore.upsertCalendarRules). שדות שהטופס לא מנהל
  *          (למשל roshHodesh) נשמרים כמו שהם.
+ *        - cmsEditedAt: סימון שהסט נערך ב-CMS. סקריפט הלוח (datascript,
+ *          calendar_targeted_update.js / calendar_hebcal_build.js) מדלג על סטים
+ *          מסומנים, כדי שההרצה השנתית מהגיליון לא תדרוס את העריכה.
  *
  *   2. publishDateSetEverywhere – רק הסט הזה, לא שום שינוי אחר שממתין בסטייג':
  *        - חותמת זמן טרייה על המסמך בסטייג' ובפרוד (set בלי merge בפרוד) –
@@ -63,6 +66,7 @@ const MANAGED_FIELDS = new Set([
     "dates_when_we_dont_say_prayer",
     "dates_when_we_dont_say_prayer_abroad",
     "weekdays",
+    "cmsEditedAt",
 ]);
 
 export class DateSetUpdateError extends Error {}
@@ -81,7 +85,7 @@ export function buildUpdatedCalendarDoc(
     for (const [key, value] of Object.entries(existing ?? {})) {
         if (!MANAGED_FIELDS.has(key)) kept[key] = value;
     }
-    return { ...kept, ...buildCalendarEntryValues(dateSetId, payload), timestamp };
+    return { ...kept, ...buildCalendarEntryValues(dateSetId, payload), timestamp, cmsEditedAt: timestamp };
 }
 
 /** בדיקות שלא תלויות ב-Firestore – אם מחזיר הודעה, אסור לעדכן */

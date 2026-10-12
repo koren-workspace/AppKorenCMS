@@ -37,6 +37,8 @@ describe("calendarService – buildCalendarEntryValues", () => {
         expect(values.weekdays).toEqual([1, 7]);
         expect(typeof values.timestamp).toBe("number");
         expect(values.timestamp).toBeGreaterThan(0);
+        // the calendar script skips sets carrying this marker
+        expect(values.cmsEditedAt).toBe(values.timestamp);
     });
 
     it("omits empty optional arrays and label", () => {

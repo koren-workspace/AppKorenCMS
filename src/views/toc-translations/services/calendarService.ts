@@ -87,9 +87,13 @@ export function buildCalendarEntryValues(
     dateSetId: string,
     payload: CalendarEntryPayload
 ): Record<string, any> {
+    const now = Date.now();
     const values: Record<string, any> = {
         dateSetId,
-        timestamp: Date.now(),
+        timestamp: now,
+        // סימון "נערך ב-CMS": סקריפט הלוח (datascript) מדלג על רשומות עם השדה הזה,
+        // כדי שהרצה שנתית מהגיליון לא תדרוס עריכה שנעשתה כאן. האפליקציות מתעלמות ממנו.
+        cmsEditedAt: now,
     };
     if (payload.label?.trim()) values.label = payload.label.trim();
     if (payload.simha !== undefined && payload.simha !== null) values.simha = payload.simha;

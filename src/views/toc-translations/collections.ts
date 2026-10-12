@@ -77,6 +77,5 @@ export const calendarCollection = buildCollection({
         dates_when_we_dont_say_prayer_abroad: { dataType: "array", name: "תאריכים שלא אומרים חו\"ל", of: { dataType: "map" } },
         weekdays: { dataType: "array", name: "ימי השבוע", of: { dataType: "number" } },
         timestamp: { dataType: "number", name: "זמן עדכון" },
-        cmsEditedAt: { dataType: "number", name: "נערך ב-CMS (סקריפט הלוח מדלג)", readOnly: true },
     }
 });

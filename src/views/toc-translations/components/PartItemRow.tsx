@@ -25,6 +25,7 @@ import {
     isBodyLikeType,
     showDiburHamatkhilField,
     supportsAttachedMeta,
+    supportsExpandable,
     supportsFirstInPage,
     supportsHebrewBodyOnlyFields,
     supportsNoSpace,
@@ -162,6 +163,7 @@ export function PartItemRow({
     const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, isBaseTranslation);
     const showNoSpace = supportsNoSpace(currentType);
     const showFirstInPage = supportsFirstInPage(currentType);
+    const showExpandable = supportsExpandable(currentType, isBaseTranslation);
     const showAttachedMeta = supportsAttachedMeta(currentType);
     const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
     const mainContentRtl = contentUsesRtlAlignment(localVal.content);
@@ -429,26 +431,6 @@ export function PartItemRow({
                                     />
                                     <span className="text-gray-600">פיסקה</span>
                                 </label>
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.expandable}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!localVal.expandable}
-                                        onChange={(e) => onFieldChange(entityId, "expandable", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">טקסט נפתח</span>
-                                </label>
-                                {!!localVal.expandable && (
-                                    <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.expandableTitle}>
-                                        <span className="text-gray-600 w-20 shrink-0">כותרת הפתיחה</span>
-                                        <input
-                                            type="text"
-                                            value={localVal.title ?? ""}
-                                            onChange={(e) => onFieldChange(entityId, "title", e.target.value)}
-                                            className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                            dir="rtl"
-                                        />
-                                    </label>
-                                )}
                             </>
                         )}
                         {showNoSpace && (
@@ -469,6 +451,28 @@ export function PartItemRow({
                                     onChange={(e) => onFieldChange(entityId, "firstInPage", e.target.checked)}
                                 />
                                 <span className="text-gray-600">ראשון בעמוד</span>
+                            </label>
+                        )}
+                        {showExpandable && (
+                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.expandable}>
+                                <input
+                                    type="checkbox"
+                                    checked={!!localVal.expandable}
+                                    onChange={(e) => onFieldChange(entityId, "expandable", e.target.checked)}
+                                />
+                                <span className="text-gray-600">טקסט נפתח</span>
+                            </label>
+                        )}
+                        {showExpandable && !!localVal.expandable && (
+                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.expandableTitle}>
+                                <span className="text-gray-600 w-20 shrink-0">כותרת הפתיחה</span>
+                                <input
+                                    type="text"
+                                    value={localVal.title ?? ""}
+                                    onChange={(e) => onFieldChange(entityId, "title", e.target.value)}
+                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                    dir="rtl"
+                                />
                             </label>
                         )}
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialDate}>

@@ -124,6 +124,18 @@ export function supportsFirstInPage(type: string | null | undefined): boolean {
     return (type ?? "body") !== "commentary";
 }
 
+/**
+ * טקסט נפתח זמין לכל סוג פריט בעברית (בסיס) מלבד פירוש – גם הארות וכותרות,
+ * כדי שחלונית תוכל להיפתח בהארה קצרה ואחריה טקסט התפילה. האפליקציה מתעלמת
+ * מהסימון על פריטי תרגום, ולכן אינו מוצג שם.
+ */
+export function supportsExpandable(
+    type: string | null | undefined,
+    isBaseTranslation: boolean
+): boolean {
+    return isBaseTranslation && (type ?? "body") !== "commentary";
+}
+
 /** תפקיד/מקורות/סימן מיוחד רלוונטיים רק לתוכן/תרגום (גוף). */
 export function supportsAttachedMeta(type: string | null | undefined): boolean {
     return isBodyLikeType(type);

@@ -678,7 +678,7 @@ export function contentUsesRtlAlignment(text: string | undefined | null): boolea
  * מחזיר מחרוזת classNames ל־textarea של פריט (תוכן / כותרת / הוראות).
  * type: "title" | "instructions" | אחר = body
  * specialDate: כשמסומן (ורלוונטי לסוגי "גוף" בלבד) – צובע את הטקסט בבורדו, בדיוק כמו באפליקציה.
- * expandable: טקסט תפילה נפתח (סוגי "גוף" בלבד) – פס ירוק בצד, כדי שיהיה ברור שהוא מוצג סגור באפליקציה.
+ * expandable: טקסט נפתח (כל סוג פריט) – פס ירוק בצד, כדי שיהיה ברור שהוא מוצג סגור באפליקציה.
  */
 export function getItemStyle(
     type: string,
@@ -693,14 +693,17 @@ export function getItemStyle(
         baseStyle += "font-serif text-3xl border-r-8 border-amber-200 pr-4 ";
     else baseStyle += "font-sans text-xl ";
 
+    // פס ירוק לטקסט נפתח – על כל סוג פריט (בכותרת מחליף את הפס האפור)
+    const expandableBar = expandable ? " border-r-8 border-r-emerald-400" : "";
+
     if (type === "title")
-        return baseStyle + "font-bold bg-gray-50 border-r-4 border-gray-400";
+        return baseStyle + "font-bold bg-gray-50" + (expandable ? expandableBar : " border-r-4 border-gray-400");
     if (type === "instructions")
-        return baseStyle + "text-lg italic text-blue-700 bg-blue-50/50";
+        return baseStyle + "text-lg italic text-blue-700 bg-blue-50/50" + expandableBar;
 
     baseStyle += "leading-relaxed bg-white border-gray-200 min-h-[120px]";
     // בורדו זהה לצבע tefillaSpecial/brand באפליקציה (colors.ts: #77081B)
     if (specialDate && isBodyLikeType(type)) baseStyle += " text-[#77081B]";
-    if (expandable && isBodyLikeType(type)) baseStyle += " border-r-8 border-r-emerald-400";
+    baseStyle += expandableBar;
     return baseStyle;
 }

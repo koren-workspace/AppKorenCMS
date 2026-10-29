@@ -12,6 +12,7 @@ import {
     isBodyLikeType,
     showDiburHamatkhilField,
     supportsAttachedMeta,
+    supportsExpandable,
     supportsFirstInPage,
     supportsHebrewBodyOnlyFields,
     supportsNoSpace,
@@ -108,6 +109,7 @@ export function AddItemModal({
     const showHebrewBodyOnly = supportsHebrewBodyOnlyFields(currentType, isBaseTranslation);
     const showNoSpace = supportsNoSpace(currentType);
     const showFirstInPage = supportsFirstInPage(currentType);
+    const showExpandable = supportsExpandable(currentType, isBaseTranslation);
     const showAttachedMeta = supportsAttachedMeta(currentType);
     const paragraphSentences = splitParagraphSentences(form.content);
     const contentRtl = contentUsesRtlAlignment(form.content);
@@ -228,26 +230,6 @@ export function AddItemModal({
                                     />
                                     <span className="text-gray-600">פיסקה</span>
                                 </label>
-                                <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.expandable}>
-                                    <input
-                                        type="checkbox"
-                                        checked={form.expandable}
-                                        onChange={(e) => setField("expandable", e.target.checked)}
-                                    />
-                                    <span className="text-gray-600">טקסט נפתח</span>
-                                </label>
-                                {form.expandable && (
-                                    <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.expandableTitle}>
-                                        <span className="text-gray-600 w-20 shrink-0">כותרת הפתיחה</span>
-                                        <input
-                                            type="text"
-                                            value={form.title}
-                                            onChange={(e) => setField("title", e.target.value)}
-                                            className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
-                                            dir="rtl"
-                                        />
-                                    </label>
-                                )}
                             </>
                         )}
                         {showNoSpace && (
@@ -268,6 +250,28 @@ export function AddItemModal({
                                     onChange={(e) => setField("firstInPage", e.target.checked)}
                                 />
                                 <span className="text-gray-600">ראשון בעמוד</span>
+                            </label>
+                        )}
+                        {showExpandable && (
+                            <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.expandable}>
+                                <input
+                                    type="checkbox"
+                                    checked={form.expandable}
+                                    onChange={(e) => setField("expandable", e.target.checked)}
+                                />
+                                <span className="text-gray-600">טקסט נפתח</span>
+                            </label>
+                        )}
+                        {showExpandable && form.expandable && (
+                            <label className="flex items-center gap-1 col-span-2" title={ITEM_FIELD_HELP.expandableTitle}>
+                                <span className="text-gray-600 w-20 shrink-0">כותרת הפתיחה</span>
+                                <input
+                                    type="text"
+                                    value={form.title}
+                                    onChange={(e) => setField("title", e.target.value)}
+                                    className="border border-gray-300 rounded px-1 py-0.5 flex-1 min-w-0"
+                                    dir="rtl"
+                                />
                             </label>
                         )}
                         <label className="flex items-center gap-1" title={ITEM_FIELD_HELP.specialDate}>
